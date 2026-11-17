@@ -87,6 +87,34 @@ The run folder is named `<Plate>__<Pipeline>__<date-time>` and contains
 `enhanced/`, `previews/` and `well_summary.json`. A well that fails is recorded in
 the manifest and the run continues.
 
+## Deconvolution
+
+Add a **Deconvolution** step to the pipeline. By default it computes a theoretical
+PSF for each channel from the metadata (objective NA, immersion and sample refractive
+index, emission wavelength, pixel size, Z step, confocal or widefield). It stops with
+a message naming anything that is missing; fill it in on the Metadata panel. Choose
+the iteration count on a representative field and keep it for the whole plate.
+
+To use a measured PSF, open the bead stack (or the field with beads) in the viewer,
+then **Tools → PSF tool…**, choose *Measured (bead stack)* and **Compute PSF**. The
+dialog shows XY and XZ projections and the FWHM. **Save PSF…** writes an OME-TIFF and
+sets it as the PSF of the Deconvolution step. The same dialog shows the theoretical
+PSF for comparison.
+
+The preview reports, per channel, the iterations, the residual (how far the
+re-blurred result is from the data), the runtime and the number of tiles. A GPU is
+used automatically when PyTorch can see one. Images too large for the memory budget
+are split into overlapping tiles automatically; set `max_memory_gb` to change the
+budget. To see how long deconvolution takes on your machine:
+
+```bash
+hcs-studio benchmark --shape 30 2048 2048 --iterations 40
+```
+
+Deconvolution output stays linear (usable for measurements). It is classic RL/TV
+deconvolution: validate it against Huygens on bead and cell images before using it
+for quantitative claims. See [validation.md](validation.md).
+
 ## Limitations in this phase
 
 - Readers have been tested on synthetic plates only, not yet on real instrument exports.
@@ -96,4 +124,4 @@ the manifest and the run continues.
 - Operetta flat-field profiles are not read yet.
 - The correction and enhancement modules are verified on synthetic images only.
 - Noise2Void and BM3D denoising are not included yet.
-- Every field is processed whole in memory; tiling for very large fields comes later.
+- Apart from deconvolution, every field is processed whole in memory.

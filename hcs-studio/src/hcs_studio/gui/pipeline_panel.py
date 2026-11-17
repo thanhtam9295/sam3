@@ -195,6 +195,19 @@ class PipelinePanel(QWidget):
         if self.live.isChecked():
             self._timer.start()
 
+    def set_module_param(self, module: str, key: str, value: Any) -> None:
+        """Set a parameter on the selected step of ``module`` (else the first; else add one)."""
+        row = self.steps.currentRow()
+        if not (0 <= row < len(self._steps) and self._steps[row]["module"] == module):
+            matches = [i for i, step in enumerate(self._steps) if step["module"] == module]
+            if not matches:
+                self.add_step(module)
+                matches = [len(self._steps) - 1]
+            row = matches[0]
+        self._steps[row]["params"] = {**self._steps[row]["params"], key: value}
+        self._rebuild(select=row)
+        self._changed()
+
     # --------------------------------------------------------------- pipeline
 
     def pipeline(self, upto_selected: bool = False) -> Pipeline:

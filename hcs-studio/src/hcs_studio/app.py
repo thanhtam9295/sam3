@@ -25,6 +25,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inspect.add_argument("path", type=Path)
     sub.add_parser("modules", help="list processing modules and their parameters")
+    bench = sub.add_parser("benchmark", help="time deconvolution of a synthetic stack")
+    bench.add_argument(
+        "--shape", type=int, nargs=3, default=[30, 2048, 2048], metavar=("Z", "Y", "X")
+    )
+    bench.add_argument("--iterations", type=int, default=40)
+    bench.add_argument("--device", choices=["auto", "cpu", "gpu"], default="auto")
+    bench.add_argument("--tile", type=int, default=0, help="tile size in pixels; 0 = automatic")
+    bench.add_argument("--max-memory-gb", type=float, help="memory limit (default: half free RAM)")
     run = sub.add_parser("run", help="run a pipeline on a plate, unattended")
     run.add_argument("--pipeline", type=Path, required=True, help="pipeline YAML or JSON file")
     run.add_argument("--input", type=Path, required=True, help="plate folder or image file")
@@ -55,6 +63,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "run":
         return _run(args)
+    if args.command == "benchmark":
+        from hcs_studio.benchmark import run_benchmark
+        from hcs_studio.processing.base import ModuleError
+
+        try:
+            result = run_benchmark(
+                tuple(args.shape),
+                args.iterations,
+                args.device,
+                args.tile,
+                args.max_memory_gb,
+            )
+        except (ModuleError, MemoryError) as exc:
+            print(f"Error: {exc}")
+            return 2
+        print(result.summary())
+        return 0
     try:
         from hcs_studio.gui.launch import run_gui
     except ImportError as exc:

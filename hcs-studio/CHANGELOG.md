@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Phase 3 — deconvolution
+- Theoretical PSFs from the metadata via `psfmodels` (vectorial or Gibson-Lanni; confocal
+  model with pinhole in Airy units, derived from the pinhole size when known).
+- Measured PSFs averaged from isolated beads (edge, saturated, crowded and off-centre beads
+  rejected; sub-pixel centring), saved as OME-TIFF with the voxel size and resampled to the
+  image on use.
+- Deconvolution step: Richardson-Lucy with total-variation regularisation and Biggs-Andrews
+  acceleration, stop on iteration count or relative change; Wiener for quick previews; 2D and
+  3D; mirror padding, background estimation, non-negativity.
+- CUDA through PyTorch when available, otherwise numpy on the CPU (`device`: auto/cpu/gpu).
+- Automatic Y/X tiling with blended overlaps whenever an image would exceed the memory budget
+  (`max_memory_gb`, default half the free RAM or 80 % of free GPU memory).
+- Per-channel report (iterations, residual, runtime, tiles, PSF and its FWHM) in the preview
+  and in each well's `well_summary.json`.
+- Tools → PSF tool: compute or measure a PSF, view XY/XZ projections and FWHM, save it and
+  link it to the Deconvolution step.
+- `hcs-studio benchmark` reports deconvolution runtime and peak memory on this machine.
+- Fixed: background estimation was biased low on noisy data (now smoothed before taking the
+  low percentile).
+- `docs/validation.md` lists what is verified and what still needs real data.
+- Deferred: `pycudadecon`, CuPy backend, depth-variant PSFs.
+
 ### Phase 2 — correction and enhancement
 - Processing-module interface: pydantic parameters, optional plate-level `fit`, per-field `apply`,
   and a `linear` flag that marks display-only results.

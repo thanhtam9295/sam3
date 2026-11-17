@@ -341,6 +341,7 @@ def run_pipeline(
                             "files": files,
                             "steps_corrected": list(correcteds[0].history),
                             "steps_enhanced": list(finals[0].history),
+                            "reports": [list(f.reports) for f in finals],
                         }
                     )
                     inputs.extend(item.sources)

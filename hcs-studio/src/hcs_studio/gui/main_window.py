@@ -26,6 +26,7 @@ from hcs_studio.gui.metadata_panel import MetadataPanel
 from hcs_studio.gui.pattern_dialog import PatternDialog
 from hcs_studio.gui.pipeline_panel import PipelinePanel
 from hcs_studio.gui.plate_panel import PlatePanel
+from hcs_studio.gui.psf_dialog import PsfDialog
 from hcs_studio.gui.viewer import ViewerPanel
 from hcs_studio.gui.workers import PlateLoader, PreviewWorker
 from hcs_studio.io.base import detect_reader
@@ -136,6 +137,9 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(self._action("&Quit", self.close, "Ctrl+Q"))
 
+        tools_menu = self.menuBar().addMenu("&Tools")
+        tools_menu.addAction(self._action("&PSF tool…", self.open_psf_tool))
+
         view_menu = self.menuBar().addMenu("&View")
         for dock in (self.browser_dock, self.metadata_dock, self.pipeline_dock, self.log_dock):
             view_menu.addAction(dock.toggleViewAction())
@@ -245,6 +249,24 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Showing {self.plate.name} · {well_name(row, col)} · field {field.index}")
 
+    # ------------------------------------------------------------------- PSF
+
+    def open_psf_tool(self) -> PsfDialog:
+        """Open the PSF tool for the open plate; the field in the viewer can be a bead stack."""
+        field_data = None
+        if self.plate is not None and self.current_field is not None:
+            row, col, position = self.current_field
+            field_data = self.plate.wells[(row, col)].fields[position].load()
+        dialog = PsfDialog(self.plate.metadata if self.plate else None, field_data, self)
+        dialog.psf_saved.connect(self._on_psf_saved)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.show()
+        return dialog
+
+    def _on_psf_saved(self, path: Path) -> None:
+        self.pipeline_panel.set_module_param("deconvolution", "psf_file", str(path))
+        self.log(f"Saved PSF to {path}; the Deconvolution step now uses it.")
+
     # ---------------------------------------------------------------- preview
 
     #: Fields sampled per plate-level estimate during previews (full runs use the step setting).
@@ -278,10 +300,20 @@ class MainWindow(QMainWindow):
             note = "intensities remain linear (usable for measurement)"
         else:
             note = "DISPLAY ONLY: not for intensity measurement"
+        details = [
+            f"{c['channel']}: {c['mode']}, {c['iterations']} iterations, residual "
+            f"{c['residual']:.3f}, {c['seconds']:.1f} s, {c['tiles']} tile(s) on {r['backend']}"
+            for r in result.final.reports
+            if r.get("module") == "deconvolution"
+            for c in r["channels"]
+        ]
         panel.status.setText(
             f"Preview: {steps}. {note}. Plate-level estimates use up to "
             f"{self.PREVIEW_FIT_FIELDS} fields in previews; first timepoint shown."
+            + "".join(f"\nDeconvolution {d}" for d in details)
         )
+        for line in details:
+            self.log(f"Deconvolution {line}")
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Preview: {steps} ({note})")
 

@@ -64,3 +64,18 @@ def test_synthetic_field_is_deterministic_and_has_known_cells() -> None:
 def test_synthetic_field_rejects_negative_cell_count() -> None:
     with pytest.raises(ValueError):
         make_cell_field(n_cells=-1)
+
+
+def test_processing_docs_are_up_to_date() -> None:
+    import importlib.util
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location(
+        "gen", root / "scripts" / "gen_processing_docs.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    current = (root / "docs" / "processing.md").read_text(encoding="utf-8")
+    assert current == module.render(), "run: python scripts/gen_processing_docs.py"

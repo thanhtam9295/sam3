@@ -59,6 +59,8 @@ class ImageData:
     #: False once any step has changed intensities non-linearly (display-only data).
     linear: bool = True
     history: tuple[str, ...] = ()
+    #: Per-step reports (e.g. deconvolution iterations, residual, runtime).
+    reports: tuple[dict[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if self.data.ndim != 4:
@@ -73,6 +75,7 @@ class ImageData:
         *,
         linear: bool = True,
         metadata: ImageMetadata | None = None,
+        report: dict[str, Any] | None = None,
     ) -> ImageData:
         """New image after ``step``. Linearity can only be lost, never regained."""
         return ImageData(
@@ -80,6 +83,7 @@ class ImageData:
             metadata=metadata or self.metadata,
             linear=self.linear and linear,
             history=(*self.history, step),
+            reports=(*self.reports, report) if report is not None else self.reports,
         )
 
     @classmethod
@@ -136,7 +140,12 @@ MODULES: Registry[type[Module]] = Registry("module")
 
 
 def load_builtin_modules() -> None:
-    from hcs_studio.processing import autofluorescence, enhance, flatfield  # noqa: F401
+    from hcs_studio.processing import (  # noqa: F401
+        autofluorescence,
+        deconvolution,
+        enhance,
+        flatfield,
+    )
 
 
 def create_module(name: str, params: dict[str, Any] | None = None) -> Module:
