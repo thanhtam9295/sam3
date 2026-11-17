@@ -45,7 +45,11 @@ from hcs_studio.analysis.classifier import (
     train_classifier,
     uncertain_objects,
 )
-from hcs_studio.analysis.table_steps import ANNOTATION_PREFIXES, feature_columns
+from hcs_studio.analysis.table_steps import (
+    ANNOTATION_PREFIXES,
+    feature_columns,
+    read_well_objects,
+)
 from hcs_studio.gui.viewer import ViewerPanel
 from hcs_studio.gui.workers import BackgroundTask
 
@@ -94,15 +98,7 @@ def sample_objects(folder: Path, max_rows: int = SAMPLE_ROWS) -> pd.DataFrame:
 
 def well_objects(folder: Path, well: str) -> pd.DataFrame:
     """All objects of one well, with any table-step annotations."""
-    directory = folder / "wells" / well
-    objects = pd.read_parquet(directory / "objects.parquet")
-    annotations = directory / "objects_annotations.parquet"
-    if annotations.exists():
-        extra = pd.read_parquet(annotations)
-        extra = extra[[c for c in extra.columns if c not in objects.columns]]
-        if len(extra) == len(objects):
-            objects = pd.concat([objects, extra], axis=1)
-    return objects
+    return read_well_objects(folder / "wells" / well)
 
 
 class ClassifyPanel(QWidget):

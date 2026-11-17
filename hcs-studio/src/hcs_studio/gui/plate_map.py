@@ -108,8 +108,12 @@ class PlateMapView(QGraphicsView):
         layout: dict[tuple[int, int], WellAnnotation] | None = None,
     ) -> None:
         """Draw a rows × cols plate; wells in ``present`` have data and can be clicked."""
-        self._scene.clear()
+        # Clearing a scene with selected items emits selectionChanged while the items are
+        # being deleted; forget them first.
         self._items.clear()
+        self._scene.blockSignals(True)
+        self._scene.clear()
+        self._scene.blockSignals(False)
         self._layout, self.selected = layout or {}, None
         self._fills = None
         self._anchor = None

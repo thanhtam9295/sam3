@@ -26,6 +26,8 @@ dependencies = [
     "mahotas>=1.4",
     "jinja2>=3.1",
     "scikit-learn>=1.3",
+    "umap-learn>=0.5.7",
+    "matplotlib>=3.8",
 ]
 
 [project.optional-dependencies]
@@ -86,6 +88,6 @@ strict = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*", "sklearn.*", "joblib.*", "igraph.*", "leidenalg.*"]
+module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*", "sklearn.*", "joblib.*", "igraph.*", "leidenalg.*", "umap", "umap.*", "matplotlib", "matplotlib.*"]
 ignore_missing_imports = true
 follow_imports = "skip"

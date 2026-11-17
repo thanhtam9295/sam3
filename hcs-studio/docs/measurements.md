@@ -86,6 +86,22 @@ Rows of other object types, and overlap duplicates, are empty.
 | `spatial_voronoi_area_um2`, `spatial_local_density_per_mm2` | spatial | Voronoi cell area and its inverse; empty at the edge of the imaged area |
 | `spatial_delaunay_neighbours` | spatial | Delaunay neighbours; empty at the edge |
 
+## Profiles (`advanced/`, Phase 9)
+
+| File / column | Meaning |
+|---|---|
+| `pca_coordinates.parquet` | per embedded object (or well): plate, run, well, field, object, layout annotation, position, labels, `PC1…PCk` |
+| `umap_coordinates.parquet` | the same rows with `UMAP1`, `UMAP2` |
+| `pca_loadings.csv`, `pca_variance.csv` | loadings (features × components); explained and cumulative variance |
+| `well_profiles.parquet` | per well: annotation, `n_objects`, well-level `PC1`, `PC2`, `UMAP1`, `UMAP2`, the readouts below, and `z_<feature>` (median of the objects' robust Z-scores) |
+| `profile_distance_to_control` | distance of the well profile from the median negative-control profile, in object SD units (PCs explaining 90 %) |
+| `profile_distance_ratio` | that distance ÷ the median distance of the negative-control wells |
+| `dose_response.csv` | per plate, compound and readout: `n`, `concentrations`, `fit`, `bottom`, `top`, `ec50`, `hill`, `r2`, `note` |
+| `profiling.json` | options, runs, features used and dropped (with reasons), notes, run time |
+
+On the results plate these appear as `profile_distance_to_control`, `profile_distance_ratio`,
+`profile_PC1/2` and `profile_UMAP1/2`.
+
 ## Per-well summary (`tables/per_well_summary.csv`)
 
 For each well: fields used and excluded (out of focus, saturated, edge), imaged area,

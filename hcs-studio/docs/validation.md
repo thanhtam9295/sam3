@@ -200,6 +200,39 @@ Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
 
 Still to do: time a real 384-well plate on the analysis workstation (Phase 10).
 
+## Profiles, PCA/UMAP and dose-response (Phase 9)
+
+Synthetic screen: two plates of 22 wells (4 negative controls, 4 positive controls, Drug X
+and an inactive Drug Y at 7 concentrations), 150 objects per well. The positive control
+and Drug X shift two independent features (Drug X following a 4-parameter logistic with
+EC50 = 1 µM, Hill 1); plate 2 is offset in every raw feature.
+
+| Check | Result | Test |
+|---|---|---|
+| Robust Z relative to control rows, per plate | exact; a plate offset is removed | `test_robust_z_relative_to_controls` |
+| Missing, near-constant and correlated (|r| > 0.95) features dropped, with reasons | exact | `test_feature_selection_and_correlation_filter`, `test_profiling_two_plates` |
+| 4PL fit of noisy data (EC50 2.5, Hill 1.3) | EC50 within 10 %, Hill within 15 %, R² > 0.99; decreasing curves; < 4 concentrations refused | `test_four_parameter_logistic_fit` |
+| PC1 carries the two shifted features | yes | `test_profiling_two_plates` |
+| Distance to control, positive control (theory √(4² + 4²) = 5.66 object SD) | 5.6–5.9 | same |
+| Distance of negative-control and inactive-compound wells | < 0.5 (0.0–0.23) | same |
+| EC50 of Drug X from the measured feature on both plates | within 35 % of 1 µM, R² > 0.95 (exact from the true shift) | same |
+| Two plates with a raw offset agree after control normalisation | correlation of well profiles > 0.95 | same |
+| UMAP and PCA reproducible with the same seed | identical | `test_profiling_is_reproducible` |
+| Report: PCA/UMAP panel in Chromium offline; click a point opens its well; rectangle marks wells on the plate | yes | `test_cli_profile_results_and_report` |
+| Profiles tab: lasso marks wells on the results plate; point opens the object in the viewer; plate click highlights points; SVG/PNG export | yes | `tests/test_gui_profiles.py` |
+
+### Choices to know
+
+- Well profiles and distances are scaled by the control **objects** (median and MAD of
+  hundreds of objects), not by the spread of control-well medians: with 4 control wells
+  that spread is too unstable (an inactive well scored 7× the control spread in an early
+  version). Distances are therefore in units of object-to-object variation.
+- `profile_distance_ratio` divides by the control wells' own typical distance; with few
+  control wells it varies a lot (0.7–2.1 for the controls themselves here). Prefer
+  `profile_distance_to_control`.
+- Normalised values are clipped to ±10 before PCA, UMAP and distances.
+- UMAP with a fixed seed runs single-threaded (reproducible but slower).
+
 ## Stitching, classification, clustering and spatial statistics (Phase 8)
 
 ### Verified on synthetic data

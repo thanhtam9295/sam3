@@ -423,6 +423,62 @@ in the same area. `spatial_pattern_<r>um` is +1 where objects are more clustered
 random at that distance, -1 where more regular. Full curves are in
 `wells/<W>/analysis.json`. See [measurements.md](measurements.md) for every column.
 
+## Phenotypic profiles (PCA, UMAP, dose-response)
+
+The **Profiles** tab compares wells and objects by all their measured features at once. It
+works on the run open in the Results tab; **Add plate (run folder)…** adds other plates of
+the same screen. Choose the objects, then **Compute profiles** (it runs in the background
+and is saved in the run's `advanced/` folder, so it is there next time).
+
+![Profiles: UMAP of nuclei, positive controls selected with the lasso and marked on the plate](images/phase9_profiles.png)
+
+How the profiles are made:
+
+1. **Features.** Every measured feature present on all plates, minus those missing in more
+   than 10 % of objects, those where 95 % of objects share one value, and then one of
+   each pair correlating above |r| = 0.95 (the one more correlated with the rest). The
+   **Scree and loadings** tab lists what was dropped and why.
+2. **Normalisation.** Per plate, each feature becomes a robust Z-score relative to the
+   objects in the **negative-control wells** of the plate layout:
+   (x − median) / (1.4826 · MAD). This removes plate-to-plate differences in staining and
+   imaging. Without negative controls in the layout, all wells are used (with a note).
+   *Centre each plate* additionally subtracts each plate's median profile.
+3. **Embedding.** PCA (scree plot, loadings) and UMAP (`n_neighbors`, `min_dist`, metric
+   and seed are recorded; the same seed gives the same picture). *Embed objects* uses up
+   to `Objects sampled` objects spread evenly over the wells; *Embed wells* uses one
+   profile per well.
+4. **Well profiles and distance to control.** A well's profile is the median of its
+   objects' Z-scores. `profile_distance_to_control` is the distance of that profile from
+   the median negative-control profile (in the principal components that explain 90 % of
+   the variation), in units of object-to-object variation: a well whose objects shifted by
+   2 SD in one feature scores about 2. `profile_distance_ratio` divides it by the typical
+   distance of the control wells themselves (noisy with few control wells). Both appear as
+   readouts on the results plate.
+
+In the plot, **Colour by** controls/compounds, concentration, well, class, gate or cluster.
+Click a point to see that object (a crop of its field) and **Open selected object in
+viewer**; switch on **Lasso** and draw around points to mark their wells on the results
+plate. Clicking a well on the results plate enlarges its points. **Export PNG/SVG** saves
+the plot as shown; **Export coordinates** saves the table behind it.
+
+The **Dose-response** tab plots any per-well readout against concentration for each
+compound in the layout (mean ± SD of replicate wells, negative-control median dashed) and
+fits a four-parameter logistic curve: EC50, Hill slope, bottom, top and R². A fit needs at
+least 4 concentrations; an EC50 outside the tested range is marked as extrapolated.
+
+![Dose-response of the distance to control](images/phase9_dose_response.png)
+
+From the command line:
+
+```bash
+hcs-studio profile <run folder> [<run folder of another plate> ...] --object-type nuclei
+```
+
+writes `advanced/` (PCA and UMAP coordinates, loadings, variance, well profiles,
+`dose_response.csv`, `figures/` as SVG and PNG, and `profiling.json` with every option and
+the features used) and updates the run's `index.html`, which then has a linked PCA/UMAP
+panel: click a point to open its well, drag a rectangle to mark wells on the plate.
+
 ## Limitations in this phase
 
 - Readers have been tested on synthetic plates only, not yet on real instrument exports.
@@ -439,3 +495,5 @@ random at that distance, -1 where more regular. Full curves are in
 - Apart from deconvolution, every field is processed whole in memory.
 - Stitched mosaics are previews; fields are not blended into one full-resolution image.
 - Classification, clustering and spatial statistics are verified on synthetic data only.
+- Profiles of several plates are saved with the first plate's run; the other runs' reports
+  do not show them.

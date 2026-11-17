@@ -32,6 +32,7 @@ from hcs_studio.gui.metadata_panel import MetadataPanel
 from hcs_studio.gui.pattern_dialog import PatternDialog
 from hcs_studio.gui.pipeline_panel import PipelinePanel
 from hcs_studio.gui.plate_panel import PlatePanel
+from hcs_studio.gui.profiles_panel import ProfilesPanel
 from hcs_studio.gui.psf_dialog import PsfDialog
 from hcs_studio.gui.results_panel import ResultsPanel
 from hcs_studio.gui.run_dialog import RunDialog
@@ -85,6 +86,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.viewer_panel.widget, "Viewer")
         self.results_panel = ResultsPanel()
         self.tabs.addTab(self.results_panel, "Results")
+        self.profiles_panel = ProfilesPanel()
+        self.tabs.addTab(self.profiles_panel, "Profiles")
         self.setCentralWidget(self.tabs)
 
         self.browser = BrowserPanel()
@@ -162,6 +165,11 @@ class MainWindow(QMainWindow):
         self.results_panel.open_field.connect(self.open_result_field)
         self.results_panel.compare_field.connect(self.compare_result_field)
         self.results_panel.open_mosaic.connect(self.open_mosaic)
+        self.results_panel.well_selected.connect(
+            lambda well: self.profiles_panel.highlight_wells([well])
+        )
+        self.profiles_panel.wells_selected.connect(self._on_profile_wells)
+        self.profiles_panel.open_object.connect(self.open_result_object)
         self.classify_panel.show_field.connect(self._classify_show_field)
         self.classify_panel.add_steps.connect(self._add_table_steps)
         self.classify_panel.apply_steps.connect(self.apply_table_steps)
@@ -405,6 +413,7 @@ class MainWindow(QMainWindow):
     def show_results(self, folder: Path) -> None:
         self.results_panel.load(folder)
         self.classify_panel.set_run(folder)
+        self.profiles_panel.set_run(folder)
         self.tabs.setCurrentWidget(self.results_panel)
         report = folder / "index.html"
         if report.exists():
@@ -422,6 +431,22 @@ class MainWindow(QMainWindow):
         self.viewer_panel.show_stages([(stage.lower(), image)])
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Showing {stage.lower()} {well} field {index} from {folder.name}")
+
+    def _on_profile_wells(self, folder: Path, wells: list[str]) -> None:
+        results = self.results_panel.results
+        if results is not None and results.folder == Path(folder):
+            self.results_panel.mark_wells(wells)
+
+    def open_result_object(
+        self, folder: Path, well: str, field: int, object_id: int, object_type: str
+    ) -> None:
+        """Show the field of an object in the viewer with that object highlighted."""
+        self.open_result_field(folder, well, field, "Corrected")
+        for name in self.viewer_panel.labels_names():
+            if name == object_type or name.startswith(f"{object_type} · "):
+                self.viewer_panel.highlight_object(name, object_id)
+                self.log(f"Object {object_id} of {well} field {field} highlighted")
+                return
 
     def _classify_show_field(self, folder: Path, well: str, index: int) -> None:
         self.open_result_field(folder, well, index, "Corrected")

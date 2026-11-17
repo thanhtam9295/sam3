@@ -124,6 +124,7 @@ class ResultsPanel(QWidget):
     open_field = Signal(object, str, int, str)
     compare_field = Signal(object, str, int)
     open_mosaic = Signal(object, str)
+    well_selected = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -460,6 +461,7 @@ class ResultsPanel(QWidget):
             self.overlay_checks[name] = check
         self._show_stats()
         self._show_fields()
+        self.well_selected.emit(well)
 
     def _show_stats(self) -> None:
         assert self.results is not None and self.well is not None
@@ -542,6 +544,12 @@ class ResultsPanel(QWidget):
         field = self.selected_field()
         if self.results is not None and self.well and field:
             self.compare_field.emit(self.results.folder, self.well, field.index)
+
+    def mark_wells(self, wells: list[str]) -> None:
+        """Outline wells chosen elsewhere (e.g. a lasso in the Profiles tab)."""
+        if self.results is None:
+            return
+        self.plate.set_selection([parse_well_name(w) for w in wells if w in self.results.wells])
 
     def _open_mosaic(self) -> None:
         if self.results is not None and self.well:

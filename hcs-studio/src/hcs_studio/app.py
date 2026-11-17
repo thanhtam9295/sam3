@@ -48,6 +48,33 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="apply only these steps (default: the run's own table steps first)",
     )
+    profile = sub.add_parser(
+        "profile",
+        help="PCA/UMAP phenotypic profiles, distance to control and dose-response of runs",
+    )
+    profile.add_argument("runs", type=Path, nargs="+", help="run folder(s), one per plate")
+    profile.add_argument("--object-type", default="nuclei")
+    profile.add_argument("--level", choices=["cell", "well"], default="cell")
+    profile.add_argument(
+        "--normalisation",
+        choices=["negative_controls", "all_wells", "none"],
+        default="negative_controls",
+    )
+    profile.add_argument("--plate-correction", action="store_true", help="centre each plate")
+    profile.add_argument("--max-cells", type=int, default=50_000)
+    profile.add_argument("--correlation", type=float, default=0.95, help="drop features above")
+    profile.add_argument("--pca-components", type=int, default=10)
+    profile.add_argument("--no-umap", action="store_true")
+    profile.add_argument("--neighbors", type=int, default=15, help="UMAP n_neighbors")
+    profile.add_argument("--min-dist", type=float, default=0.1, help="UMAP min_dist")
+    profile.add_argument("--metric", default="euclidean", help="UMAP metric")
+    profile.add_argument("--seed", type=int, default=0)
+    profile.add_argument(
+        "--dose-readouts",
+        default="profile_distance_to_control",
+        help="comma-separated per-well readouts for dose-response fits",
+    )
+    profile.add_argument("--output", type=Path, help="default: advanced/ of the first run")
     classify = sub.add_parser(
         "train-classifier", help="train an object classifier from labelled objects of a run"
     )
@@ -133,6 +160,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "analyze":
         return _analyze(args)
+    if args.command == "profile":
+        return _profile(args)
     if args.command == "train-classifier":
         return _train_classifier(args)
     if args.command == "train-cellpose":
@@ -328,4 +357,42 @@ def _train_classifier(args: argparse.Namespace) -> int:
             f"(balanced {model.cv_balanced_accuracy:.3f})"
         )
     print(f"Classifier: {args.output}")
+    return 0
+
+
+def _profile(args: argparse.Namespace) -> int:
+    from hcs_studio.analysis.profiling import ProfileOptions, run_profiling
+    from hcs_studio.output.report import write_report
+
+    options = ProfileOptions(
+        object_type=args.object_type,
+        level=args.level,
+        normalisation=args.normalisation,
+        plate_correction=args.plate_correction,
+        max_cells=args.max_cells,
+        correlation_threshold=args.correlation,
+        pca_components=args.pca_components,
+        umap=not args.no_umap,
+        n_neighbors=args.neighbors,
+        min_dist=args.min_dist,
+        metric=args.metric,
+        seed=args.seed,
+        dose_readouts=[r.strip() for r in args.dose_readouts.split(",") if r.strip()],
+    )
+    try:
+        result = run_profiling(args.runs, options, args.output)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    variance = result.variance["explained_variance_ratio"].head(3).tolist()
+    print(
+        f"{len(result.cells)} points, {len(result.wells)} wells, {len(result.features)} features "
+        f"({len(result.dropped)} dropped); PC1-3 explain "
+        + ", ".join(f"{100 * v:.0f} %" for v in variance)
+    )
+    for note in result.notes:
+        print(f"Note: {note}")
+    if args.output is None:
+        write_report(args.runs[0])  # the report shows the profiles of the first run
+    print(f"Profiles: {result.folder}")
     return 0

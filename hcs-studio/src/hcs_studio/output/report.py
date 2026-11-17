@@ -69,6 +69,7 @@ def report_data(results: RunResults) -> dict[str, Any]:
         "values": values,
         "wells": wells,
         "layout": layout,
+        "embedding": results.profile_embedding(max_cells=3000),
     }
 
 

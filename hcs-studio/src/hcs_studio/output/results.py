@@ -24,6 +24,7 @@ _PREFERRED = (
     "count",
     "per_mm2",
     "_fraction",
+    "profile_distance",
     "objects_measured",
     "_mean_mean",
     "coloc_",
@@ -87,6 +88,7 @@ class RunResults:
         self.summary = (
             pd.read_csv(summary_file).set_index("well") if summary_file.exists() else pd.DataFrame()
         )
+        self._add_profile_readouts()
         flags_file = tables / "qc_flags.csv"
         self.flags = pd.read_csv(flags_file) if flags_file.exists() else None
         layout_file = self.folder / "plate_layout.csv"
@@ -103,6 +105,107 @@ class RunResults:
             else []
         )
         self._objects_file = tables / "per_object_all.parquet"
+
+    # ---------------------------------------------------------------- profiles
+
+    def _profile_wells(self) -> pd.DataFrame:
+        path = self.folder / "advanced" / "well_profiles.parquet"
+        if not path.exists():
+            return pd.DataFrame()
+        frame = pd.read_parquet(path)
+        return frame[frame["run"] == self.folder.name] if "run" in frame else frame
+
+    def _add_profile_readouts(self) -> None:
+        """Per-well profile values (Phase 9) become readouts: distance to control, PCs."""
+        wells = self._profile_wells()
+        if wells.empty:
+            return
+        names = {
+            "profile_distance_to_control": "profile_distance_to_control",
+            "profile_distance_ratio": "profile_distance_ratio",
+            "PC1": "profile_PC1",
+            "PC2": "profile_PC2",
+            "UMAP1": "profile_UMAP1",
+            "UMAP2": "profile_UMAP2",
+        }
+        extra = wells.set_index("well")[[c for c in names if c in wells]].rename(columns=names)
+        if self.summary.empty:
+            self.summary = extra
+        else:
+            new = [c for c in extra.columns if c not in self.summary.columns]
+            self.summary = self.summary.join(extra[new], how="outer")
+
+    def profile_embedding(self, max_cells: int = 3000, seed: int = 0) -> dict[str, Any] | None:
+        """PCA/UMAP coordinates of this run's wells and a sample of its objects, for plots:
+        {"wells": [...], "cells": [...], "variance": [...], "spaces": [...]}, or None."""
+        wells = self._profile_wells()
+        if wells.empty:
+            return None
+        advanced = self.folder / "advanced"
+        cells = pd.read_parquet(advanced / "pca_coordinates.parquet")
+        if (advanced / "umap_coordinates.parquet").exists():
+            umap = pd.read_parquet(advanced / "umap_coordinates.parquet")
+            if len(umap) == len(cells):
+                cells["UMAP1"] = umap["UMAP1"].to_numpy()
+                cells["UMAP2"] = umap["UMAP2"].to_numpy()
+        if "run" in cells:
+            cells = cells[cells["run"] == self.folder.name]
+        if len(cells) > max_cells:
+            cells = cells.sample(max_cells, random_state=seed)
+        spaces = [s for s in ("PC", "UMAP") if f"{s}1" in cells and f"{s}2" in cells]
+
+        def points(frame: pd.DataFrame, extra: tuple[str, ...]) -> list[dict[str, Any]]:
+            columns = [c for c in ("well", "PC1", "PC2", "UMAP1", "UMAP2", *extra) if c in frame]
+            out = []
+            for record in frame[columns].to_dict("records"):
+                point: dict[str, Any] = {}
+                for key, value in record.items():
+                    if isinstance(value, (float, np.floating)):
+                        if math.isfinite(value):
+                            point[str(key)] = round(float(value), 4)
+                    elif isinstance(value, (int, np.integer)):
+                        point[str(key)] = int(value)
+                    else:
+                        point[str(key)] = value
+                out.append(point)
+            return out
+
+        variance_file = advanced / "pca_variance.csv"
+        variance = (
+            pd.read_csv(variance_file)["explained_variance_ratio"].round(4).tolist()
+            if variance_file.exists()
+            else []
+        )
+        return {
+            "wells": points(wells, ("profile_distance_to_control",)),
+            "cells": points(cells, ("field", "object_id")),
+            "variance": variance,
+            "spaces": spaces,
+        }
+
+    def object_crop(
+        self, well: str, field: int, y_um: float, x_um: float, size_um: float = 40.0
+    ) -> Any:
+        """RGB crop (uint8) of a field's enhanced preview centred on a position in the field
+        (µm), or None when the preview or the field size is unknown."""
+        from PIL import Image
+
+        directory = self.folder / "wells" / well
+        try:
+            summary = json.loads((directory / "well_summary.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        size = summary.get("field_size_um")
+        preview = directory / "previews" / f"f{int(field):03d}.png"
+        if not size or not preview.exists():
+            return None
+        image = np.asarray(Image.open(preview).convert("RGB"))
+        scale = image.shape[0] / float(size[0])  # preview pixels per µm
+        half = max(4, round(size_um * scale / 2))
+        row, col = round(y_um * scale), round(x_um * scale)
+        r0, c0 = max(0, row - half), max(0, col - half)
+        crop = image[r0 : row + half, c0 : col + half]
+        return crop if crop.size else None
 
     # ---------------------------------------------------------------- readouts
 

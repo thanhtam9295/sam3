@@ -55,6 +55,11 @@ table.stats td:last-child { text-align: right; font-variant-numeric: tabular-num
 .stack img.overlay { position: absolute; inset: 0; image-rendering: pixelated; }
 .empty { color: var(--muted); }
 footer { padding: 10px 20px 20px; color: var(--muted); font-size: 12px; }
+.well.picked { box-shadow: inset 0 0 0 3px var(--link); }
+#profiles h2 { font-size: 16px; margin: 18px 0 8px; }
+#embed { width: 100%; height: 380px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: crosshair; touch-action: none; }
+#legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+#legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--dot); margin-right: 5px; vertical-align: -1px; }
 </style>
 </head>
 <body>
@@ -77,6 +82,16 @@ footer { padding: 10px 20px 20px; color: var(--muted); font-size: 12px; }
     <div class="colorbar"><span id="cmin"></span><div class="bar" id="bar"></div><span id="cmax"></span></div>
     <p id="zprime"></p>
     <p id="note"></p>
+    <div id="profiles" hidden>
+      <h2>Phenotypic profiles</h2>
+      <div class="controls">
+        <label>Space <select id="space"></select></label>
+        <label>Points <select id="level"><option value="wells">wells</option><option value="cells">objects (sample)</option></select></label>
+      </div>
+      <canvas id="embed" role="img" aria-label="PCA or UMAP of the profiles; click a point to open its well, drag to select wells"></canvas>
+      <div id="legend"></div>
+      <p id="embed-note" class="empty">Click a point to open its well; drag a rectangle to mark wells on the plate.</p>
+    </div>
   </section>
   {% if analysis %}
   <section>
@@ -211,7 +226,107 @@ function selectWell(name) {
   const b = $("w-" + name); b.classList.add("sel"); b.focus({ preventScroll: true });
   history.replaceState(null, "", "#" + name);
   renderWell();
+  if (DATA.embedding) drawEmbedding();
 }
+
+// ---------------------------------------------------------------- PCA / UMAP
+const PALETTE = ["#4477aa", "#ee6677", "#228833", "#ccbb44", "#66ccee", "#aa3377", "#bbbbbb", "#ee8866", "#44bb99", "#99ddff", "#332288", "#882255"];
+let picked = new Set(), screenPoints = [], drag = null;
+function groupOf(well) {
+  const a = DATA.layout[well];
+  if (!a) return "sample";
+  if (a.control_type) return a.control_type + " control";
+  return a.compound || "sample";
+}
+function embeddingGroups() {
+  const names = [...new Set(DATA.embedding.wells.map((p) => groupOf(p.well)))];
+  names.sort((x, y) => (y.endsWith("control") - x.endsWith("control")) || x.localeCompare(y));
+  return Object.fromEntries(names.map((n, i) => [n, PALETTE[i % PALETTE.length]]));
+}
+function drawEmbedding() {
+  const canvas = $("embed"), ctx = canvas.getContext("2d"), ratio = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * ratio; canvas.height = h * ratio; ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const space = $("space").value, level = $("level").value;
+  const points = (level === "cells" ? DATA.embedding.cells : DATA.embedding.wells).filter((p) => finite(p[space + "1"]) && finite(p[space + "2"]));
+  const colours = embeddingGroups(), pad = 28;
+  const xs = points.map((p) => p[space + "1"]), ys = points.map((p) => p[space + "2"]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const sx = (v) => pad + (v - x0) / ((x1 - x0) || 1) * (w - 2 * pad), sy = (v) => h - pad - (v - y0) / ((y1 - y0) || 1) * (h - 2 * pad);
+  const style = getComputedStyle(document.body);
+  ctx.fillStyle = style.color; ctx.font = "12px system-ui";
+  const label = space === "PC" ? "PC" : "UMAP";
+  const variance = DATA.embedding.variance;
+  ctx.fillText(`${label}1${space === "PC" && variance[0] ? ` (${(100 * variance[0]).toFixed(0)} %)` : ""}`, w / 2 - 30, h - 8);
+  ctx.save(); ctx.translate(12, h / 2 + 30); ctx.rotate(-Math.PI / 2);
+  ctx.fillText(`${label}2${space === "PC" && variance[1] ? ` (${(100 * variance[1]).toFixed(0)} %)` : ""}`, 0, 0); ctx.restore();
+  screenPoints = [];
+  const size = level === "cells" ? 2.5 : 6;
+  const highlighted = (p) => p.well === selectedWell || picked.has(p.well);
+  for (const pass of [false, true]) {  // highlighted points on top
+    for (const p of points) {
+      if (highlighted(p) !== pass) continue;
+      const x = sx(p[space + "1"]), y = sy(p[space + "2"]);
+      ctx.globalAlpha = level === "cells" && !pass ? 0.55 : 1;
+      ctx.beginPath(); ctx.arc(x, y, pass ? size + 2 : size, 0, 2 * Math.PI);
+      ctx.fillStyle = colours[groupOf(p.well)] || "#888"; ctx.fill();
+      if (pass) { ctx.lineWidth = 2; ctx.strokeStyle = style.color; ctx.stroke(); }
+      screenPoints.push({ x, y, well: p.well });
+    }
+  }
+  ctx.globalAlpha = 1;
+  if (drag && drag.moved) {
+    ctx.setLineDash([4, 3]); ctx.strokeStyle = style.color; ctx.lineWidth = 1;
+    ctx.strokeRect(Math.min(drag.x0, drag.x1), Math.min(drag.y0, drag.y1), Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
+    ctx.setLineDash([]);
+  }
+  const legend = $("legend"); legend.innerHTML = "";
+  for (const [name, colour] of Object.entries(colours)) { const s = el("span", {}, name); s.style.setProperty("--dot", colour); legend.appendChild(s); }
+}
+function canvasPoint(e) { const r = $("embed").getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function setPicked(wells) {
+  picked = new Set(wells);
+  for (const b of document.querySelectorAll(".well.data")) b.classList.toggle("picked", picked.has(b.dataset.well));
+  $("embed-note").textContent = picked.size ? `${picked.size} well(s) marked on the plate: ${[...picked].sort().join(", ")}` : "Click a point to open its well; drag a rectangle to mark wells on the plate.";
+  drawEmbedding();
+}
+function setupEmbedding() {
+  const e = DATA.embedding;
+  if (!e || !e.spaces.length) return;
+  $("profiles").hidden = false;
+  for (const s of e.spaces) { const o = document.createElement("option"); o.value = s; o.textContent = s === "PC" ? "PCA" : "UMAP"; $("space").appendChild(o); }
+  if (!e.cells.length) $("level").querySelector('[value="cells"]').disabled = true;
+  $("space").addEventListener("change", drawEmbedding);
+  $("level").addEventListener("change", drawEmbedding);
+  const canvas = $("embed");
+  canvas.addEventListener("pointerdown", (ev) => { const [x, y] = canvasPoint(ev); drag = { x0: x, y0: y, x1: x, y1: y, moved: false }; canvas.setPointerCapture(ev.pointerId); });
+  canvas.addEventListener("pointermove", (ev) => {
+    if (!drag) return;
+    [drag.x1, drag.y1] = canvasPoint(ev);
+    drag.moved = drag.moved || Math.hypot(drag.x1 - drag.x0, drag.y1 - drag.y0) > 4;
+    if (drag.moved) drawEmbedding();
+  });
+  canvas.addEventListener("pointerup", () => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (!d.moved) {
+      let best = null, bestDistance = 9;
+      for (const p of screenPoints) { const dist = Math.hypot(p.x - d.x0, p.y - d.y0); if (dist < bestDistance) { best = p; bestDistance = dist; } }
+      if (best && DATA.wells[best.well]) selectWell(best.well); else drawEmbedding();
+      return;
+    }
+    const [xa, xb] = [Math.min(d.x0, d.x1), Math.max(d.x0, d.x1)], [ya, yb] = [Math.min(d.y0, d.y1), Math.max(d.y0, d.y1)];
+    setPicked(screenPoints.filter((p) => p.x >= xa && p.x <= xb && p.y >= ya && p.y <= yb).map((p) => p.well));
+  });
+  window.addEventListener("resize", drawEmbedding);
+  drawEmbedding();
+}
+// For automated checks: where a well's point is drawn (client coordinates).
+window.hcsEmbedding = {
+  position(well) { const p = screenPoints.find((q) => q.well === well); if (!p) return null; const r = $("embed").getBoundingClientRect(); return [r.left + p.x, r.top + p.y]; },
+  picked() { return [...picked].sort(); },
+};
 
 function onKey(e) {
   const moves = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
@@ -287,6 +402,7 @@ function renderWell() {
 
 buildPlate();
 fillReadouts();
+setupEmbedding();
 $("filter").addEventListener("input", fillReadouts);
 $("readout").addEventListener("change", draw);
 $("norm").addEventListener("change", draw);

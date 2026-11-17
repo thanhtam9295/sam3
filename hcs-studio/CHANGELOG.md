@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Phase 9 — phenotypic profiles
+- Profiling of one or more runs: feature selection (missing, near-constant, |r| > 0.95),
+  robust Z per plate relative to negative-control objects, optional plate centring, PCA
+  (scree, loadings) and seeded UMAP of objects or wells.
+- Per-well profiles and distance to the negative controls (object SD units), shown as
+  readouts on the results plate and in the report.
+- Dose-response: four-parameter logistic fits (EC50, Hill, bottom, top, R²) of any per-well
+  readout per compound.
+- Profiles tab: PCA/UMAP coloured by controls, compound, concentration, class or cluster;
+  lasso → wells marked on the results plate; click → object crop and viewer; plate click →
+  points highlighted; scree and loadings; dose-response; SVG/PNG/CSV export.
+- `advanced/` folder with coordinates, loadings, well profiles, `dose_response.csv`,
+  figures (SVG, PNG) and `profiling.json`; `hcs-studio profile <runs…>`.
+- `index.html`: PCA/UMAP panel linked to the plate (click a point → well; drag → mark wells;
+  selected well highlighted).
+- umap-learn and matplotlib are now dependencies.
+- Fixed: rebuilding the results plate while wells were selected raised an error.
+
 ### Phase 8 — classification, clustering, whole-well analysis
 - **Stitch well** step: field positions from stage coordinates, stage orientation found
   from the overlaps, sub-pixel refinement by phase correlation and global least squares;

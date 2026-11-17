@@ -109,6 +109,13 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - Classifiers are joblib dicts (`FORMAT = "hcs-studio-classifier/1"`); record the file's SHA-256 in the analysis summary.
 - `docs/processing.md` covers table steps too (regenerate after changing their parameters).
 
+## Profiling conventions
+
+- `analysis/profiling.py` (`run_profiling`, `load_profile`) is headless; it writes `advanced/` of the first run (or `output`). Normalisation is robust Z per plate relative to negative-control **objects**; well profiles = median of object Z-scores (do not scale by control-well spread: too few wells). Clip ±10 before PCA/UMAP/distances.
+- `RunResults` adds `profile_*` readouts from `advanced/well_profiles.parquet` (rows of that run only) and `profile_embedding()` for plots; the report embeds it (well points + ≤ 3000 sampled objects).
+- Figures for files go through matplotlib (`save_scatter`, `_figures`); pyqtgraph's SVG exporter fails with this Qt version.
+- UMAP is seeded (single-threaded); record every option in `profiling.json`.
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).
@@ -120,6 +127,7 @@ Run from this folder (`hcs-studio/`).
 - Deconvolution timing: `hcs-studio benchmark --shape 30 2048 2048 --iterations 40 [--device gpu]`
 - Fine-tune Cellpose: `hcs-studio train-cellpose --data <folder>`; real-SAM 3 tests: `HCS_SAM3_PYTHON=.venv-sam3/bin/python HCS_SAM3_WEIGHTS=1 pytest -k real_sam3`
 - Regenerate a run's report: `hcs-studio report <run folder>`
+- Profiles: `hcs-studio profile <run> [<run> ...] --object-type nuclei [--level well] [--no-umap]`
 - Apply table steps to a finished run: `hcs-studio analyze <run folder> --pipeline steps.yaml [--only]`; train a classifier from a labels CSV: `hcs-studio train-classifier --run <folder> --labels labels.csv --output model.joblib`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)
 - Headless Linux needs `xvfb libegl1 libgl1-mesa-dri libxcb-cursor0`; `ci.sh` wraps pytest in `xvfb-run`. `QT_QPA_PLATFORM=offscreen` does not work (napari needs a real OpenGL context).

@@ -4,7 +4,7 @@ Desktop image analysis for high-content and high-throughput fluorescence microsc
 (Nikon `.nd2`, Operetta CLS, ImageXpress). The full specification is in `PROMPT.md`;
 the project rules are in `CLAUDE.md`.
 
-**Status: Phase 8 (classification, clustering, whole-well analysis).** Plates from Nikon, Operetta CLS,
+**Status: Phase 9 (phenotypic profiles).** Plates from Nikon, Operetta CLS,
 ImageXpress, OME-TIFF, OME-Zarr and plain TIFF folders can be browsed and viewed.
 Correction, enhancement, deconvolution, segmentation (Cellpose 4, SAM 3, threshold +
 watershed) and measurement steps (object features, colocalization, QC and counts) are
@@ -12,7 +12,8 @@ combined into pipelines and run on wells or plates as resumable background jobs.
 appear on a clickable plate (any readout, % positive, robust Z, Z′) in the app and in a
 self-contained `index.html` that works offline. Wells can be stitched; objects can be
 gated, classified (trained on clicked examples), clustered, and analysed for spatial
-organisation, also after a run. Algorithms are tested on synthetic data;
+organisation, also after a run. PCA/UMAP profiles normalised to negative controls, a
+distance-to-control score and dose-response fits are linked to the plate. Algorithms are tested on synthetic data;
 real-data validation is pending. See `docs/index.md`, `docs/processing.md`,
 `docs/measurements.md` and `docs/validation.md`.
 
@@ -47,6 +48,8 @@ python -m hcs_studio
 `hcs-studio analyze <run folder> --pipeline steps.yaml` applies gates, classifiers and
 clustering to a finished run; `hcs-studio train-classifier` trains a classifier from a
 labels CSV.
+`hcs-studio profile <run folder> [...]` computes PCA/UMAP profiles, distance to control and
+dose-response curves.
 `hcs-studio benchmark` times deconvolution on this machine.
 `hcs-studio train-cellpose --data <folder>` fine-tunes Cellpose on edited masks.
 

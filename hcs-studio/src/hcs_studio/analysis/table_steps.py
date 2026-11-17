@@ -176,6 +176,18 @@ class TableRunResult:
     steps: list[dict[str, Any]] = field(default_factory=list)
 
 
+def read_well_objects(folder: Path) -> pd.DataFrame:
+    """All objects of one well (``wells/<W>``), with any table-step annotations."""
+    objects = pd.read_parquet(folder / "objects.parquet")
+    path = folder / ANNOTATIONS_FILE
+    if path.exists():
+        extra = pd.read_parquet(path)
+        extra = extra[[c for c in extra.columns if c not in objects.columns]]
+        if len(extra) == len(objects):
+            objects = pd.concat([objects, extra], axis=1)
+    return objects
+
+
 def _load_objects(folder: Path, annotations: pd.DataFrame | None) -> pd.DataFrame:
     objects = pd.read_parquet(folder / "objects.parquet")
     if annotations is not None:
