@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Phase 4 — segmentation
+- Label sets on images: named segmentations (nuclei, cells, spots, …) with parent links.
+- Cellpose 4.2 step (`cpsam_v2` default, `cpsam`, `cpdino`, `cpdino-vitb`, or a trained model
+  file): one or two channels, optional diameter in µm, flow and cell-probability thresholds,
+  2D, 3D or stitched planes, GPU when available, model cached per process.
+- SAM 3 step (text concept) and interactive SAM 3 in the viewer (concept, positive/negative
+  points, boxes), through a worker process in a separate SAM 3 environment, with a CPU
+  compatibility layer and a first-run settings dialog.
+- Classical fallback: threshold (Otsu, Li, triangle, or local with background removal) and
+  watershed for touching objects.
+- Hierarchy: cells from nuclei by expansion (IDs shared), spot detection (LoG/DoG) linked to
+  cells, linking any segmentation to a parent by overlap.
+- Object filters: edge, size, solidity and intensity gates; children removed with parents.
+- Editing in the viewer: napari paint/erase/fill, plus merge, split by seed points and delete.
+- Training pairs in Cellpose format from edited labels; Cellpose fine-tuning in the app and
+  with `hcs-studio train-cellpose`.
+- Run folders now hold label images (`masks/`), parent links (CSV), object counts per field,
+  and previews with outlines.
+- Optional `segmentation` extra (`cellpose`).
+- SAM 3.1 is a video-tracking release; still images use the SAM 3 image model.
+
 ### Phase 3 — deconvolution
 - Theoretical PSFs from the metadata via `psfmodels` (vectorial or Gibson-Lanni; confocal
   model with pinhole in Airy units, derived from the pinhole size when known).

@@ -47,6 +47,30 @@ NOTES = {
     "otherwise on the CPU. **Validate against your reference software (e.g. Huygens) on bead "
     "and cell images before using it for quantitative claims** — see "
     "[validation.md](validation.md).",
+    "segment_classical": "Smooths the channel, thresholds it (Otsu, Li or triangle; `local` "
+    "subtracts a smooth background first, for uneven illumination), fills holes and separates "
+    "touching objects by watershed on the distance transform. Fast and transparent; best for "
+    "well-separated, evenly stained nuclei and as a fallback when no model is available.",
+    "segment_cellpose": "Cellpose 4 (`cpsam_v2` is the default Cellpose-SAM model). Give one "
+    "channel, or two (e.g. cytoplasm plus nuclei) for whole cells. The diameter is optional. "
+    "Z stacks are segmented in 3D (`do_3d`), plane by plane with stitching, or plane by plane. "
+    "A trained model file can be used in place of a built-in name. Uses the GPU when available; "
+    "on the CPU expect about 15 s per 512 × 512 field.",
+    "segment_sam3": 'Segments every instance of a text concept ("nucleus", "spheroid") with '
+    "SAM 3, plane by plane, from 1-3 channels shown as a grey or colour image. Runs in a "
+    "separate SAM 3 environment (Tools → SAM 3 settings). Best for organoids, spheroids and "
+    "unusual objects; use Cellpose for high-throughput cell and nucleus segmentation.",
+    "expand_cells": "Grows each nucleus outward by up to `distance_um`, without overlap, so "
+    "each cell keeps its nucleus' ID (cell 7 contains nucleus 7). Optionally limited to pixels "
+    "where a cytoplasm channel is above a threshold.",
+    "detect_spots": "Finds sub-cellular spots with a Laplacian-of-Gaussian or "
+    "difference-of-Gaussians filter tuned to the spot size, thresholded at a multiple of the "
+    "robust noise level. Each spot is linked to the cell under its centre; spots outside cells "
+    "are dropped unless `only_inside_parent` is off.",
+    "filter_objects": "Removes objects touching the border, outside a size range, below a "
+    "solidity, or outside an intensity range (intensity gates need linear data, so put the "
+    "filter before display-only steps). Objects of child label sets lose their parent or are "
+    "removed with it. Removed IDs are not renumbered.",
 }
 
 

@@ -29,6 +29,9 @@ gui = [
     "napari>=0.9",
     "pyqtgraph>=0.13",
 ]
+segmentation = [
+    "cellpose>=4.2",
+]
 gpu = [
     # Install the CUDA build that matches your driver, see https://pytorch.org/get-started/
     "torch>=2.2",
@@ -74,6 +77,6 @@ strict = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*"]
+module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*"]
 ignore_missing_imports = true
 follow_imports = "skip"

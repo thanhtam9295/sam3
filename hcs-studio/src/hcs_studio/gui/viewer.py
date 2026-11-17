@@ -40,6 +40,7 @@ class ViewerPanel:
         self.widget: QWidget = window
         self._before_layers: list[Any] = []
         self._after_layers: list[Any] = []
+        self._label_layers: list[Any] = []
         self._after_width = 0.0
 
     def show_channels(
@@ -103,7 +104,7 @@ class ViewerPanel:
         else:
             data = data[0]
         self.viewer.layers.clear()
-        self._before_layers, self._after_layers = [], []
+        self._before_layers, self._after_layers, self._label_layers = [], [], []
         self.viewer.add_image(
             data,
             channel_axis=1 if n_t > 1 else 0,
@@ -122,6 +123,7 @@ class ViewerPanel:
     def show_comparison(self, before: ImageData, after: ImageData, mode: str = "After") -> None:
         """Show a field before and after processing. Both are (C, Z, Y, X) in memory."""
         self.viewer.layers.clear()
+        self._label_layers = []
         self._before_layers = self._add_czyx(before, "")
         suffix = " ▸ corrected" if after.linear else " ▸ enhanced (display only)"
         self._after_layers = self._add_czyx(after, suffix)
@@ -161,12 +163,97 @@ class ViewerPanel:
         side = mode == "Side by side"
         for layer in self._before_layers:
             layer.visible = mode != "After"
-        for layer in self._after_layers:
+        live_labels = [layer for layer in self._label_layers if layer in self.viewer.layers]
+        for layer in [*self._after_layers, *live_labels]:
             layer.visible = mode != "Before"
             translate = [0.0] * layer.ndim
             translate[-1] = self._after_width * 1.05 if side else 0.0
             layer.translate = translate
         self.viewer.reset_view()
+
+    # ------------------------------------------------------------- labels
+
+    @staticmethod
+    def _spatial(metadata: ImageMetadata, n_z: int) -> tuple[list[float], list[str]]:
+        calibrated = metadata.pixel_size_um is not None
+        pixel = metadata.pixel_size_um or 1.0
+        scale: list[float] = [pixel, pixel]
+        units = ["µm" if calibrated else "pixel"] * 2
+        if n_z > 1:
+            z_known = calibrated and metadata.z_step_um is not None
+            scale.insert(0, metadata.z_step_um if z_known and metadata.z_step_um else pixel)
+            units.insert(0, "µm" if z_known else "pixel")
+        return scale, units
+
+    def show_labels(
+        self, label_sets: Any, metadata: ImageMetadata, translate_x: float = 0.0
+    ) -> None:
+        """Add (or replace) one editable labels layer per label set."""
+        for label_set in label_sets:
+            data = label_set.data if label_set.data.shape[0] > 1 else label_set.data[0]
+            scale, units = self._spatial(metadata, label_set.data.shape[0])
+            if label_set.name in self.viewer.layers:
+                self.viewer.layers.remove(label_set.name)
+            layer = self.viewer.add_labels(
+                np.asarray(data, dtype=np.int32), name=label_set.name, scale=scale, units=units
+            )
+            translate = [0.0] * layer.ndim
+            translate[-1] = translate_x
+            layer.translate = translate
+            layer.opacity = 0.45
+            if layer not in self._label_layers:
+                self._label_layers.append(layer)
+
+    def labels_names(self) -> list[str]:
+        return [layer.name for layer in self.viewer.layers if type(layer).__name__ == "Labels"]
+
+    def get_labels(self, name: str) -> NDArray[np.int32]:
+        """Labels of a layer as (Z, Y, X)."""
+        data = np.asarray(self.viewer.layers[name].data, dtype=np.int32)
+        return data if data.ndim == 3 else data[None]
+
+    def set_labels(self, name: str, labels: NDArray[Any]) -> None:
+        layer = self.viewer.layers[name]
+        layer.data = np.asarray(labels if layer.ndim == 3 else labels[0], dtype=np.int32)
+
+    def add_empty_labels(
+        self, name: str, shape_zyx: tuple[int, int, int], metadata: ImageMetadata
+    ) -> None:
+        from hcs_studio.processing.base import LabelSet
+
+        self.show_labels([LabelSet(name, np.zeros(shape_zyx, dtype=np.int32))], metadata)
+
+    def prompt_layer(self, kind: str, name: str, like: str) -> Any:
+        """Get or create a Points/Shapes layer for prompts, aligned with layer ``like``."""
+        if name in self.viewer.layers:
+            return self.viewer.layers[name]
+        reference = self.viewer.layers[like]
+        if kind == "points":
+            layer = self.viewer.add_points(
+                np.zeros((0, reference.ndim)),
+                name=name,
+                scale=reference.scale,
+                size=6,
+                face_color="lime" if "negative" not in name else "red",
+            )
+        else:
+            layer = self.viewer.add_shapes(
+                name=name,
+                scale=reference.scale,
+                ndim=reference.ndim,
+                edge_color="lime",
+                face_color="transparent",
+                edge_width=2,
+            )
+        layer.translate = reference.translate
+        return layer
+
+    def current_z(self, like: str) -> int:
+        """Z index of the displayed plane for layer ``like`` (0 for 2D)."""
+        layer = self.viewer.layers[like]
+        if layer.ndim < 3:
+            return 0
+        return int(np.rint(float(layer.world_to_data(self.viewer.dims.point)[-3])))
 
     def layer_names(self) -> list[str]:
         return [layer.name for layer in self.viewer.layers]

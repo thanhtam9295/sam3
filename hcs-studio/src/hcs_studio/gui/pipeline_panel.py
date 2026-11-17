@@ -195,6 +195,9 @@ class PipelinePanel(QWidget):
         if self.live.isChecked():
             self._timer.start()
 
+    def has_module(self, module: str) -> bool:
+        return any(step["module"] == module for step in self._steps)
+
     def set_module_param(self, module: str, key: str, value: Any) -> None:
         """Set a parameter on the selected step of ``module`` (else the first; else add one)."""
         row = self.steps.currentRow()

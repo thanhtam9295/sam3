@@ -51,6 +51,33 @@ class ChannelParams(ModuleParams):
 
 
 @dataclass(frozen=True)
+class LabelSet:
+    """Segmented objects of one kind: int32 (Z, Y, X), 0 = background, 1..N = objects.
+
+    ``parent_ids[i]`` is the ID of the parent object (in label set ``parent``) of object
+    ``i``; index 0 is unused. Cells expanded from nuclei share their nucleus' ID.
+    """
+
+    name: str
+    data: NDArray[np.int32]
+    parent: str | None = None
+    parent_ids: NDArray[np.int32] | None = None
+    source: str = ""
+
+    def __post_init__(self) -> None:
+        if self.data.ndim != 3:
+            raise ValueError(f"Label set '{self.name}' needs (Z, Y, X); got {self.data.shape}")
+        if (self.parent is None) != (self.parent_ids is None):
+            raise ValueError("parent and parent_ids must be given together")
+
+    @property
+    def count(self) -> int:
+        """Number of objects (distinct non-zero IDs)."""
+        ids = np.unique(self.data)
+        return int((ids > 0).sum())
+
+
+@dataclass(frozen=True)
 class ImageData:
     """One timepoint of one field: ``data`` is float32 (C, Z, Y, X)."""
 
@@ -61,12 +88,20 @@ class ImageData:
     history: tuple[str, ...] = ()
     #: Per-step reports (e.g. deconvolution iterations, residual, runtime).
     reports: tuple[dict[str, Any], ...] = ()
+    #: Segmentations made so far, in order (nuclei, cells, spots, ...).
+    labels: tuple[LabelSet, ...] = ()
 
     def __post_init__(self) -> None:
         if self.data.ndim != 4:
             raise ValueError(f"ImageData needs (C, Z, Y, X); got shape {self.data.shape}")
         if self.data.shape[0] != len(self.metadata.channels):
             raise ValueError("Channel count of data and metadata differ")
+        for label_set in self.labels:
+            if label_set.data.shape != self.data.shape[1:]:
+                raise ValueError(
+                    f"Label set '{label_set.name}' has shape {label_set.data.shape}; the image "
+                    f"is {self.data.shape[1:]}"
+                )
 
     def derive(
         self,
@@ -84,6 +119,28 @@ class ImageData:
             linear=self.linear and linear,
             history=(*self.history, step),
             reports=(*self.reports, report) if report is not None else self.reports,
+            labels=self.labels if data.shape[1:] == self.data.shape[1:] else (),
+        )
+
+    def label_set(self, name: str) -> LabelSet:
+        for label_set in self.labels:
+            if label_set.name == name:
+                return label_set
+        known = ", ".join(ls.name for ls in self.labels) or "none yet"
+        raise ModuleError(f"No segmentation named '{name}' (available: {known})")
+
+    def with_labels(
+        self, label_set: LabelSet, step: str, report: dict[str, Any] | None = None
+    ) -> ImageData:
+        """Add (or replace, by name) a label set. Pixel data and linearity are unchanged."""
+        kept = tuple(ls for ls in self.labels if ls.name != label_set.name)
+        return ImageData(
+            data=self.data,
+            metadata=self.metadata,
+            linear=self.linear,
+            history=(*self.history, step),
+            reports=(*self.reports, report) if report is not None else self.reports,
+            labels=(*kept, label_set),
         )
 
     @classmethod
@@ -146,6 +203,12 @@ def load_builtin_modules() -> None:
         enhance,
         flatfield,
     )
+    from hcs_studio.segmentation import (  # noqa: F401
+        cellpose_backend,
+        classical,
+        objects,
+        sam3_backend,
+    )
 
 
 def create_module(name: str, params: dict[str, Any] | None = None) -> Module:
@@ -191,6 +254,7 @@ __all__ = [
     "FitContext",
     "FloatImage",
     "ImageData",
+    "LabelSet",
     "Module",
     "ModuleError",
     "ModuleParams",

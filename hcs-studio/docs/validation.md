@@ -67,3 +67,38 @@ analysis workstation to get the real figure.
   modelled).
 - Richardson-Lucy has no automatic stopping rule tied to noise. Choose the
   iteration count on a representative field and keep it fixed across a plate.
+
+## Segmentation (Phase 4)
+
+### Verified on synthetic data
+
+| Check | Result | Test |
+|---|---|---|
+| Threshold + watershed finds every nucleus, one ID each, correct area | 5/5, area within 15 % | `test_classical_finds_every_nucleus` |
+| Watershed separates two overlapping nuclei | 2 objects (1 without watershed) | `test_watershed_separates_touching_nuclei` |
+| Local threshold copes with a strong background ramp | 5/5 (global Otsu fails) | `test_local_threshold_handles_uneven_background` |
+| Cells from nuclei keep the nucleus ID, grow by the requested distance, stop at the cytoplasm mask | yes, radius within 1.5 px | `test_cells_by_expansion_keep_nucleus_ids` |
+| Spots found and linked to the right cell; spots outside cells dropped | 4/4 linked, 1 dropped | `test_spots_are_found_and_linked_to_cells` |
+| Edge, size and intensity filters; children removed with their parent | yes | `test_filters` |
+| **Real Cellpose `cpsam_v2`** (CPU) on 25 separated synthetic nuclei | 25/25, one ID per nucleus, areas within 20 % | `test_real_cellpose_counts_separated_nuclei` (runs when the weights are downloaded) |
+| **Real Cellpose fine-tuning** (1 epoch, CPU) and use of the new model | trains in 44 s; the new model finds 36/36 nuclei | manual run, see the changelog |
+| **Real SAM 3 code** through the worker (random weights, CPU): image encoding, text, box and point prompts | all four calls work; ~10 s per image, 1-2 s per prompt | `test_real_sam3_api_with_random_weights` (set `HCS_SAM3_PYTHON`) |
+| SAM worker protocol, errors and crashes reported | yes (stand-in model) | `test_sam_worker_*` |
+
+### Still to do on real data
+
+1. **Cell counts**: compare Cellpose counts per field with manual counts on 10 annotated
+   fields (acceptance: within ±5 %).
+2. **SAM 3** with the real weights, once Meta approves access to `facebook/sam3`: check
+   concept prompts ("nucleus", "spheroid", "mitotic cell") on representative fields.
+3. Check the spot detector threshold (`threshold_sd`) on PLA images against manual spot
+   counts in a few cells.
+
+### Known limitations
+
+- SAM 3 needs a CUDA GPU upstream. HCS Studio's worker adds a small CPU compatibility
+  layer: it redirects three hard-coded CUDA allocations and `pin_memory` to the CPU and
+  runs under bfloat16 autocast. Results on CPU have not been compared with GPU results.
+- SAM 3 segments 2D planes only.
+- `cpdino` and `cpdino-vitb` need the `dinov3` package (installed from GitHub), not
+  included here.

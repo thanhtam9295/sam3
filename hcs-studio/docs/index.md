@@ -115,6 +115,83 @@ Deconvolution output stays linear (usable for measurements). It is classic RL/TV
 deconvolution: validate it against Huygens on bead and cell images before using it
 for quantitative claims. See [validation.md](validation.md).
 
+## Segmentation
+
+Segmentation steps go in the same pipeline as the corrections. They read the image as it
+is at that point, so contrast or clarity steps placed before them improve detection,
+while measurements (Phase 5) still use the linear data. Each step creates a named
+**label set** (`nuclei`, `cells`, `spots`, …):
+
+| Step | Use it for |
+|---|---|
+| Segmentation: Cellpose | nuclei and whole cells, high throughput (default `cpsam_v2`) |
+| Segmentation: threshold + watershed | well-separated nuclei; fast fallback without a model |
+| Segmentation: SAM 3 (text concept) | organoids, spheroids, unusual objects, by describing them |
+| Cells from nuclei (expansion) | cells as nuclei grown outward; cell *n* contains nucleus *n* |
+| Spot detection (LoG / DoG) | sub-cellular spots, each linked to its cell |
+| Filter objects | remove edge objects, wrong sizes, shapes or intensities |
+
+A typical hierarchy is *Cellpose (nuclei) → Cells from nuclei, or Cellpose on the
+cytoplasm channel with `parent: nuclei` → Spot detection (`parent: cells`) → Filter*.
+Every object records its parent ID.
+
+After **Preview**, each label set appears in the viewer as an editable labels layer.
+
+### Editing and SAM 3 in the viewer
+
+The **Segmentation** dock (tab next to Pipeline) works on the selected labels layer:
+
+- **Paint, erase, fill**: use napari's own tools in the viewer's layer controls.
+- **Merge / Delete**: type object IDs (hover over an object to see its ID).
+- **Split**: *Add seed layer*, click two or more points inside the object, enter its
+  ID, *Split*.
+- **SAM 3**: type a concept (e.g. "mitotic cell") and *Segment all instances*, or
+  *Add prompt layers*, click positive and negative points or draw boxes, then
+  *Segment from points/boxes*. SAM works on the displayed Z plane.
+
+### Training data and fine-tuning Cellpose
+
+Correct a segmentation, then **Save as training pair**: the image and its masks are
+written to the training folder as `*_img.tif` / `*_masks.tif` (Cellpose's format).
+With enough pairs, **Fine-tune Cellpose** trains a new model from the chosen base model.
+The result is set as the model of the pipeline's Cellpose step. From the command line:
+
+```bash
+hcs-studio train-cellpose --data <training folder> --base cpsam_v2 --epochs 100
+```
+
+Fine-tuning needs a GPU in practice. Validate a fine-tuned model on fields that were not
+used for training.
+
+### Setting up SAM 3
+
+SAM 3 needs its own Python environment because it requires numpy < 2:
+
+```bash
+uv venv --python 3.12 .venv-sam3
+```
+
+```bash
+uv pip install --python .venv-sam3/bin/python torch torchvision einops pycocotools psutil "setuptools<81" -e <path to the sam3 repository>
+```
+
+(`einops`, `pycocotools`, `psutil` and `setuptools` are imported by SAM 3 but not declared
+by it.) The weights are gated: request access to **facebook/sam3** on Hugging Face and
+wait for approval, then log in with `huggingface-cli login` in that environment, or
+download `sam3.pt` yourself. In **Tools → SAM 3 settings**, choose that environment's
+Python (and the checkpoint, if downloaded) and click *Check environment*.
+
+SAM 3.1 is a video-tracking release; still images use the SAM 3 image model. A GPU is
+strongly recommended. On the CPU, encoding an image takes about 10 s and each prompt
+1-2 s.
+
+### Output
+
+Each run writes, per field, `masks/<field>_<label set>.ome.tif` (label images),
+`masks/<field>_<label set>_parents.csv` (object → parent links), and the object counts in
+`well_summary.json`. The PNG previews show outlines: nuclei yellow, cells magenta, spots
+cyan.
+
 ## Limitations in this phase
 
 - Readers have been tested on synthetic plates only, not yet on real instrument exports.
@@ -122,6 +199,9 @@ for quantitative claims. See [validation.md](validation.md).
 - ImageXpress does not record confocal vs widefield; set the modality manually.
 - ImageXpress field positions are nominal (site grid), not measured stage positions.
 - Operetta flat-field profiles are not read yet.
-- The correction and enhancement modules are verified on synthetic images only.
+- The correction, enhancement and segmentation modules are verified on synthetic images only.
+- SAM 3 is tested with random weights only (its gated weights were not available); the
+  real model's segmentation quality on your images is unverified.
+- SAM 3 segments 2D planes; 3D SAM 3 segmentation is not available.
 - Noise2Void and BM3D denoising are not included yet.
 - Apart from deconvolution, every field is processed whole in memory.

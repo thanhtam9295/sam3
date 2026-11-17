@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
@@ -27,6 +28,8 @@ from hcs_studio.gui.pattern_dialog import PatternDialog
 from hcs_studio.gui.pipeline_panel import PipelinePanel
 from hcs_studio.gui.plate_panel import PlatePanel
 from hcs_studio.gui.psf_dialog import PsfDialog
+from hcs_studio.gui.sam_settings import Sam3SettingsDialog
+from hcs_studio.gui.segmentation_panel import SegmentationPanel
 from hcs_studio.gui.viewer import ViewerPanel
 from hcs_studio.gui.workers import PlateLoader, PreviewWorker
 from hcs_studio.io.base import detect_reader
@@ -56,6 +59,9 @@ class MainWindow(QMainWindow):
         self.layout_annotations: dict[tuple[int, int], WellAnnotation] = {}
         #: (row, col, field position) of the field shown in the viewer.
         self.current_field: tuple[int, int, int] | None = None
+        #: Last preview of the current field, and the raw field once loaded.
+        self._preview: ProcessResult | None = None
+        self._raw_field: ImageData | None = None
         self._fit_cache: dict[str, Any] = {}
 
         self.viewer_panel = ViewerPanel()
@@ -83,7 +89,15 @@ class MainWindow(QMainWindow):
         self.pipeline_dock = self._add_dock(
             "Pipeline", "pipelineDock", self.pipeline_panel, Qt.DockWidgetArea.RightDockWidgetArea
         )
+        self.segmentation_panel = SegmentationPanel(self.viewer_panel, self.current_image, self.log)
+        self.segmentation_dock = self._add_dock(
+            "Segmentation",
+            "segmentationDock",
+            self.segmentation_panel,
+            Qt.DockWidgetArea.RightDockWidgetArea,
+        )
         self.tabifyDockWidget(self.metadata_dock, self.pipeline_dock)
+        self.tabifyDockWidget(self.pipeline_dock, self.segmentation_dock)
         self.metadata_dock.raise_()
         self.resizeDocks(
             [self.browser_dock, self.metadata_dock], [300, 380], Qt.Orientation.Horizontal
@@ -105,6 +119,7 @@ class MainWindow(QMainWindow):
         self.preview.failed.connect(self._on_preview_failed)
         self.pipeline_panel.preview_requested.connect(self.preview_pipeline)
         self.pipeline_panel.compare_mode_changed.connect(self.viewer_panel.set_compare_mode)
+        self.segmentation_panel.model_trained.connect(self._on_model_trained)
 
         self._build_menus()
         self.log(f"HCS Studio {__version__} started. {self.gpu_status.summary}")
@@ -139,9 +154,16 @@ class MainWindow(QMainWindow):
 
         tools_menu = self.menuBar().addMenu("&Tools")
         tools_menu.addAction(self._action("&PSF tool…", self.open_psf_tool))
+        tools_menu.addAction(self._action("&SAM 3 settings…", self.open_sam_settings))
 
         view_menu = self.menuBar().addMenu("&View")
-        for dock in (self.browser_dock, self.metadata_dock, self.pipeline_dock, self.log_dock):
+        for dock in (
+            self.browser_dock,
+            self.metadata_dock,
+            self.pipeline_dock,
+            self.segmentation_dock,
+            self.log_dock,
+        ):
             view_menu.addAction(dock.toggleViewAction())
 
         help_menu = self.menuBar().addMenu("&Help")
@@ -246,8 +268,40 @@ class MainWindow(QMainWindow):
             self.log(f"Could not open {well_name(row, col)} field {field.index}: {exc}")
             return
         self.current_field = (row, col, position)
+        self._preview, self._raw_field = None, None
+        self.segmentation_panel.refresh_layers()
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Showing {self.plate.name} · {well_name(row, col)} · field {field.index}")
+
+    # ---------------------------------------------------------- segmentation
+
+    def current_image(self) -> ImageData | None:
+        """The field in the viewer as the segmentation input: the last preview, else raw."""
+        if self._preview is not None:
+            return self._preview.final
+        if self.plate is None or self.current_field is None:
+            return None
+        if self._raw_field is None:
+            row, col, position = self.current_field
+            field = self.plate.wells[(row, col)].fields[position]
+            data = np.asarray(field.load()[0], dtype=np.float32)
+            self._raw_field = ImageData(data, self.plate.metadata)
+        return self._raw_field
+
+    def open_sam_settings(self) -> Sam3SettingsDialog:
+        dialog = Sam3SettingsDialog(self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.show()
+        return dialog
+
+    def _on_model_trained(self, path: Path) -> None:
+        if self.pipeline_panel.has_module("segment_cellpose"):
+            self.pipeline_panel.set_module_param("segment_cellpose", "model", str(path))
+            self.log(f"The Cellpose step now uses the fine-tuned model {path}")
+        else:
+            self.log(
+                f"Fine-tuned model saved: {path}. Add a Cellpose step and set its model to it."
+            )
 
     # ------------------------------------------------------------------- PSF
 
@@ -293,7 +347,14 @@ class MainWindow(QMainWindow):
 
     def _on_preview_finished(self, raw: ImageData, result: ProcessResult) -> None:
         panel = self.pipeline_panel
+        self._preview = result
         self.viewer_panel.show_comparison(raw, result.final, panel.compare.currentText())
+        if result.final.labels:
+            self.viewer_panel.show_labels(result.final.labels, result.final.metadata)
+            self.viewer_panel.set_compare_mode(panel.compare.currentText())
+            counts = ", ".join(f"{ls.name}: {ls.count}" for ls in result.final.labels)
+            self.log(f"Objects: {counts}")
+        self.segmentation_panel.refresh_layers()
         panel.set_histograms(raw, result.final)
         steps = " → ".join(result.final.history) or "no steps"
         if result.final.linear:

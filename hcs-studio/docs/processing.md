@@ -113,6 +113,48 @@ Smoothing filters. Output is still treated as measurement-grade, but median and 
 | `median_size_px` | 3 | Median window in pixels (odd). |
 | `nlm_strength` | 1.0 | Non-local means strength, in units of the noise level. |
 
+## Spot detection (LoG / DoG) (`detect_spots`)
+
+Finds sub-cellular spots with a Laplacian-of-Gaussian or difference-of-Gaussians filter tuned to the spot size, thresholded at a multiple of the robust noise level. Each spot is linked to the cell under its centre; spots outside cells are dropped unless `only_inside_parent` is off.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel` | required | Channel with the spots. |
+| `output` | 'spots' | Name of the new label set. |
+| `parent` | 'cells' | Label set the spots belong to; empty = none. |
+| `diameter_um` | 0.6 | Typical spot diameter in µm. |
+| `method` | 'log' | Laplacian or difference of Gaussians. |
+| `threshold_sd` | 5.0 | Detection threshold in robust noise SDs of the filtered image. |
+| `only_inside_parent` | True | Drop spots outside any parent object. |
+
+## Cells from nuclei (expansion) (`expand_cells`)
+
+Grows each nucleus outward by up to `distance_um`, without overlap, so each cell keeps its nucleus' ID (cell 7 contains nucleus 7). Optionally limited to pixels where a cytoplasm channel is above a threshold.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `nuclei` | 'nuclei' | Label set to grow from. |
+| `output` | 'cells' | Name of the new label set. |
+| `distance_um` | 5.0 | Maximum growth in µm. |
+| `mask_channel` | None | Limit growth to pixels where this channel is bright. |
+| `mask_threshold` | None | Threshold for mask_channel; empty = Otsu. |
+
+## Filter objects (`filter_objects`)
+
+Removes objects touching the border, outside a size range, below a solidity, or outside an intensity range (intensity gates need linear data, so put the filter before display-only steps). Objects of child label sets lose their parent or are removed with it. Removed IDs are not renumbered.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `labels` | 'nuclei' | Label set to filter. |
+| `remove_edge` | True | Remove objects touching the image border. |
+| `min_size` | None | Minimum area (µm², µm³ in 3D). |
+| `max_size` | None | Maximum area (µm², µm³ in 3D). |
+| `min_solidity` | None | 2D only: area / convex area. |
+| `intensity_channel` | None | Channel for the intensity gate. |
+| `min_mean_intensity` | None | Keep objects at least this bright. |
+| `max_mean_intensity` | None | Keep objects at most this bright. |
+| `remove_children` | True | Also remove objects of child label sets whose parent is removed. |
+
 ## Flat-field correction (`flatfield`)
 
 Estimates the illumination profile from many fields of the plate: each field is divided by its mean, the per-pixel median across fields removes the cells, and a wide Gaussian keeps the smooth shading. The profile is normalised to mean 1, so the mean intensity of a field is preserved. This is a median-based estimate, not the BaSiC algorithm. It needs enough fields with varied content; it fails rather than guess when fewer than `min_fields` are available.
@@ -133,6 +175,60 @@ Collapses Z. `edf` picks, per pixel, the plane with the highest local sharpness.
 | Parameter | Default | Meaning |
 |---|---|---|
 | `method` | 'max' | edf = extended depth of field (sharpest plane per pixel). |
+
+## Segmentation: Cellpose (`segment_cellpose`)
+
+Cellpose 4 (`cpsam_v2` is the default Cellpose-SAM model). Give one channel, or two (e.g. cytoplasm plus nuclei) for whole cells. The diameter is optional. Z stacks are segmented in 3D (`do_3d`), plane by plane with stitching, or plane by plane. A trained model file can be used in place of a built-in name. Uses the GPU when available; on the CPU expect about 15 s per 512 × 512 field.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel` | required | Channel to segment (nuclear stain, or cytoplasm/membrane). |
+| `second_channel` | None | Optional extra channel (e.g. nuclei when segmenting cells). |
+| `output` | 'nuclei' | Name of the new label set. |
+| `model` | 'cpsam_v2' | cpsam_v2, cpsam, cpdino, cpdino-vitb, or a trained model file. |
+| `diameter_um` | None | Typical object diameter in µm; empty = let the model decide. |
+| `flow_threshold` | 0.4 | Higher = more (less certain) objects. |
+| `cellprob_threshold` | 0.0 | Lower = larger objects. |
+| `min_size_px` | 15 | Remove objects smaller than this. |
+| `do_3d` | False | Segment Z stacks in 3D (else plane by plane). |
+| `stitch_threshold` | 0.0 | 2D mode on stacks: stitch planes above this overlap. |
+| `parent` | None | Link each object to the object it overlaps most in this label set. |
+| `batch_size` | 8 | Tiles per GPU batch. |
+| `device` | 'auto' | auto, cpu or gpu. |
+
+## Segmentation: threshold + watershed (`segment_classical`)
+
+Smooths the channel, thresholds it (Otsu, Li or triangle; `local` subtracts a smooth background first, for uneven illumination), fills holes and separates touching objects by watershed on the distance transform. Fast and transparent; best for well-separated, evenly stained nuclei and as a fallback when no model is available.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel` | required | Channel to segment (e.g. the nuclear stain). |
+| `output` | 'nuclei' | Name of the new label set. |
+| `method` | 'otsu' | Threshold method; local adapts to uneven background. |
+| `local_block_um` | 50.0 | Neighbourhood for 'local', in µm. |
+| `offset` | 0.0 | Added to the threshold (intensity units). |
+| `smoothing_um` | 1.0 | Gaussian smoothing before thresholding. |
+| `split_touching` | True | Separate touching objects by watershed. |
+| `min_distance_um` | 5.0 | Smallest distance between object centres (≈ nucleus radius). |
+| `min_size_px` | 20 | Remove objects smaller than this. |
+| `fill_holes` | True | Fill holes inside objects. |
+| `parent` | None | Link each object to the object it overlaps most in this label set. |
+
+## Segmentation: SAM 3 (text concept) (`segment_sam3`)
+
+Segments every instance of a text concept ("nucleus", "spheroid") with SAM 3, plane by plane, from 1-3 channels shown as a grey or colour image. Runs in a separate SAM 3 environment (Tools → SAM 3 settings). Best for organoids, spheroids and unusual objects; use Cellpose for high-throughput cell and nucleus segmentation.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `prompt` | required | Concept to segment, e.g. "nucleus", "spheroid". |
+| `channels` | required | 1-3 channels shown to SAM 3. |
+| `output` | 'objects' | Name of the new label set. |
+| `confidence` | 0.5 | Minimum detection score. |
+| `min_size_px` | 20 | Remove objects smaller than this. |
+| `parent` | None | Link objects to this label set by overlap. |
+| `python` | None | Python of the SAM 3 environment; empty = from settings. |
+| `checkpoint` | None | Path of sam3.pt; empty = from settings, else Hugging Face. |
+| `device` | 'auto' | auto, cpu or gpu. |
 
 ## Sharpen (unsharp mask / DoG) (`sharpen`) — **display only**
 

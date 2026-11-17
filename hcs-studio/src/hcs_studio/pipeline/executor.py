@@ -19,10 +19,15 @@ from hcs_studio.io.sidecar import load_overrides
 from hcs_studio.model.layout import WellAnnotation
 from hcs_studio.model.plate import Field, ImageMetadata, Plate, parse_well_name, well_name
 from hcs_studio.output.manifest import build_manifest, describe_inputs, write_json
-from hcs_studio.output.writers import write_ome_tiff, write_png
+from hcs_studio.output.writers import (
+    write_labels,
+    write_ome_tiff,
+    write_parent_links,
+    write_png,
+)
 from hcs_studio.pipeline.schema import Pipeline
 from hcs_studio.processing.base import ImageData, Module, ModuleError
-from hcs_studio.utils.display import channel_colormaps, make_thumbnail
+from hcs_studio.utils.display import add_outlines, channel_colormaps, make_thumbnail
 
 _UNFITTED = object()
 Progress = Callable[[int, int, str], None]
@@ -330,10 +335,28 @@ def run_pipeline(
                             finals[0].metadata,
                         )
                         files["enhanced_display_only"] = f"enhanced/{stem}_enhanced.ome.tif"
-                    write_png(
-                        well_dir / "previews" / f"{stem}.png",
-                        make_thumbnail(final, colormaps, max_size=1024),
-                    )
+                    preview = make_thumbnail(final, colormaps, max_size=1024)
+                    label_sets = finals[0].labels
+                    if label_sets:
+                        (well_dir / "masks").mkdir(exist_ok=True)
+                        middle = final.shape[2] // 2
+                        preview = add_outlines(preview, [ls.data[middle] for ls in label_sets])
+                    objects: dict[str, Any] = {}
+                    for ls in label_sets:
+                        stack = np.stack([f.label_set(ls.name).data for f in finals])
+                        mask_file = f"masks/{stem}_{ls.name}.ome.tif"
+                        write_labels(well_dir / mask_file, stack, finals[0].metadata, ls.name)
+                        files[f"mask_{ls.name}"] = mask_file
+                        objects[ls.name] = {
+                            "count": ls.count,
+                            "source": ls.source,
+                            "parent": ls.parent,
+                        }
+                        if ls.parent is not None and ls.parent_ids is not None:
+                            links = f"masks/{stem}_{ls.name}_parents.csv"
+                            write_parent_links(well_dir / links, ls.parent_ids, ls.parent)
+                            files[f"parents_{ls.name}"] = links
+                    write_png(well_dir / "previews" / f"{stem}.png", preview)
                     files["preview"] = f"previews/{stem}.png"
                     written.append(
                         {
@@ -342,6 +365,7 @@ def run_pipeline(
                             "steps_corrected": list(correcteds[0].history),
                             "steps_enhanced": list(finals[0].history),
                             "reports": [list(f.reports) for f in finals],
+                            "objects": objects,
                         }
                     )
                     inputs.extend(item.sources)

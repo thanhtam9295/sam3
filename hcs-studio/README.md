@@ -4,12 +4,13 @@ Desktop image analysis for high-content and high-throughput fluorescence microsc
 (Nikon `.nd2`, Operetta CLS, ImageXpress). The full specification is in `PROMPT.md`;
 the project rules are in `CLAUDE.md`.
 
-**Status: Phase 3 (deconvolution).** Plates from Nikon, Operetta CLS, ImageXpress,
-OME-TIFF, OME-Zarr and plain TIFF folders can be browsed and viewed. Flat-field,
-autofluorescence, background, enhancement and deconvolution steps (theoretical or
-bead-measured PSF, CPU or CUDA GPU) can be combined into a pipeline, previewed on a field,
-and run on a plate from the command line. Readers and algorithms are tested on synthetic
-data only so far. See `docs/index.md`, `docs/processing.md` and `docs/validation.md`.
+**Status: Phase 4 (segmentation).** Plates from Nikon, Operetta CLS, ImageXpress,
+OME-TIFF, OME-Zarr and plain TIFF folders can be browsed and viewed. Correction,
+enhancement, deconvolution and segmentation steps (Cellpose 4, SAM 3, threshold +
+watershed; nuclei → cells → spots) can be combined into a pipeline, previewed on a
+field, edited in the viewer, and run on a plate from the command line. Readers and
+algorithms are tested on synthetic data only so far. See `docs/index.md`,
+`docs/processing.md` and `docs/validation.md`.
 
 ## Install
 
@@ -20,7 +21,7 @@ uv venv --python 3.12 .venv
 ```
 
 ```bash
-uv pip install --python .venv/bin/python -e ".[gui,dev]"
+uv pip install --python .venv/bin/python -e ".[gui,dev,segmentation]"
 ```
 
 On Windows the interpreter path is `.venv\Scripts\python.exe`. The GPU is optional:
@@ -38,6 +39,9 @@ python -m hcs_studio
 `hcs-studio inspect <path>` describes how a plate folder is read.
 `hcs-studio run --pipeline pipe.yaml --input <plate>` runs a pipeline unattended.
 `hcs-studio benchmark` times deconvolution on this machine.
+`hcs-studio train-cellpose --data <folder>` fine-tunes Cellpose on edited masks.
+
+SAM 3 needs a separate environment; see *Setting up SAM 3* in `docs/index.md`.
 
 ## Develop
 

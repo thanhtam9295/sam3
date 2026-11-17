@@ -62,3 +62,34 @@ def make_thumbnail(data: Any, colormaps: list[str], max_size: int = 160) -> NDAr
         scaled = np.clip((plane - low) / (high - low), 0.0, 1.0)
         rgb += scaled[..., None] * np.asarray(_RGB.get(name, _RGB["gray"]), dtype=np.float32)
     return (np.clip(rgb, 0.0, 1.0) * 255).astype(np.uint8)
+
+
+#: Outline colours for label sets, in order of creation (nuclei, cells, spots, ...).
+OUTLINE_COLOURS: tuple[tuple[int, int, int], ...] = (
+    (255, 255, 0),
+    (255, 0, 255),
+    (0, 255, 255),
+    (255, 128, 0),
+    (255, 255, 255),
+)
+
+
+def add_outlines(rgb: NDArray[np.uint8], label_planes: list[NDArray[Any]]) -> NDArray[np.uint8]:
+    """Draw object outlines (full-resolution 2D label planes) onto a possibly smaller RGB image."""
+    from skimage.segmentation import find_boundaries
+
+    out = rgb.copy()
+    for index, plane in enumerate(label_planes):
+        if plane.size == 0 or not plane.any():
+            continue
+        edges = find_boundaries(plane, mode="inner")
+        step = max(1, -(-max(plane.shape) // max(rgb.shape[:2])))
+        if step > 1:
+            height, width = rgb.shape[:2]
+            padded = np.zeros((height * step, width * step), dtype=bool)
+            h, w = min(edges.shape[0], height * step), min(edges.shape[1], width * step)
+            padded[:h, :w] = edges[:h, :w]
+            edges = padded.reshape(height, step, width, step).any(axis=(1, 3))
+        edges = edges[: rgb.shape[0], : rgb.shape[1]]
+        out[edges] = OUTLINE_COLOURS[index % len(OUTLINE_COLOURS)]
+    return out

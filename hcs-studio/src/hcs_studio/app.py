@@ -25,6 +25,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inspect.add_argument("path", type=Path)
     sub.add_parser("modules", help="list processing modules and their parameters")
+    train = sub.add_parser("train-cellpose", help="fine-tune Cellpose on edited masks")
+    train.add_argument("--data", type=Path, required=True, help="training folder")
+    train.add_argument("--base", default="cpsam_v2", help="model to start from")
+    train.add_argument("--epochs", type=int, default=100)
+    train.add_argument("--learning-rate", type=float, default=1e-5)
+    train.add_argument("--name", default="hcs_custom", help="name of the new model")
+    train.add_argument("--device", choices=["auto", "cpu", "gpu"], default="auto")
     bench = sub.add_parser("benchmark", help="time deconvolution of a synthetic stack")
     bench.add_argument(
         "--shape", type=int, nargs=3, default=[30, 2048, 2048], metavar=("Z", "Y", "X")
@@ -63,6 +70,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "run":
         return _run(args)
+    if args.command == "train-cellpose":
+        from hcs_studio.processing.base import ModuleError
+        from hcs_studio.segmentation.cellpose_backend import fine_tune
+
+        try:
+            path, history = fine_tune(
+                args.data,
+                base_model=args.base,
+                model_name=args.name,
+                epochs=args.epochs,
+                learning_rate=args.learning_rate,
+                device=args.device,
+            )
+        except ModuleError as exc:
+            print(f"Error: {exc}")
+            return 2
+        print(f"Trained on {history['images_train']} image(s) for {args.epochs} epochs")
+        print(f"Model: {path}")
+        return 0
     if args.command == "benchmark":
         from hcs_studio.benchmark import run_benchmark
         from hcs_studio.processing.base import ModuleError
