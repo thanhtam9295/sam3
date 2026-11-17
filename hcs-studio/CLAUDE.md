@@ -126,6 +126,42 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - `multiprocessing.freeze_support()` must run first in the frozen entry (`packaging/entry.py`); worker processes of the bundle restart the executable.
 - `scripts/make_test_plate.py` writes realistic synthetic plates (384 wells); `scripts/pipelines/perf_384.yaml` is the reference pipeline for performance numbers in docs/validation.md.
 
+## Add-on phases 11–15 (PROMPT_ADDON.md) — proposed, pending approval
+
+Order: 11 annotation → 12 projection + background → 13 pharmacology → 14 comparison/export → 15 integration (all prerequisites, Phases 1–10, are built). Stop for review after each phase.
+
+### Plate annotation data model (Phase 11; replaces `model/layout.py`)
+
+```
+PlateLayout (model/annotation.py)
+ ├─ plate_id / barcode, plate_type (96 | 384 | 1536), assay, date, operator, version, parent_version
+ └─ wells: dict[(row, col)] → WellAnnotation
+     ├─ cell_line, passage, seeding_density (cells/well)
+     ├─ treatments: tuple[Treatment, ...]   (0 = untreated/vehicle only, 1 = single agent, 2+ = combination)
+     │    └─ Treatment(compound, concentration (base units), unit_kind, display_unit, vehicle)
+     ├─ role: sample | negative_control | positive_control | untreated | blank | empty | excluded
+     │        (+ unstained, needed by the AF-reference step)
+     ├─ replicate_group: derived from (cell_line, sorted treatments) unless overridden
+     ├─ time_point_h, notes, custom: dict[str, str]
+```
+
+- Concentrations are stored in base units: molar → M; mass → g/L (ng/mL etc.); percent → fraction (v/v). Molar and mass convert only with a molecular weight. One tested utility: `model/units.py`.
+- Treatments are compared order-free: (A, B) == (B, A). Concentration 0 of a drug means "this drug absent" (single-agent edge of a matrix).
+- Layouts are immutable values; an edit makes a new version. Versions live in `<settings>/layouts/<plate key>/vNNNN.json` (plate key = barcode, else a hash of the plate path). Each run copies the version it used to `plate_layout.json` and records `{version, sha256}` in `run_manifest.json`. Templates live in `<settings>/layout_templates/`.
+- Only the processing-relevant part of a layout (unstained/blank wells) enters `pipeline_hash`; changing names, doses or roles of samples does not block resuming. Annotation can be re-applied to a finished run (tables and report refreshed, no image reprocessing).
+- Per-well tables get the annotation columns joined at aggregation; per-object tables are joined by well at read time (no duplication across 10⁷ rows).
+
+### New dependencies (approved list for 11–15)
+
+| Library | Phase | Use |
+|---|---|---|
+| openpyxl | 11 | XLSX import/export of layouts and results |
+| reportlab | 13/15 | PDF reports (pure-Python wheels; bundles with PyInstaller) |
+| imageio-ffmpeg | 14 | MP4 export (GIF needs only Pillow) |
+| synergy | 13 | MuSyC, optional; ask first |
+
+Not added: lmfit (`scipy.optimize.least_squares` covers bounds, robust loss, covariance CIs), weasyprint (needs system Pango/Cairo; hard on Windows).
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).
