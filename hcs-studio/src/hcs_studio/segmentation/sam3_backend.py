@@ -253,6 +253,11 @@ class SegmentSam3(Module):
     Params = Sam3Params
     #: Tests set this to use the worker's threshold stand-in instead of SAM 3.
     fake_model = False
+    #: Each process would load its own copy of the 3.4 GB model: run plates with one worker.
+    exclusive = True
+
+    def uses_gpu(self) -> bool:
+        return bool(self.params.device != "cpu")
 
     def validate(self, metadata: ImageMetadata) -> None:
         bad = [c for c in self.params.channels if not 1 <= c <= len(metadata.channels)]

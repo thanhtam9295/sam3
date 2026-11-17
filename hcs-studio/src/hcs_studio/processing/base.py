@@ -175,8 +175,16 @@ class Module(ABC):
     def __init__(self, params: ModuleParams | None = None) -> None:
         self.params: Any = params if params is not None else self.Params()
 
+    #: True for steps that must run one at a time across worker processes (e.g. a large
+    #: model loaded per process).
+    exclusive: ClassVar[bool] = False
+
     def validate(self, metadata: ImageMetadata) -> None:  # noqa: B027
         """Raise ``ModuleError`` if the step cannot run on images with this metadata."""
+
+    def uses_gpu(self) -> bool:
+        """Whether this step will run on the GPU (GPU steps are serialised across workers)."""
+        return False
 
     def fit(self, context: FitContext) -> Any:
         return None

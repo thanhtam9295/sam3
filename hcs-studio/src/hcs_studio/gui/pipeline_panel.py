@@ -10,6 +10,7 @@ import pyqtgraph as pg
 from pydantic import ValidationError
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -39,6 +40,8 @@ class PipelinePanel(QWidget):
 
     preview_requested = Signal(object)
     compare_mode_changed = Signal(str)
+    #: The user wants to run the whole pipeline on a plate (opens the run dialog).
+    run_requested = Signal(object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -48,8 +51,11 @@ class PipelinePanel(QWidget):
 
         self.name_edit = QLineEdit("pipeline")
         self.steps = QListWidget()
+        self.steps.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.steps.setToolTip("Drag steps to reorder them; untick a step to skip it.")
         self.steps.currentRowChanged.connect(self._on_row_changed)
         self.steps.itemChanged.connect(self._on_item_changed)
+        self.steps.model().rowsMoved.connect(self._on_rows_moved)
 
         self.module_combo = QComboBox()
         for name in MODULES:
@@ -72,8 +78,13 @@ class PipelinePanel(QWidget):
         notice.setWordWrap(True)
         notice.setStyleSheet("color: #a05a00;")
 
-        self.preview_button = QPushButton("Preview on current field")
+        self.preview_button = QPushButton("Preview up to selected step")
         self.preview_button.clicked.connect(self.request_preview)
+        self.preview_all_button = QPushButton("Preview all steps")
+        self.preview_all_button.clicked.connect(self.request_preview_all)
+        self.run_button = QPushButton("Run on plate…")
+        self.run_button.setToolTip("Run the whole pipeline on wells or plates as a background job.")
+        self.run_button.clicked.connect(self.request_run)
         self.live = QCheckBox("Live")
         self.live.setToolTip("Re-run the preview whenever a step or parameter changes.")
         self.compare = QComboBox()
@@ -119,7 +130,8 @@ class PipelinePanel(QWidget):
         layout.addWidget(self.form)
         layout.addWidget(self.error)
         layout.addWidget(notice)
-        layout.addLayout(row(self.preview_button, self.live, QLabel("Show"), self.compare))
+        layout.addLayout(row(self.preview_button, self.preview_all_button, self.live))
+        layout.addLayout(row(QLabel("Show"), self.compare, self.run_button))
         layout.addWidget(self.status)
         layout.addLayout(row(QLabel("Histogram of"), self.histogram_channel))
         layout.addWidget(self.histograms, 2)
@@ -136,6 +148,7 @@ class PipelinePanel(QWidget):
         self.steps.clear()
         for index, step in enumerate(self._steps):
             item = QListWidgetItem(self._label(index))
+            item.setData(Qt.ItemDataRole.UserRole, index)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(
                 Qt.CheckState.Checked if step["enabled"] else Qt.CheckState.Unchecked
@@ -166,6 +179,18 @@ class PipelinePanel(QWidget):
             self._steps[row], self._steps[target] = self._steps[target], self._steps[row]
             self._rebuild(select=target)
             self._changed()
+
+    def _on_rows_moved(self, *args: Any) -> None:
+        """Follow a drag-and-drop reorder of the list."""
+        order = [
+            self.steps.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.steps.count())
+        ]
+        if sorted(order) != list(range(len(self._steps))):
+            return
+        current = self.steps.currentRow()
+        self._steps = [self._steps[i] for i in order]
+        self._rebuild(select=current)
+        self._changed()
 
     def _on_row_changed(self, row: int) -> None:
         if self._loading or row < 0:
@@ -271,6 +296,30 @@ class PipelinePanel(QWidget):
             self.error.setText(str(exc))
             return
         self.preview_requested.emit(pipeline)
+
+    def request_preview_all(self) -> None:
+        if not self._steps:
+            self.status.setText("Add a step first.")
+            return
+        try:
+            self._on_params_pending()
+            pipeline = self.pipeline()
+        except ValueError as exc:
+            self.error.setText(str(exc))
+            return
+        self.preview_requested.emit(pipeline)
+
+    def request_run(self) -> None:
+        try:
+            self._on_params_pending()
+            pipeline = self.pipeline()
+        except ValueError as exc:
+            self.error.setText(str(exc))
+            return
+        if not pipeline.enabled_steps():
+            self.error.setText("The pipeline has no enabled steps.")
+            return
+        self.run_requested.emit(pipeline)
 
     def _on_params_pending(self) -> None:
         """Commit the form in case the user clicked Preview without leaving a text field."""

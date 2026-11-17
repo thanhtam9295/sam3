@@ -338,8 +338,9 @@ def nuclear_cytoplasmic(
     ids = np.arange(int(np.max(cells.data)) + 1)
     result = pd.DataFrame({"object_id": ids[1:]})
     for c in channels:
-        nucleus_mean = ndimage.mean(image[c], cells.data * in_nucleus, ids)
-        cytoplasm_mean = ndimage.mean(image[c], cells.data * in_cytoplasm, ids)
+        with np.errstate(invalid="ignore", divide="ignore"):  # absent IDs → NaN, intended
+            nucleus_mean = ndimage.mean(image[c], cells.data * in_nucleus, ids)
+            cytoplasm_mean = ndimage.mean(image[c], cells.data * in_cytoplasm, ids)
         with np.errstate(invalid="ignore", divide="ignore"):
             ratio = np.asarray(nucleus_mean, dtype=float) / np.asarray(cytoplasm_mean, dtype=float)
         result[f"{prefixes[c]}_nc_ratio"] = ratio[1:]

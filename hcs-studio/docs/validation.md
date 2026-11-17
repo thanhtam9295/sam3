@@ -184,3 +184,18 @@ Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
    both result sets.
 2. Check the focus threshold (half the plate median) on a plate with known out-of-focus
    fields.
+
+## Batch execution (Phase 6)
+
+| Check | Result | Test |
+|---|---|---|
+| 2 worker processes give the same objects and masks as 1 | identical tables and masks | `test_parallel_run_matches_sequential` |
+| Cancel, then resume: completed wells skipped, saved plate-level estimates reused, result equal to an uninterrupted run | identical | `test_cancel_then_resume_skips_completed_wells` |
+| CLI run killed with SIGKILL (workers included), then `--resume` | completes; finished wells untouched; equal to a clean run | `test_forced_kill_then_cli_resume` |
+| **384-well plate**, `--workers auto` (3 here), killed after 122 wells, resumed | resumed run skipped 122 wells, processed 262, identical to a clean full run (2,300 objects, 1,150 colocalization rows, 384 well summaries); clean run 48 s | manual run, small synthetic fields |
+| An unreadable image fails only its well; plate-level estimates skip it; `--retry-failed` reruns that well only | yes | `test_retry_failed_wells`, `test_job_queue_runs_retries_and_resumes` |
+| Resume refuses a changed pipeline | yes | `test_resume_refuses_a_changed_pipeline` |
+| GPU steps take the shared lock; SAM 3 forces one worker | yes | `test_gpu_steps_are_serialised` |
+| Jobs in their own process: progress, pause, cancel, resume, interrupted job detected | yes | `test_job_process_runs_and_cancels`, `test_pause_cancel_resume_and_interrupted` |
+
+Still to do: time a real 384-well plate on the analysis workstation (Phase 10).

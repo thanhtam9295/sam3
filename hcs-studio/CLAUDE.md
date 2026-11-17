@@ -87,6 +87,13 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - Colocalization definitions follow Fiji Coloc 2 except the Costes search (first crossing from the top) and p (= 1 − Coloc 2's value); see docs/validation.md. Column reference: docs/measurements.md (update it when adding features).
 - pandas-stubs types `df.loc[i, col]` as a scalar union; in tests read rows with `to_dict("index")`.
 
+## Batch conventions
+
+- `run_pipeline` (pipeline/executor.py) orchestrates; `process_well` writes one well, `well_summary.json` last (with `pipeline_hash`) = completion marker. Worker processes rebuild the plate with `reopen_plate(plate.source)`; anything sent to workers (`RunPlan`, `Job`) must be picklable. Use the `spawn` context everywhere.
+- Resume skips wells that `well_is_complete`; fitted states live in `state/fitted.pkl`. `well_summary.json` is rewritten after every run with plate-level summaries, so test "not redone" on per-field outputs (previews), not on the summary.
+- Modules that use the GPU override `uses_gpu()`; modules that must not run in several processes set `exclusive = True`.
+- Jobs (pipeline/jobs.py) run in their own process and report dict events (`run_started`, `well_started`, `field_done`, `well_finished`, `status`, `log`, `finished`); the GUI Jobs dock only listens.
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).
@@ -94,7 +101,7 @@ Run from this folder (`hcs-studio/`).
 - Environment: `uv venv --python 3.12 .venv` then `uv pip install --python .venv/bin/python -e ".[gui,dev,segmentation]"`
 - Launch: `python -m hcs_studio` (or `hcs-studio`); `hcs-studio info` prints version and GPU status
 - Describe how a path is read: `hcs-studio inspect <path>`
-- Run a pipeline: `hcs-studio run --pipeline p.yaml --input <plate> --wells A01-H12`; list modules: `hcs-studio modules`
+- Run a pipeline: `hcs-studio run --pipeline p.yaml --input <plate> --wells A01-H12 --workers auto`; `--resume <folder>`, `--retry-failed <folder>`; list modules: `hcs-studio modules`
 - Deconvolution timing: `hcs-studio benchmark --shape 30 2048 2048 --iterations 40 [--device gpu]`
 - Fine-tune Cellpose: `hcs-studio train-cellpose --data <folder>`; real-SAM 3 tests: `HCS_SAM3_PYTHON=.venv-sam3/bin/python HCS_SAM3_WEIGHTS=1 pytest -k real_sam3`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)

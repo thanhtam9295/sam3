@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Phase 6 — pipelines and batch runs
+- Pipeline builder: drag-and-drop step order, preview up to a step or all steps,
+  **Run on plate…**.
+- Plate map selection: click, Ctrl+click, Shift+click range and rubber-band drag.
+- Run dialog: current field, current well, selected wells, whole plate, or several plates;
+  output folder, worker processes (auto), checksums.
+- Jobs dock: a queue of jobs, each in its own process; overall progress with ETA, status of
+  every well, pause, cancel, retry failed wells, resume a run folder, open folder;
+  interrupted jobs detected.
+- Batch engine: wells processed by a pool of worker processes; GPU steps serialised by a
+  shared lock; memory budget shared between workers; SAM 3 runs with one worker.
+- Resume: a well is complete when its summary is written with the run's pipeline hash;
+  interrupted wells are redone; plate-level estimates are saved and reused; resuming a
+  folder made with a different pipeline, plate, metadata or layout is refused.
+- An unreadable image fails only its own well; plate-level estimates skip it and log a
+  warning.
+- CLI: `--workers N|auto`, several `--input`, `--resume <folder>`, `--retry-failed <folder>`;
+  exit codes 0 / 1 (some wells failed) / 2 (could not start).
+- Run manifest records the plate source, pipeline hash and every attempt (history).
+- Verified on a synthetic 384-well plate: killed part-way, resumed, identical to a clean run.
+
 ### Phase 5 — measurements
 - Measurement steps: produce tables, always from the linear image and the current
   segmentations; the pipeline runner collects them per field.

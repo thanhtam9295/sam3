@@ -23,12 +23,14 @@ from PySide6.QtWidgets import (
 
 from hcs_studio import __version__
 from hcs_studio.gui.browser import BrowserPanel
+from hcs_studio.gui.jobs_panel import JobsPanel
 from hcs_studio.gui.measurements_panel import MeasurementsPanel
 from hcs_studio.gui.metadata_panel import MetadataPanel
 from hcs_studio.gui.pattern_dialog import PatternDialog
 from hcs_studio.gui.pipeline_panel import PipelinePanel
 from hcs_studio.gui.plate_panel import PlatePanel
 from hcs_studio.gui.psf_dialog import PsfDialog
+from hcs_studio.gui.run_dialog import RunDialog
 from hcs_studio.gui.sam_settings import Sam3SettingsDialog
 from hcs_studio.gui.segmentation_panel import SegmentationPanel
 from hcs_studio.gui.viewer import ViewerPanel
@@ -104,6 +106,12 @@ class MainWindow(QMainWindow):
             self.measurements_panel,
             Qt.DockWidgetArea.RightDockWidgetArea,
         )
+        self.jobs_panel = JobsPanel()
+        self.jobs_dock = self._add_dock(
+            "Jobs", "jobsDock", self.jobs_panel, Qt.DockWidgetArea.BottomDockWidgetArea
+        )
+        self.tabifyDockWidget(self.log_dock, self.jobs_dock)
+        self.log_dock.raise_()
         self.tabifyDockWidget(self.metadata_dock, self.pipeline_dock)
         self.tabifyDockWidget(self.pipeline_dock, self.segmentation_dock)
         self.tabifyDockWidget(self.segmentation_dock, self.measurements_dock)
@@ -129,6 +137,12 @@ class MainWindow(QMainWindow):
         self.pipeline_panel.preview_requested.connect(self.preview_pipeline)
         self.pipeline_panel.compare_mode_changed.connect(self.viewer_panel.set_compare_mode)
         self.segmentation_panel.model_trained.connect(self._on_model_trained)
+        self.pipeline_panel.run_requested.connect(self.open_run_dialog)
+        self.jobs_panel.job_finished.connect(self._on_job_finished)
+        self.jobs_panel.event_received.connect(self._on_job_event)
+        self.plate_panel.plate_map.selection_changed.connect(self._on_selection_changed)
+        #: Plate layout CSV of the open plate (passed to runs).
+        self.layout_path: Path | None = None
 
         self._build_menus()
         self.log(f"HCS Studio {__version__} started. {self.gpu_status.summary}")
@@ -173,6 +187,7 @@ class MainWindow(QMainWindow):
             self.segmentation_dock,
             self.measurements_dock,
             self.log_dock,
+            self.jobs_dock,
         ):
             view_menu.addAction(dock.toggleViewAction())
 
@@ -245,6 +260,7 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError) as exc:
             self.log(f"Saved metadata overrides could not be applied: {exc}")
         self.layout_annotations = {}
+        self.layout_path = None
         self.current_field = None
         self._fit_cache.clear()
         self._refresh_plate()
@@ -298,6 +314,45 @@ class MainWindow(QMainWindow):
             data = np.asarray(field.load()[0], dtype=np.float32)
             self._raw_field = ImageData(data, self.plate.metadata)
         return self._raw_field
+
+    # ------------------------------------------------------------------ jobs
+
+    def open_run_dialog(self, pipeline: Pipeline) -> RunDialog | None:
+        if self.plate is None:
+            self.log("Open a plate before running a pipeline.")
+            return None
+        dialog = RunDialog(
+            self.plate,
+            pipeline,
+            current_field=self.current_field,
+            selected_wells=self.plate_panel.plate_map.selected_wells(),
+            layout_path=self.layout_path,
+            parent=self,
+        )
+        dialog.accepted.connect(lambda: self.queue_jobs(dialog.jobs))
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.show()
+        return dialog
+
+    def queue_jobs(self, jobs: list[Any]) -> None:
+        self.jobs_panel.add_jobs(jobs)
+        self.jobs_dock.raise_()
+        for job in jobs:
+            self.log(f"Queued job: {job.label}")
+
+    def _on_job_event(self, event: dict[str, Any]) -> None:
+        if event.get("type") == "log" and event.get("level") in ("warning", "error"):
+            first = str(event["text"]).strip().splitlines()[0]
+            self.log(f"Job {event['level']}: {first}")
+
+    def _on_job_finished(self, state: Any) -> None:
+        failed = f", {len(state.failed)} failed well(s)" if state.failed else ""
+        self.log(f"Job '{state.job.label}' {state.status}{failed}. Output: {state.folder or '-'}")
+        self.statusBar().showMessage(f"Job {state.status}: {state.job.label}", 10000)
+
+    def _on_selection_changed(self, wells: list[tuple[int, int]]) -> None:
+        if len(wells) > 1:
+            self.statusBar().showMessage(f"{len(wells)} wells selected", 4000)
 
     def open_sam_settings(self) -> Sam3SettingsDialog:
         dialog = Sam3SettingsDialog(self)
@@ -423,6 +478,7 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError) as exc:
             self.log(f"Layout not imported: {exc}")
             return
+        self.layout_path = path
         missing = sorted(well_name(*k) for k in layout if k not in self.plate.wells)
         self.layout_annotations = layout
         self._refresh_plate()
@@ -454,6 +510,7 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        self.jobs_panel.shutdown()
         self.plate_panel.thumbnails.set_plate(None)
         self.loader.wait()
         self.preview.wait()

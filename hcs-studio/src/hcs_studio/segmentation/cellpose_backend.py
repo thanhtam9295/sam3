@@ -123,6 +123,12 @@ class SegmentCellpose(Module):
     title = "Segmentation: Cellpose"
     Params = CellposeParams
 
+    def uses_gpu(self) -> bool:
+        try:
+            return use_gpu(self.params.device)
+        except ModuleError:
+            return False
+
     def validate(self, metadata: ImageMetadata) -> None:
         params: CellposeParams = self.params
         for channel in (params.channel, params.second_channel):

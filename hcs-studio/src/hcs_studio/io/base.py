@@ -59,6 +59,8 @@ def detect_reader(path: Path) -> type[PlateReader] | None:
 
 def open_plate(path: Path, reader: str | None = None) -> Plate:
     """Open a plate with the named reader, or auto-detect the format."""
+    from dataclasses import replace
+
     _load_builtin_readers()
     path = Path(path)
     if not path.exists():
@@ -69,7 +71,21 @@ def open_plate(path: Path, reader: str | None = None) -> Plate:
             f"Could not recognise the format of {path}. "
             "Use the generic reader with a filename pattern."
         )
-    return cls.read(path)
+    name = next(n for n in READERS if READERS.get(n) is cls)
+    return replace(cls.read(path), source={"reader": name, "path": str(path)})
+
+
+def reopen_plate(source: dict[str, Any]) -> Plate:
+    """Open a plate again from its ``Plate.source`` (used by worker processes)."""
+    if not source:
+        raise ReaderError("This plate does not record how it was opened")
+    if source.get("pattern") is not None:
+        from hcs_studio.io.generic import TiffFolderReader
+
+        return TiffFolderReader.read_with_pattern(
+            Path(source["path"]), source["pattern"], source.get("pixel_size_um")
+        )
+    return open_plate(Path(source["path"]), source.get("reader"))
 
 
 def lazy_tiff_stack(

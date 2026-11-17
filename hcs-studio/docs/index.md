@@ -72,20 +72,67 @@ non-linearly. Their output is for viewing and as segmentation input. Each run wr
 two images per field: `*_corrected.ome.tif` (linear data from before the first ◐ step:
 use this for measurements) and `*_enhanced.ome.tif` (display only).
 
-### Running a pipeline on a plate
+### Running a pipeline on wells and plates
 
-Until the job queue arrives in Phase 6, plate runs are started from the command line:
+Build the pipeline in the **Pipeline** dock: add steps, drag them into order, untick a
+step to skip it. **Preview up to selected step** runs the steps up to the selected one
+on the field in the viewer; **Preview all steps** runs them all. **Save…** stores the
+pipeline as a YAML file that can be loaded again or used from the command line.
+
+**Run on plate…** opens the run dialog. Choose the scope:
+
+| Scope | Runs on |
+|---|---|
+| Current field | the field shown in the viewer |
+| Current well | every field of that well |
+| Selected wells | the wells selected on the plate map |
+| Whole plate | every well |
+| Whole plate, and other plates | this plate plus the plate folders you add (one job each) |
+
+Select wells on the plate map by clicking, **Ctrl+click** (add/remove one well),
+**Shift+click** (a rectangle from the last clicked well) or by dragging a rectangle.
+
+The run then waits in the **Jobs** dock (tab next to Log). Jobs run one after another,
+each in its own process, so the application stays responsive. Within a job, wells are
+processed by several worker processes (*auto* picks the number from the CPU cores and
+memory). Steps that use the GPU run one at a time across workers; a pipeline with SAM 3
+uses one worker, since each worker would load its own copy of the model.
+
+The Jobs dock shows the overall progress with an estimate of the time left, and the
+status of every well. **Pause** stops starting new wells; **Cancel** stops after the
+wells in progress. **Retry failed wells** reruns only the wells that failed, in the same
+run folder. **Resume a run folder…** continues a run that was cancelled, interrupted or
+cut short by a crash or power cut. Completed wells are skipped, and the plate-level
+estimates (flat-field and similar) are reused, so the result is identical to an
+uninterrupted run. A well is only complete once all its fields are written; a well
+interrupted part-way is done again.
+
+Resuming refuses a run folder that was made with a different pipeline, plate,
+metadata or plate layout: start a new run instead.
+
+### From the command line
+
+The same runs can be started without the application, for example overnight:
 
 ```bash
-hcs-studio run --pipeline pipe.yaml --input <plate folder> --wells A01-H12
+hcs-studio run --pipeline pipe.yaml --input <plate folder> --wells A01-H12 --workers auto
 ```
 
-Options: `--output <folder>` (default: next to the raw data, never inside it),
-`--layout layout.csv`, `--no-checksums` (skip SHA-256 of the input files).
-The run folder is named `<Plate>__<Pipeline>__<date-time>` and contains
-`run_manifest.json`, `pipeline.yaml`, `logs/run.log` and, per well,
-`enhanced/`, `previews/` and `well_summary.json`. A well that fails is recorded in
-the manifest and the run continues.
+| Option | Meaning |
+|---|---|
+| `--input` | plate folder or file; repeat it to run several plates |
+| `--wells` | `all` (default), `A01-H12`, `B02,B03`, … |
+| `--workers` | number of worker processes, or `auto` (default 1) |
+| `--output` | output root (default: next to the raw data, never inside it) |
+| `--layout` | plate layout CSV |
+| `--no-checksums` | record input file size and time instead of SHA-256 |
+| `--resume <run folder>` | continue an interrupted run (plate and pipeline are read from the folder) |
+| `--retry-failed <run folder>` | rerun only the wells that failed |
+
+The exit code is 0 when every well succeeded, 1 when some wells failed, and 2 when the
+run could not start. Each run folder is named `<Plate>__<Pipeline>__<date-time>` and
+contains `run_manifest.json` (with the history of every attempt), `pipeline.yaml`,
+`logs/run.log`, `wells/<well>/…` and `tables/`.
 
 ## Deconvolution
 

@@ -270,4 +270,10 @@ class TiffFolderReader(PlateReader):
             ),
             shape_tczyx=(*shape_tcz, *plane_shape),
             notes=tuple(notes),
+            source={
+                "reader": "tiff-folder",
+                "path": str(path),
+                "pattern": pattern,
+                "pixel_size_um": pixel_size_um,
+            },
         )

@@ -91,6 +91,7 @@ def build_manifest(
             "metadata": asdict(plate.metadata),
             "metadata_overrides": overrides,
             "reader_notes": list(plate.notes),
+            "source": plate.source,
         },
         "pipeline": pipeline,
         "fitted_state": fitted,

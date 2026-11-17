@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from hcs_studio import __version__
 from hcs_studio.utils.gpu import detect_gpu
@@ -41,8 +42,22 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--tile", type=int, default=0, help="tile size in pixels; 0 = automatic")
     bench.add_argument("--max-memory-gb", type=float, help="memory limit (default: half free RAM)")
     run = sub.add_parser("run", help="run a pipeline on a plate, unattended")
-    run.add_argument("--pipeline", type=Path, required=True, help="pipeline YAML or JSON file")
-    run.add_argument("--input", type=Path, required=True, help="plate folder or image file")
+    run.add_argument("--pipeline", type=Path, help="pipeline YAML or JSON file")
+    run.add_argument(
+        "--input",
+        type=Path,
+        action="append",
+        help="plate folder or image file (repeat for several)",
+    )
+    run.add_argument(
+        "--workers", default="1", help="worker processes: a number, or 'auto' (default: 1)"
+    )
+    run.add_argument(
+        "--resume", type=Path, help="continue an interrupted run folder (skips completed wells)"
+    )
+    run.add_argument(
+        "--retry-failed", type=Path, help="run folder: redo only the wells that failed"
+    )
     run.add_argument("--wells", default="all", help="e.g. all, A01-H12, or B02,B03 (default: all)")
     run.add_argument("--output", type=Path, help="output root (default: next to the raw data)")
     run.add_argument("--layout", type=Path, help="plate layout CSV")
@@ -55,6 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    import multiprocessing
+
+    multiprocessing.freeze_support()  # no-op except in frozen (installer) builds
     args = build_parser().parse_args(argv)
     if args.command == "info":
         print(f"hcs-studio {__version__}")
@@ -139,39 +157,81 @@ def _describe_modules() -> str:
 
 
 def _run(args: argparse.Namespace) -> int:
+    import json
+
     from pydantic import ValidationError
 
-    from hcs_studio.io.base import ReaderError, open_plate
+    from hcs_studio.io.base import ReaderError, open_plate, reopen_plate
     from hcs_studio.io.sidecar import apply_overrides
     from hcs_studio.model.layout import read_plate_layout
     from hcs_studio.pipeline.executor import parse_wells, run_pipeline
     from hcs_studio.pipeline.schema import Pipeline
     from hcs_studio.processing.base import ModuleError
 
+    def progress(done: int, total: int, message: str) -> None:
+        print(f"[{done}/{total}] {message}", flush=True)
+
+    folder = args.resume or args.retry_failed
     try:
-        pipeline = Pipeline.load(args.pipeline)
-        plate = apply_overrides(open_plate(args.input))
-        wells = parse_wells(args.wells, plate)
-        layout = read_plate_layout(args.layout) if args.layout else None
-
-        def progress(done: int, total: int, message: str) -> None:
-            print(f"[{done}/{total}] {message}", flush=True)
-
-        result = run_pipeline(
-            plate,
-            pipeline,
-            output_root=args.output,
-            wells=wells,
-            layout=layout,
-            layout_path=args.layout,
-            checksums=not args.no_checksums,
-            progress=progress,
-        )
-    except (OSError, ValueError, ValidationError, ReaderError, ModuleError) as exc:
+        workers = None if args.workers == "auto" else int(args.workers)
+        if workers is not None and workers < 1:
+            raise ValueError("--workers must be at least 1")
+        jobs: list[tuple[Any, Pipeline, Any, Any, Path | None]] = []
+        if folder is not None:
+            manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
+            pipeline = Pipeline.load(folder / "pipeline.yaml")
+            source = manifest["plate"].get("source") or {"path": manifest["plate"]["path"]}
+            plate = apply_overrides(reopen_plate(source))
+            layout_file = folder / "plate_layout.csv"
+            layout = read_plate_layout(layout_file) if layout_file.exists() else None
+            if args.retry_failed:
+                failed = list(manifest.get("failed_wells", {}))
+                if not failed:
+                    print("No failed wells in this run.")
+                    return 0
+                wells = parse_wells(",".join(failed), plate)
+            else:
+                wells = parse_wells(",".join(manifest["wells"]), plate)
+            jobs.append((plate, pipeline, wells, layout, None))
+        else:
+            if args.pipeline is None or not args.input:
+                raise ValueError("--pipeline and --input are required (or use --resume)")
+            pipeline = Pipeline.load(args.pipeline)
+            layout = read_plate_layout(args.layout) if args.layout else None
+            for path in args.input:
+                plate = apply_overrides(open_plate(path))
+                jobs.append((plate, pipeline, parse_wells(args.wells, plate), layout, args.layout))
+    except (OSError, ValueError, KeyError, ValidationError, ReaderError, ModuleError) as exc:
         print(f"Error: {exc}")
         return 2
-    print(f"Output folder: {result.folder}")
-    print(f"Fields written: {result.fields_written}")
-    for well, error in result.failed_wells.items():
-        print(f"FAILED {well}: {error}")
-    return 1 if result.failed_wells else 0
+
+    code = 0
+    for plate, pipeline, wells, layout, layout_path in jobs:
+        if len(jobs) > 1:
+            print(f"== {plate.name} ==", flush=True)
+        try:
+            result = run_pipeline(
+                plate,
+                pipeline,
+                output_root=args.output,
+                wells=wells,
+                layout=layout,
+                layout_path=layout_path,
+                checksums=not args.no_checksums,
+                progress=progress,
+                workers=workers,
+                resume=folder,
+            )
+        except (OSError, ValueError, ValidationError, ReaderError, ModuleError) as exc:
+            print(f"Error: {exc}")
+            code = 2
+            continue
+        print(f"Output folder: {result.folder}")
+        if result.skipped_wells:
+            print(f"Already complete (skipped): {len(result.skipped_wells)} well(s)")
+        print(f"Fields written: {result.fields_written}")
+        for well, error in result.failed_wells.items():
+            print(f"FAILED {well}: {error}")
+        if result.failed_wells:
+            code = max(code, 1)
+    return code

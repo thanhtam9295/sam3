@@ -155,6 +155,8 @@ class Plate:
     shape_tczyx: tuple[int, int, int, int, int] | None = None
     #: Things the reader had to assume; shown to the user.
     notes: tuple[str, ...] = ()
+    #: How to open this plate again (reader name, path, options), e.g. in a worker process.
+    source: dict[str, Any] = field(default_factory=dict, compare=False)
 
     def well(self, name: str) -> Well:
         return self.wells[parse_well_name(name)]

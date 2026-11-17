@@ -178,6 +178,9 @@ def _padding(shape: tuple[int, ...], psf_shape: tuple[int, ...]) -> list[tuple[i
     return pads
 
 
+#: Fraction of the machine this process may use; set to 1/workers in batch worker processes.
+MEMORY_SHARE = 1.0
+
 #: Peak working memory of one Richardson-Lucy + TV run, per padded voxel (measured: ~80).
 BYTES_PER_PADDED_VOXEL = 96
 _MIN_TILE = 128
@@ -248,7 +251,7 @@ def memory_budget(backend: Backend, max_memory_gb: float | None) -> float:
         free, _ = backend._torch.cuda.mem_get_info(backend.device)
         return 0.8 * float(free)
     available = _available_ram()
-    return 0.5 * available if available else 4 * 1024**3
+    return (0.5 * MEMORY_SHARE) * (available if available else 8 * 1024**3)
 
 
 def _prepare(
@@ -527,6 +530,14 @@ class Deconvolution(Module):
     def __init__(self, params: Any = None) -> None:
         super().__init__(params)
         self._psfs: dict[tuple[int, bool], tuple[FloatImage, dict[str, Any]]] = {}
+
+    def uses_gpu(self) -> bool:
+        if self.params.device == "cpu":
+            return False
+        try:
+            return isinstance(get_backend(self.params.device), TorchBackend)
+        except ModuleError:
+            return False
 
     def validate(self, metadata: ImageMetadata) -> None:
         params: DeconvolutionParams = self.params
