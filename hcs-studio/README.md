@@ -4,13 +4,14 @@ Desktop image analysis for high-content and high-throughput fluorescence microsc
 (Nikon `.nd2`, Operetta CLS, ImageXpress). The full specification is in `PROMPT.md`;
 the project rules are in `CLAUDE.md`.
 
-**Status: Phase 4 (segmentation).** Plates from Nikon, Operetta CLS, ImageXpress,
+**Status: Phase 5 (measurements).** Plates from Nikon, Operetta CLS, ImageXpress,
 OME-TIFF, OME-Zarr and plain TIFF folders can be browsed and viewed. Correction,
-enhancement, deconvolution and segmentation steps (Cellpose 4, SAM 3, threshold +
-watershed; nuclei → cells → spots) can be combined into a pipeline, previewed on a
-field, edited in the viewer, and run on a plate from the command line. Readers and
-algorithms are tested on synthetic data only so far. See `docs/index.md`,
-`docs/processing.md` and `docs/validation.md`.
+enhancement, deconvolution, segmentation (Cellpose 4, SAM 3, threshold + watershed) and
+measurement steps (object features, colocalization with Costes thresholds, QC and counts)
+can be combined into a pipeline, previewed on a field and run on a plate from the
+command line, producing Parquet/CSV tables per object, field and well. Algorithms are
+tested on synthetic data; real-data validation is pending. See `docs/index.md`,
+`docs/processing.md`, `docs/measurements.md` and `docs/validation.md`.
 
 ## Install
 

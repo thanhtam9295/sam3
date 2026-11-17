@@ -138,3 +138,49 @@ Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
 - SAM 3 segments 2D planes only.
 - `cpdino` and `cpdino-vitb` need the `dinov3` package (installed from GitHub), not
   included here.
+
+## Measurements and colocalization (Phase 5)
+
+### Verified on synthetic data
+
+| Check | Result | Test |
+|---|---|---|
+| Pearson of identical channels = 1, of inverted channels = −1; ICQ = 0.5; M1 = M2 = tM1 = tM2 = 1 | exact | `test_identical_and_anticorrelated_channels` |
+| Pearson and Spearman equal scipy's | within 1e-12 | `test_statistics_match_scipy` |
+| Manders with known overlap (A: 4 regions, B: 1 shared + 1 own) | M1 = 0.25, M2 = 0.5 exactly | `test_manders_known_overlap` |
+| Costes threshold equals an independent brute-force search (first crossing from the top) | within one scan step (1/256 of the range); regression slope 0.7 recovered | `test_costes_threshold_matches_brute_force_and_separates_background` |
+| Costes randomization: shared texture vs independent textures | p = 0.01 (99 randomizations) vs p > 0.05 | `test_randomization_separates_real_from_chance_correlation`, `test_coloc_module_per_cell_and_per_field` |
+| Statistics restricted to the mask | r = 1 inside, −1 outside | `test_mask_restricts_the_statistics` |
+| Chromatic shift of (2.3, −1.6) px detected and corrected, from given shifts or a bead image | within 0.15 px | `test_channel_shift_detection_and_registration` |
+| Saturation and shift warnings | raised | `test_coloc_warnings_saturation_and_shift` |
+| Object-based colocalization | 2/4 spots on nuclei; 3/4 within 20 µm | `test_coloc_parameters_and_object_based` |
+| Disc and ellipse morphology in µm | area within 2 %, perimeter 5 %, axes 3-5 %, eccentricity 0.02 | `test_morphology_in_physical_units` |
+| Sphere in an anisotropic stack | volume within 3 %, surface area 8 % | `test_3d_volume_and_surface` |
+| Integrated intensity, percentiles, nuclear/cytoplasmic ratio (4.0), radial distribution | exact / > 90 % in the right ring | `test_intensity_radial_and_nuclear_cytoplasmic` |
+| Spots per cell (1, 2, 3, 4), spot intensity, neighbour distances (20 µm grid) | exact | `test_spots_per_cell_and_neighbours` |
+| Haralick contrast (rough ≫ smooth), granularity peak at the granule size | yes | `test_texture_and_granularity` |
+| Focus score: blurred field ≪ sharp; independent of brightness | yes | `test_focus_score_and_plate_flags` |
+| Out-of-focus, saturated, edge and low-count flags; counts exclude flagged fields; density per mm² | exact | `test_focus_score_and_plate_flags`, `test_run_writes_measurement_tables` |
+
+### Choices that may differ from Fiji Coloc 2
+
+- **Costes threshold search**: HCS Studio takes the *first* threshold, lowering from the
+  maximum, at which pixels below both thresholds stop correlating (Costes et al. 2004).
+  Coloc 2 bisects, which can stop at a different crossing when the correlation of the
+  background fluctuates around zero. Both land inside the background's intensity range;
+  tM1/tM2 can then differ by a few percent. "Below" means below both thresholds by
+  default (`costes_below: and`); `or` is available if Coloc 2 turns out to differ.
+- **Regression**: orthogonal (total least squares), as Coloc 2.
+- **p-value**: reported as the probability of a random r at least as high as the observed
+  one; Coloc 2's "Costes P-Value" is 1 − p.
+- **Background**: subtracted before Manders (median outside the objects by default). For
+  the comparison, export the inputs (Measurements dock → Export for Fiji) so Coloc 2 sees
+  the same background-subtracted pixels.
+
+### Still to do on real data
+
+1. **Fiji Coloc 2 comparison on 3 real fields** (acceptance: Pearson and Manders within
+   ±0.02): export each field with *Export for Fiji…*, run `coloc2_compare.ijm`, and send
+   both result sets.
+2. Check the focus threshold (half the plate median) on a plate with known out-of-focus
+   fields.

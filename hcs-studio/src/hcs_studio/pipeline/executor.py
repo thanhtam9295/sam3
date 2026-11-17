@@ -19,6 +19,7 @@ from hcs_studio.io.sidecar import load_overrides
 from hcs_studio.model.layout import WellAnnotation
 from hcs_studio.model.plate import Field, ImageMetadata, Plate, parse_well_name, well_name
 from hcs_studio.output.manifest import build_manifest, describe_inputs, write_json
+from hcs_studio.output.tables import aggregate_run, write_well_tables
 from hcs_studio.output.writers import (
     write_labels,
     write_ome_tiff,
@@ -26,7 +27,13 @@ from hcs_studio.output.writers import (
     write_png,
 )
 from hcs_studio.pipeline.schema import Pipeline
-from hcs_studio.processing.base import ImageData, Module, ModuleError
+from hcs_studio.processing.base import (
+    ImageData,
+    MeasureContext,
+    MeasurementModule,
+    Module,
+    ModuleError,
+)
 from hcs_studio.utils.display import add_outlines, channel_colormaps, make_thumbnail
 
 _UNFITTED = object()
@@ -43,6 +50,8 @@ class ProcessResult:
     final: ImageData
     #: Last image whose intensities are still linear: the data to measure on.
     corrected: ImageData
+    #: Tables from measurement steps (pandas DataFrames), by name.
+    tables: dict[str, Any] = field(default_factory=dict)
 
 
 class _Context:
@@ -64,6 +73,15 @@ class _Context:
         for item in fields:
             runner.check_cancelled()
             yield runner.process(runner.load(item), upto=self._step, _fit=False).final
+
+
+def _concat(tables: dict[str, list[Any]]) -> dict[str, Any]:
+    import pandas as pd
+
+    return {
+        name: pd.concat(parts, ignore_index=True) if len(parts) > 1 else parts[0]
+        for name, parts in tables.items()
+    }
 
 
 class PipelineRunner:
@@ -149,16 +167,23 @@ class PipelineRunner:
         end = len(self.modules) if upto is None else upto
         if _fit:
             self.fit(end)
-        corrected = image
+        raw = corrected = image
+        tables: dict[str, list[Any]] = {}
         for i, module in enumerate(self.modules[:end]):
             self.check_cancelled()
             try:
+                if isinstance(module, MeasurementModule):
+                    context = MeasureContext(raw=raw, corrected=corrected, labels=image.labels)
+                    context.check_shapes()
+                    for name, table in module.measure(context).items():
+                        tables.setdefault(name, []).append(table)
+                    continue
                 image = module.apply(image, self.states[i])
             except ModuleError as exc:
                 raise ModuleError(f"Step {i + 1} ({module.title}): {exc}") from None
             if image.linear:
                 corrected = image
-        return ProcessResult(final=image, corrected=corrected)
+        return ProcessResult(final=image, corrected=corrected, tables=_concat(tables))
 
     def fitted_summary(self) -> list[dict[str, Any]]:
         summary = []
@@ -194,6 +219,16 @@ def parse_wells(text: str, plate: Plate) -> list[tuple[int, int]]:
 
 
 # ----------------------------------------------------------------------- run
+
+
+def _qc_params(runner: PipelineRunner) -> Any:
+    """QC settings of the pipeline's QC step, or the defaults."""
+    from hcs_studio.analysis.measure import FieldQc, QcParams
+
+    for module in runner.modules:
+        if isinstance(module, FieldQc):
+            return module.params
+    return QcParams()
 
 
 @dataclass
@@ -308,6 +343,7 @@ def run_pipeline(
             name = well_name(*key)
             well_dir = folder / "wells" / name
             written: list[dict[str, Any]] = []
+            well_tables: dict[str, list[Any]] = {}
             try:
                 for item in plate.wells[key].fields:
                     runner.check_cancelled()
@@ -317,6 +353,20 @@ def run_pipeline(
                         processed = runner.process(runner.load(item, t))
                         finals.append(processed.final)
                         correcteds.append(processed.corrected)
+                        for table_name, table in processed.tables.items():
+                            table = table.copy()
+                            context = {
+                                "well": name,
+                                "row": key[0] + 1,
+                                "col": key[1] + 1,
+                                "field": item.index,
+                                "timepoint": t,
+                            }
+                            if table_name == "fields":
+                                context.update(x_um=item.x_um, y_um=item.y_um)
+                            for position, (column, value) in enumerate(context.items()):
+                                table.insert(position, column, value)
+                            well_tables.setdefault(table_name, []).append(table)
                     stem = f"f{item.index:03d}"
                     (well_dir / "enhanced").mkdir(parents=True, exist_ok=True)
                     (well_dir / "previews").mkdir(exist_ok=True)
@@ -377,17 +427,30 @@ def run_pipeline(
                 result.failed_wells[name] = f"{type(exc).__name__}: {exc}"
                 log.exception("Well %s failed", name)
                 done = sum(len(plate.wells[w].fields) for w in selected[: selected.index(key) + 1])
+            table_files: dict[str, str] = {}
+            if well_tables:
+                well_dir.mkdir(parents=True, exist_ok=True)
+                table_files = write_well_tables(well_dir, well_tables)
             if written:
                 write_json(
                     well_dir / "well_summary.json",
                     {
                         "well": name,
+                        "tables": table_files,
                         "fields": written,
                         "measurement_note": "Measure intensities on the *_corrected files only; "
                         "*_enhanced files are for viewing and segmentation.",
                         "error": result.failed_wells.get(name),
                     },
                 )
+        report("Summarising tables")
+        summaries = aggregate_run(folder, _qc_params(runner))
+        for well, summary in summaries.items():
+            path = folder / "wells" / well / "well_summary.json"
+            if path.exists():
+                data = json.loads(path.read_text(encoding="utf-8"))
+                data["summary"] = summary
+                write_json(path, data)
         status = "completed_with_failures" if result.failed_wells else "completed"
     except RunCancelled:
         result.cancelled = True

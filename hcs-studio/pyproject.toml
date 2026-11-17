@@ -21,6 +21,9 @@ dependencies = [
     "opencv-python-headless>=4.8",
     "pyyaml>=6",
     "psfmodels>=0.3",
+    "pandas>=2.1",
+    "pyarrow>=15",
+    "mahotas>=1.4",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +47,7 @@ dev = [
     "mypy>=1.10",
     "types-PyYAML",
     "scipy-stubs",
+    "pandas-stubs",
 ]
 
 [project.scripts]
@@ -59,7 +63,10 @@ packages = ["src/hcs_studio"]
 testpaths = ["tests"]
 qt_api = "pyside6"
 addopts = "-ra"
-filterwarnings = ["ignore:.*json_encoders.*"]
+filterwarnings = [
+    "ignore:.*json_encoders.*",
+    "ignore:Setting the shape on a NumPy array:DeprecationWarning",
+]
 markers = ["gui: needs Qt and a display with OpenGL"]
 
 [tool.ruff]
@@ -77,6 +84,6 @@ strict = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*"]
+module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*"]
 ignore_missing_imports = true
 follow_imports = "skip"

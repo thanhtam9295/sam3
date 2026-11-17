@@ -193,10 +193,47 @@ class Module(ABC):
         return metadata
 
 
+@dataclass(frozen=True)
+class MeasureContext:
+    """What a measurement step sees for one field and timepoint."""
+
+    #: The field as read, before any step (for saturation checks).
+    raw: ImageData
+    #: The last linear image: the data intensities are measured on.
+    corrected: ImageData
+    #: Segmentations available at this point in the pipeline.
+    labels: tuple[LabelSet, ...]
+
+    def check_shapes(self) -> None:
+        for label_set in self.labels:
+            if label_set.data.shape != self.corrected.data.shape[1:]:
+                raise ModuleError(
+                    f"Label set '{label_set.name}' has shape {label_set.data.shape}, but the "
+                    f"linear image is {self.corrected.data.shape[1:]}: put Z projection before "
+                    "any display-only step"
+                )
+
+
+class MeasurementModule(Module):
+    """A step that produces tables instead of changing the image.
+
+    ``apply`` passes the image through; the runner calls ``measure`` with the raw image,
+    the last linear image and the current segmentations.
+    """
+
+    def apply(self, image: ImageData, state: Any) -> ImageData:
+        return image
+
+    @abstractmethod
+    def measure(self, context: MeasureContext) -> dict[str, Any]:
+        """Tables (pandas DataFrames) by name, e.g. {"objects": ..., "coloc": ...}."""
+
+
 MODULES: Registry[type[Module]] = Registry("module")
 
 
 def load_builtin_modules() -> None:
+    from hcs_studio.analysis import measure  # noqa: F401
     from hcs_studio.processing import (  # noqa: F401
         autofluorescence,
         deconvolution,
@@ -255,6 +292,8 @@ __all__ = [
     "FloatImage",
     "ImageData",
     "LabelSet",
+    "MeasureContext",
+    "MeasurementModule",
     "Module",
     "ModuleError",
     "ModuleParams",

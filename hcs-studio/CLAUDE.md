@@ -80,6 +80,13 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - The `fake` SAM worker model exists only for protocol and UI tests.
 - Cellpose and SAM weights come from huggingface.co; the cloud environment `sam3-hcs-studio` allows it.
 
+## Measurement conventions
+
+- Measurement steps subclass `MeasurementModule` (in `analysis/measure.py`): `apply` passes the image through; `measure(MeasureContext)` returns DataFrames by table name. The runner gives them `raw`, `corrected` (last linear image) and the current labels; never measure `final`.
+- Table names: `objects` → `objects.parquet`, `coloc` → `coloc.csv`, `fields` → `fields.csv` per well; `output/tables.py` builds `tables/` after the run (streamed Parquet merge, QC flags, per-well summary).
+- Colocalization definitions follow Fiji Coloc 2 except the Costes search (first crossing from the top) and p (= 1 − Coloc 2's value); see docs/validation.md. Column reference: docs/measurements.md (update it when adding features).
+- pandas-stubs types `df.loc[i, col]` as a scalar union; in tests read rows with `to_dict("index")`.
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).

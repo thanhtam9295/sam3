@@ -67,6 +67,26 @@ Mild Gaussian denoise, then an unsharp mask that does not amplify detail at the 
 | `tile_um` | 60.0 | CLAHE tile size in µm. |
 | `clip_limit` | 0.005 | CLAHE contrast limit. |
 
+## Measure: colocalization (`colocalization`)
+
+Pearson, Spearman, Li's ICQ, Manders M1/M2, thresholded tM1/tM2 with Costes automatic thresholds (or manual ones), overlap coefficients and, optionally, the Costes randomization p-value, per object or for the whole field, after background subtraction. Warns about saturated pixels and chromatic shift. Optional object-based colocalization: the fraction of objects in one label set near objects of another. Writes `coloc.csv` per well.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel_a` | required | First channel. |
+| `channel_b` | required | Second channel. |
+| `scope` | 'objects' | objects: each object of 'labels'; field: all of them together. |
+| `labels` | 'cells' | Label set giving the objects or the mask; empty = whole field. |
+| `background` | 'outside_objects' | Subtracted before Manders: median outside objects, 1st percentile, or none. |
+| `thresholds` | None | Manual thresholds [A, B] after background subtraction; empty = Costes. |
+| `costes_below` | 'and' | Costes: pixels below both thresholds ('and') or either ('or'). |
+| `randomizations` | 0 | Costes randomization test; 0 = off. |
+| `block_size_um` | None | Scramble block size; empty = lateral PSF FWHM from the metadata. |
+| `saturation_warning_fraction` | 0.001 | Warn when more raw pixels than this are saturated. |
+| `object_labels_a` | None | Object-based: fraction of these objects (e.g. spots) near ... |
+| `object_labels_b` | None | ... these objects. |
+| `object_distance_um` | 0.0 | Object-based: 0 = overlapping. |
+
 ## Contrast (percentile rescale, gamma) (`contrast`) — **display only**
 
 Rescales each channel to 0-1 between two percentiles and applies gamma.
@@ -168,6 +188,24 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | `min_fields` | 8 | Fewer fields than this cannot separate shading from cells; the step fails. |
 | `smoothing_fraction` | 0.05 | Gaussian smoothing of the profile, as a fraction of the image width. |
 
+## Measure: objects (`measure_objects`)
+
+Measures every object of the chosen label sets on the linear image (never on contrast/CLAHE/clarity output): morphology in µm, intensity per channel, radial distribution, Haralick texture, granularity, optional Zernike moments, counts of child objects (e.g. spots per cell), nuclear/cytoplasmic ratios and neighbours. Writes `objects.parquet` per well. Column reference: [measurements.md](measurements.md).
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `labels` | None | Label sets to measure; empty = all. |
+| `channels` | None | Channels to measure; empty = all. |
+| `percentiles` | [5, 25, 75, 95] | Intensity percentiles. |
+| `radial_bins` | 3 | Rings from edge to centre. |
+| `texture` | True | Haralick texture features. |
+| `texture_scales_px` | [1, 3] | Haralick pixel distances. |
+| `granularity` | True | Granularity spectrum. |
+| `granularity_max_radius_px` | 6 | Largest opening radius. |
+| `zernike` | False | Zernike shape moments (2D). |
+| `neighbor_radius_um` | 20.0 | Radius for neighbour counts. |
+| `nucleus_labels` | 'nuclei' | Label set used for nuclear/cytoplasmic ratios of its children. |
+
 ## Z projection (`projection`)
 
 Collapses Z. `edf` picks, per pixel, the plane with the highest local sharpness.
@@ -175,6 +213,32 @@ Collapses Z. `edf` picks, per pixel, the plane with the highest local sharpness.
 | Parameter | Default | Meaning |
 |---|---|---|
 | `method` | 'max' | edf = extended depth of field (sharpest plane per pixel). |
+
+## Measure: field QC and counts (`qc`)
+
+Per field: focus score (normalised variance of the Laplacian), fraction of saturated pixels, imaged area and object counts. After the run, fields are flagged as out of focus or saturated relative to the plate, wells with low counts are flagged, and counts and densities per well leave out the excluded fields. Writes `tables/qc_flags.csv`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `focus_channel` | 1 | Channel used for the focus score. |
+| `focus_fraction` | 0.5 | Out of focus when the score is below this × plate median. |
+| `saturation_fraction` | 0.001 | Saturated when more pixels than this are at maximum. |
+| `low_count_fraction` | 0.3 | Low-count well when below this × plate median count. |
+| `count_labels` | None | Label set for counts; empty = first. |
+| `exclude_out_of_focus` | True | Leave out-of-focus fields out of counts. |
+| `exclude_edge_fields` | False | Leave fields at the edge of the well out of counts (needs ≥ 9 fields). |
+
+## Register channels (chromatic shift) (`register_channels`)
+
+Corrects chromatic shift by translating channels, either by given shifts in µm or by shifts measured on an image of multicolour beads. Linear (sub-pixel interpolation), so measurements stay valid. Place it before segmentation and colocalization.
+
+Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `shifts_um` | {} | Per channel number: [dy, dx] (or [dz, dy, dx]) in µm to apply. |
+| `reference_channel` | 1 | Channel the others are aligned to. |
+| `bead_image` | None | Image of multicolour beads to estimate the shifts from (overrides shifts_um). |
 
 ## Segmentation: Cellpose (`segment_cellpose`)
 

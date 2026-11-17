@@ -201,6 +201,57 @@ Each run writes, per field, `masks/<field>_<label set>.ome.tif` (label images),
 `well_summary.json`. The PNG previews show outlines: nuclei yellow, cells magenta, spots
 cyan.
 
+## Measurements, colocalization and QC
+
+Measurement steps go after the segmentation steps. They do not change the image; they
+produce tables. They always measure the linear image, whatever display-only steps come
+before them, using the segmentations made so far.
+
+| Step | Produces |
+|---|---|
+| Measure: objects | `objects.parquet` per well: shape, intensity, texture, spots per cell, neighbours ([columns](measurements.md)) |
+| Measure: colocalization | `coloc.csv` per well: Pearson, Manders M1/M2 and tM1/tM2 with Costes thresholds, ICQ, optional randomization p-value |
+| Measure: field QC and counts | focus and saturation per field; flags and counts per well |
+| Register channels | (correction) removes chromatic shift before measuring |
+
+A typical end of pipeline: *Cellpose (nuclei) → Cells from nuclei → Spot detection →
+Filter objects → Measure: objects → Measure: colocalization → Measure: field QC*.
+
+After the run, `tables/` holds `per_object_all.parquet` (every object of the plate),
+`per_well_summary.csv` (counts, densities per mm², feature means/medians/SDs,
+colocalization medians), `per_field.csv`, `qc_flags.csv` and `coloc_all.csv`. Parquet
+files open in Python (pandas), R (arrow), KNIME, Spotfire or Excel (via Power Query).
+
+### QC and counting
+
+Fields whose focus score is below half the plate median are flagged *out of focus*;
+fields with more than 0.1 % saturated pixels are flagged *saturated*; wells with fewer
+than 30 % of the plate's median count are flagged *low count*. Out-of-focus fields are
+left out of the counts by default; edge fields (outermost row and column of a well's
+grid of 9 or more fields) can be left out too. All thresholds are parameters of the QC
+step.
+
+### Colocalization in the viewer
+
+The **Measurements** dock shows the tables of the last preview and analyses
+colocalization on the field in the viewer: choose two channels and a region (whole
+field, all cells, or one cell by its ID), then **Cytofluorogram** to see the 2D
+intensity histogram with the Costes regression line and thresholds.
+**Colocalization map** adds an nMDP image (positive where both channels are above their
+mean). The analysis uses the linear, background-subtracted data, never the enhanced
+display.
+
+Warnings appear when pixels are saturated in the raw data or when the channels look
+shifted (chromatic shift). Image multicolour beads and add **Register channels** with
+that bead image to correct the shift.
+
+### Comparing with Fiji Coloc 2
+
+**Export for Fiji…** writes the exact inputs of the current region (background-subtracted
+channel A and B and the mask), HCS Studio's results, and a macro `coloc2_compare.ijm`.
+Run the macro in Fiji and compare Coloc 2's values with `hcs_studio_results.json`. The
+mapping is in the macro's comments. Coloc 2 reports the Costes p-value as 1 − p.
+
 ## Limitations in this phase
 
 - Readers have been tested on synthetic plates only, not yet on real instrument exports.
@@ -208,7 +259,8 @@ cyan.
 - ImageXpress does not record confocal vs widefield; set the modality manually.
 - ImageXpress field positions are nominal (site grid), not measured stage positions.
 - Operetta flat-field profiles are not read yet.
-- The correction, enhancement and segmentation modules are verified on synthetic images only.
+- The correction, enhancement, segmentation and measurement modules are verified on synthetic images only;
+  colocalization has not yet been compared with Fiji Coloc 2 on real fields.
 - SAM 3 is tested with random weights only (its gated weights were not available); the
   real model's segmentation quality on your images is unverified.
 - SAM 3 segments 2D planes; 3D SAM 3 segmentation is not available.

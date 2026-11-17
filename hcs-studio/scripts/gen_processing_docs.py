@@ -71,6 +71,25 @@ NOTES = {
     "solidity, or outside an intensity range (intensity gates need linear data, so put the "
     "filter before display-only steps). Objects of child label sets lose their parent or are "
     "removed with it. Removed IDs are not renumbered.",
+    "measure_objects": "Measures every object of the chosen label sets on the linear image "
+    "(never on contrast/CLAHE/clarity output): morphology in µm, intensity per channel, "
+    "radial distribution, Haralick texture, granularity, optional Zernike moments, counts of "
+    "child objects (e.g. spots per cell), nuclear/cytoplasmic ratios and neighbours. Writes "
+    "`objects.parquet` per well. Column reference: [measurements.md](measurements.md).",
+    "colocalization": "Pearson, Spearman, Li's ICQ, Manders M1/M2, thresholded tM1/tM2 with "
+    "Costes automatic thresholds (or manual ones), overlap coefficients and, optionally, the "
+    "Costes randomization p-value, per object or for the whole field, after background "
+    "subtraction. Warns about saturated pixels and chromatic shift. Optional object-based "
+    "colocalization: the fraction of objects in one label set near objects of another. "
+    "Writes `coloc.csv` per well.",
+    "qc": "Per field: focus score (normalised variance of the Laplacian), fraction of saturated "
+    "pixels, imaged area and object counts. After the run, fields are flagged as out of focus "
+    "or saturated relative to the plate, wells with low counts are flagged, and counts and "
+    "densities per well leave out the excluded fields. Writes `tables/qc_flags.csv`.",
+    "register_channels": "Corrects chromatic shift by translating channels, either by given "
+    "shifts in µm or by shifts measured on an image of multicolour beads. Linear (sub-pixel "
+    "interpolation), so measurements stay valid. Place it before segmentation and "
+    "colocalization.",
 }
 
 

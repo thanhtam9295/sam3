@@ -1,0 +1,180 @@
+"""Per-well and plate-level tables of a run: objects, fields, QC flags, per-well summary.
+
+Per-object tables can be very large (10⁷ rows), so the plate-wide Parquet file is written
+by streaming the per-well files with a unified schema, never by loading them all at once.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+#: Columns added to every table row to say where it came from.
+CONTEXT_COLUMNS = ("well", "row", "col", "field", "timepoint")
+
+
+def write_well_tables(well_dir: Path, tables: dict[str, list[pd.DataFrame]]) -> dict[str, str]:
+    """Write one well's tables; returns {table name: relative file name}."""
+    written = {}
+    for name, parts in tables.items():
+        frame = pd.concat(parts, ignore_index=True) if len(parts) > 1 else parts[0]
+        if name == "objects":
+            path = well_dir / "objects.parquet"
+            frame.to_parquet(path.with_name(path.name + ".part"), index=False)
+        else:
+            path = well_dir / ("coloc.csv" if name == "coloc" else f"{name}.csv")
+            frame.to_csv(path.with_name(path.name + ".part"), index=False)
+        path.with_name(path.name + ".part").replace(path)
+        written[name] = path.name
+    return written
+
+
+def merge_object_tables(well_dirs: list[Path], target: Path) -> int:
+    """Stream wells/*/objects.parquet into one file with the union of all columns."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    files = [d / "objects.parquet" for d in well_dirs if (d / "objects.parquet").exists()]
+    if not files:
+        return 0
+    schema = pa.unify_schemas([pq.read_schema(f) for f in files], promote_options="permissive")
+    rows = 0
+    part = target.with_name(target.name + ".part")
+    with pq.ParquetWriter(part, schema) as writer:
+        for file in files:
+            for batch in pq.ParquetFile(file).iter_batches(batch_size=65536):
+                table = pa.Table.from_batches([batch])
+                for column in schema.names:
+                    if column not in table.column_names:
+                        table = table.append_column(
+                            column, pa.nulls(len(table), schema.field(column).type)
+                        )
+                writer.write_table(table.select(schema.names).cast(schema))
+                rows += len(table)
+    part.replace(target)
+    return rows
+
+
+def qc_flags(fields: pd.DataFrame, params: Any) -> pd.DataFrame:
+    """Flag out-of-focus, saturated and edge fields, relative to the plate."""
+    flags = fields.copy()
+    median_focus = float(flags["focus_score"].median()) if "focus_score" in flags else np.nan
+    flags["out_of_focus"] = flags.get("focus_score", np.nan) < params.focus_fraction * median_focus
+    flags["saturated"] = flags.get("saturated_fraction", 0) > params.saturation_fraction
+    flags["edge_field"] = False
+    if {"x_um", "y_um"}.issubset(flags.columns):
+        for _, group in flags.groupby("well"):
+            positions = group.drop_duplicates("field")
+            if len(positions) < 9 or positions[["x_um", "y_um"]].isna().any().any():
+                continue
+            x, y = positions.x_um, positions.y_um
+            edge = (
+                np.isclose(x, x.min())
+                | np.isclose(x, x.max())
+                | np.isclose(y, y.min())
+                | np.isclose(y, y.max())
+            )
+            edge_fields = set(positions.field[np.asarray(edge, dtype=bool)])
+            flags.loc[group.index, "edge_field"] = group.field.isin(edge_fields)
+    flags["excluded"] = (params.exclude_out_of_focus & flags.out_of_focus) | (
+        params.exclude_edge_fields & flags.edge_field
+    )
+    return flags
+
+
+def well_summary(
+    objects: pd.DataFrame | None,
+    flags: pd.DataFrame | None,
+    coloc: pd.DataFrame | None,
+    params: Any,
+) -> pd.DataFrame:
+    """One row per well: counts, density, feature means/medians/SDs, colocalization."""
+    rows: dict[str, dict[str, Any]] = {}
+    if flags is not None and not flags.empty:
+        count_columns = [c for c in flags.columns if c.startswith("n_")]
+        for well, group in flags.groupby("well"):
+            used = group[~group.excluded]
+            row = rows.setdefault(str(well), {"well": well})
+            row["fields"] = int(group.field.nunique())
+            row["fields_excluded"] = int(group[group.excluded].field.nunique())
+            row["fields_out_of_focus"] = int(group[group.out_of_focus].field.nunique())
+            row["fields_saturated"] = int(group[group.saturated].field.nunique())
+            area = float(used["area_mm2"].sum()) if "area_mm2" in used else np.nan
+            row["area_mm2"] = area
+            for column in count_columns:
+                total = int(used[column].sum())
+                row[f"{column[2:]}_count"] = total
+                row[f"{column[2:]}_per_mm2"] = total / area if area and area > 0 else np.nan
+        count_label = str(flags["count_labels"].iloc[0]) if "count_labels" in flags else ""
+        key = f"{count_label}_count"
+        counts = pd.Series({w: r.get(key, np.nan) for w, r in rows.items()}, dtype=float)
+        median = float(counts.median()) if counts.notna().any() else np.nan
+        for well, row in rows.items():
+            row["low_count"] = bool(counts.get(well, np.nan) < params.low_count_fraction * median)
+    if objects is not None and not objects.empty:
+        excluded = set()
+        if flags is not None and not flags.empty:
+            excluded = set(map(tuple, flags[flags.excluded][["well", "field"]].to_numpy().tolist()))
+        if excluded:
+            keep = [
+                (w, f) not in excluded for w, f in zip(objects.well, objects.field, strict=True)
+            ]
+            objects = objects[keep]
+        skip = {"object_id", "parent_id", "row", "col", "field", "timepoint"} | {
+            c for c in objects.columns if c.startswith("centroid_")
+        }
+        numeric = [c for c in objects.select_dtypes("number").columns if c not in skip]
+        for keys, group in objects.groupby(["well", "object_type"]):
+            well, kind = str(keys[0]), str(keys[1])
+            row = rows.setdefault(str(well), {"well": well})
+            row[f"{kind}_objects_measured"] = len(group)
+            stats = group[numeric].agg(["mean", "median", "std"])
+            for column in numeric:
+                if group[column].notna().any():
+                    for stat in ("mean", "median", "std"):
+                        row[f"{kind}_{column}_{stat}"] = float(stats.loc[stat, column])  # type: ignore[arg-type]
+    if coloc is not None and not coloc.empty:
+        for keys, group in coloc.groupby(["well", "channel_a", "channel_b"]):
+            well, a, b = (str(k) for k in keys)
+            row = rows.setdefault(str(well), {"well": well})
+            for metric in ("pearson", "m1", "m2", "tm1", "tm2", "icq"):
+                row[f"coloc_{a}_{b}_{metric}_median"] = float(group[metric].median())
+    return pd.DataFrame(list(rows.values())).sort_values("well") if rows else pd.DataFrame()
+
+
+def aggregate_run(folder: Path, params: Any) -> dict[str, Any]:
+    """Build tables/ for a finished run; returns per-well summary rows by well name."""
+    tables = folder / "tables"
+    tables.mkdir(exist_ok=True)
+    well_dirs = sorted(p for p in (folder / "wells").iterdir() if p.is_dir())
+    n_objects = merge_object_tables(well_dirs, tables / "per_object_all.parquet")
+
+    def gather(name: str) -> pd.DataFrame | None:
+        parts = [pd.read_csv(d / name) for d in well_dirs if (d / name).exists()]
+        return pd.concat(parts, ignore_index=True) if parts else None
+
+    fields = gather("fields.csv")
+    coloc = gather("coloc.csv")
+    flags = None
+    if fields is not None:
+        flags = qc_flags(fields, params)
+        fields.to_csv(tables / "per_field.csv", index=False)
+    objects = None
+    if n_objects:
+        import pyarrow.parquet as pq
+
+        # Summary statistics need numbers only; read the plate file column-wise.
+        objects = pq.read_table(tables / "per_object_all.parquet").to_pandas()
+    summary = well_summary(objects, flags, coloc, params)
+    if flags is not None:
+        well_flags = summary.set_index("well")["low_count"] if "low_count" in summary else None
+        flags["low_count_well"] = flags.well.map(well_flags) if well_flags is not None else False
+        flags.to_csv(tables / "qc_flags.csv", index=False)
+    if coloc is not None:
+        coloc.to_csv(tables / "coloc_all.csv", index=False)
+    if not summary.empty:
+        summary.to_csv(tables / "per_well_summary.csv", index=False)
+    return {str(r["well"]): r for r in summary.to_dict("records")} if not summary.empty else {}

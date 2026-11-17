@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from hcs_studio import __version__
 from hcs_studio.gui.browser import BrowserPanel
+from hcs_studio.gui.measurements_panel import MeasurementsPanel
 from hcs_studio.gui.metadata_panel import MetadataPanel
 from hcs_studio.gui.pattern_dialog import PatternDialog
 from hcs_studio.gui.pipeline_panel import PipelinePanel
@@ -96,8 +97,16 @@ class MainWindow(QMainWindow):
             self.segmentation_panel,
             Qt.DockWidgetArea.RightDockWidgetArea,
         )
+        self.measurements_panel = MeasurementsPanel(self.viewer_panel, self.log)
+        self.measurements_dock = self._add_dock(
+            "Measurements",
+            "measurementsDock",
+            self.measurements_panel,
+            Qt.DockWidgetArea.RightDockWidgetArea,
+        )
         self.tabifyDockWidget(self.metadata_dock, self.pipeline_dock)
         self.tabifyDockWidget(self.pipeline_dock, self.segmentation_dock)
+        self.tabifyDockWidget(self.segmentation_dock, self.measurements_dock)
         self.metadata_dock.raise_()
         self.resizeDocks(
             [self.browser_dock, self.metadata_dock], [300, 380], Qt.Orientation.Horizontal
@@ -162,6 +171,7 @@ class MainWindow(QMainWindow):
             self.metadata_dock,
             self.pipeline_dock,
             self.segmentation_dock,
+            self.measurements_dock,
             self.log_dock,
         ):
             view_menu.addAction(dock.toggleViewAction())
@@ -270,6 +280,7 @@ class MainWindow(QMainWindow):
         self.current_field = (row, col, position)
         self._preview, self._raw_field = None, None
         self.segmentation_panel.refresh_layers()
+        self.measurements_panel.set_data(self.current_image(), (), {})
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Showing {self.plate.name} · {well_name(row, col)} · field {field.index}")
 
@@ -354,6 +365,9 @@ class MainWindow(QMainWindow):
             self.viewer_panel.set_compare_mode(panel.compare.currentText())
             counts = ", ".join(f"{ls.name}: {ls.count}" for ls in result.final.labels)
             self.log(f"Objects: {counts}")
+        self.measurements_panel.set_data(result.corrected, result.final.labels, result.tables)
+        for table_name, table in result.tables.items():
+            self.log(f"Table '{table_name}': {len(table)} row(s)")
         self.segmentation_panel.refresh_layers()
         panel.set_histograms(raw, result.final)
         steps = " → ".join(result.final.history) or "no steps"

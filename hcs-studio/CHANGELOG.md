@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Phase 5 — measurements
+- Measurement steps: produce tables, always from the linear image and the current
+  segmentations; the pipeline runner collects them per field.
+- Object analyzer: morphology (2D and 3D, in µm), intensity statistics and percentiles,
+  radial distribution, nuclear/cytoplasmic ratio, Haralick texture, granularity, optional
+  Zernike moments, child-object counts (spots per cell), neighbours.
+- Colocalization: Pearson, Spearman, Li's ICQ, Manders M1/M2, tM1/tM2 with Costes
+  thresholds (or manual), overlap coefficients, Costes randomization test, object-based
+  colocalization, saturation and chromatic-shift warnings; per object or per field.
+- Register channels: chromatic-shift correction from given shifts or a bead image.
+- Field QC: focus score, saturation, area and counts; plate-relative out-of-focus,
+  saturated, edge and low-count flags; counts and densities per well without excluded fields.
+- Run folders: `objects.parquet` and `coloc.csv` per well; `tables/per_object_all.parquet`
+  (streamed, unified schema), `per_well_summary.csv`, `per_field.csv`, `qc_flags.csv`,
+  `coloc_all.csv`; per-well summaries in `well_summary.json`.
+- Measurements dock: tables of the preview, cytofluorogram with Costes line and thresholds,
+  colocalization map (nMDP), and export of the exact inputs plus a macro for Fiji Coloc 2.
+- `docs/measurements.md`: reference of every measurement column.
+
 ### Phase 4 — segmentation
 - Label sets on images: named segmentations (nuclei, cells, spots, …) with parent links.
 - Cellpose 4.2 step (`cpsam_v2` default, `cpsam`, `cpdino`, `cpdino-vitb`, or a trained model
