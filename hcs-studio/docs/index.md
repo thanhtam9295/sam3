@@ -182,8 +182,17 @@ download `sam3.pt` yourself. In **Tools → SAM 3 settings**, choose that enviro
 Python (and the checkpoint, if downloaded) and click *Check environment*.
 
 SAM 3.1 is a video-tracking release; still images use the SAM 3 image model. A GPU is
-strongly recommended. On the CPU, encoding an image takes about 10 s and each prompt
-1-2 s.
+strongly recommended. On the CPU, encoding an image takes about 5-10 s and each prompt
+about 1 s.
+
+**Choosing between Cellpose and SAM 3.** In our tests SAM 3's concept prompt found every
+nucleus in a confocal field of large nuclei, but almost none in a dense field of 300+
+small nuclei, where Cellpose found them all. Use Cellpose for batch segmentation of
+nuclei and cells; use SAM 3 to correct objects with a click, and for spheroids,
+organoids and unusual objects. Concept prompts depend strongly on wording ("cell
+nucleus" worked where "nucleus" found nothing), so try a few phrasings. SAM 3 does not
+tell phenotypes apart: "mitotic cell" returns ordinary nuclei too. See
+[validation.md](validation.md).
 
 ### Output
 

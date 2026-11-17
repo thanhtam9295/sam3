@@ -99,7 +99,9 @@ class Sam3Client:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                env={**os.environ, "PYTHONNOUSERSITE": "1"},
+                # Plain HTTPS downloads: the Xet transfer hosts are often blocked by
+                # institutional proxies, while the standard CDN download works.
+                env={"HF_HUB_DISABLE_XET": "1", **os.environ, "PYTHONNOUSERSITE": "1"},
             )
         except OSError as exc:
             raise ModuleError(f"Could not start the SAM 3 worker with {python}: {exc}") from None

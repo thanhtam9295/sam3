@@ -76,7 +76,7 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - Segmentation modules live in `segmentation/` and register in the same `MODULES` registry. They add a `LabelSet` (int32 (Z, Y, X), `parent` + `parent_ids`) with `ImageData.with_labels`; pixel data and linearity are unchanged.
 - Cells grown from nuclei share the nucleus ID. Other links use `overlap_parents` / `point_parents`.
 - SAM 3 runs only in a separate environment (`.venv-sam3`, numpy < 2) via `segmentation/sam3_worker.py`, which must import only stdlib, numpy, torch, PIL and sam3. Its CPU shim and bfloat16 autocast are deliberate; do not edit the upstream `sam3/` package.
-- SAM 3.1 is the video release; still images use `build_sam3_image_model` (`facebook/sam3`, `sam3.pt`). The weights are gated (access was pending approval as of Phase 4).
+- SAM 3.1 is the video release; still images use `build_sam3_image_model` (`facebook/sam3`, `sam3.pt`). Access to the gated weights is granted; download with `HF_HUB_DISABLE_XET=1` (the Xet hosts are not allowed in the cloud environment). SAM 3 concept prompts are unreliable on dense small nuclei and wording-sensitive (see docs/validation.md); keep Cellpose as the batch default.
 - The `fake` SAM worker model exists only for protocol and UI tests.
 - Cellpose and SAM weights come from huggingface.co; the cloud environment `sam3-hcs-studio` allows it.
 
@@ -89,6 +89,6 @@ Run from this folder (`hcs-studio/`).
 - Describe how a path is read: `hcs-studio inspect <path>`
 - Run a pipeline: `hcs-studio run --pipeline p.yaml --input <plate> --wells A01-H12`; list modules: `hcs-studio modules`
 - Deconvolution timing: `hcs-studio benchmark --shape 30 2048 2048 --iterations 40 [--device gpu]`
-- Fine-tune Cellpose: `hcs-studio train-cellpose --data <folder>`; real-SAM 3 API test: `HCS_SAM3_PYTHON=.venv-sam3/bin/python pytest -k real_sam3`
+- Fine-tune Cellpose: `hcs-studio train-cellpose --data <folder>`; real-SAM 3 tests: `HCS_SAM3_PYTHON=.venv-sam3/bin/python HCS_SAM3_WEIGHTS=1 pytest -k real_sam3`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)
 - Headless Linux needs `xvfb libegl1 libgl1-mesa-dri libxcb-cursor0`; `ci.sh` wraps pytest in `xvfb-run`. `QT_QPA_PLATFORM=offscreen` does not work (napari needs a real OpenGL context).

@@ -85,12 +85,48 @@ analysis workstation to get the real figure.
 | **Real SAM 3 code** through the worker (random weights, CPU): image encoding, text, box and point prompts | all four calls work; ~10 s per image, 1-2 s per prompt | `test_real_sam3_api_with_random_weights` (set `HCS_SAM3_PYTHON`) |
 | SAM worker protocol, errors and crashes reported | yes (stand-in model) | `test_sam_worker_*` |
 
+### SAM 3 with its trained weights (CPU)
+
+Access to `facebook/sam3` was granted after Phase 4 was first delivered. Results on two
+real fluorescence images shipped with scikit-image (no ground-truth masks; Cellpose
+`cpsam_v2` is the reference):
+
+| Image | Prompt | SAM 3 objects | Match a Cellpose nucleus (IoU > 0.5) | Median IoU |
+|---|---|---|---|---|
+| `cells3d` nuclei, plane 30 (256², 24 nuclei by Cellpose) | "cell nucleus" | 24 | 24 | 0.96 |
+| same | "nucleus" | 0 | – | – |
+| same | "cell" | 26 | 24 | 0.96 |
+| same | "mitotic cell" | 22 | 22 (ordinary nuclei) | 0.96 |
+| `human_mitosis` (512², 333 small nuclei by Cellpose) | any of the above | 0-2 | 0 | – |
+| same, in 256-px tiles | "cell" | 192 | 184 | – |
+
+Point and box prompts (synthetic nuclei, known masks): one click on a nucleus gives
+IoU 0.93 with the true mask; a box used as an exemplar returns the boxed nucleus and
+similar ones. On flat synthetic discs, "white circle" scores 0.94 but "nucleus" 0.002,
+so text prompts are semantic, not shape detectors.
+
+Conclusions:
+
+- Use **Cellpose** for batch nucleus and cell segmentation. SAM 3's concept mode misses
+  most objects in dense fields of small nuclei, even when tiled.
+- Use **SAM 3** for interactive correction (point clicks are excellent), for larger
+  objects, and for objects Cellpose was not trained on (spheroids, organoids).
+- Concept prompts are **very sensitive to wording** ("nucleus" found nothing where "cell
+  nucleus" found every nucleus). Try several phrasings on a representative field and keep
+  the one that works.
+- "mitotic cell" returns ordinary nuclei too: SAM 3 concepts do not classify phenotypes.
+  Use the object classifier (Phase 8) for that.
+- On CPU: model load ~20 s, image encoding ~5-7 s, each prompt ~1 s.
+
+Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
+`HCS_SAM3_PYTHON` and `HCS_SAM3_WEIGHTS=1`).
+
 ### Still to do on real data
 
 1. **Cell counts**: compare Cellpose counts per field with manual counts on 10 annotated
    fields (acceptance: within ±5 %).
-2. **SAM 3** with the real weights, once Meta approves access to `facebook/sam3`: check
-   concept prompts ("nucleus", "spheroid", "mitotic cell") on representative fields.
+2. **SAM 3** on your own images: spheroids/organoids and PLA fields, with a few prompt
+   phrasings, compared with manual outlines.
 3. Check the spot detector threshold (`threshold_sd`) on PLA images against manual spot
    counts in a few cells.
 

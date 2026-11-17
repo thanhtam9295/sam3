@@ -22,6 +22,9 @@
   and previews with outlines.
 - Optional `segmentation` extra (`cellpose`).
 - SAM 3.1 is a video-tracking release; still images use the SAM 3 image model.
+- Validated SAM 3 with its trained weights on real fluorescence images (see
+  `docs/validation.md`): excellent for clicks and larger nuclei, unreliable for dense small
+  nuclei; Cellpose stays the batch default. The SAM worker downloads over plain HTTPS.
 
 ### Phase 3 — deconvolution
 - Theoretical PSFs from the metadata via `psfmodels` (vectorial or Gibson-Lanni; confocal

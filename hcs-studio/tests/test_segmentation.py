@@ -513,3 +513,38 @@ steps:
     yellow = np.all(preview == (255, 255, 0), axis=-1).sum()
     magenta = np.all(preview == (255, 0, 255), axis=-1).sum()
     assert yellow > 50 and magenta > 50  # nucleus and cell outlines drawn
+
+
+@pytest.mark.skipif(
+    not os.environ.get("HCS_SAM3_PYTHON") or not os.environ.get("HCS_SAM3_WEIGHTS"),
+    reason="set HCS_SAM3_PYTHON and HCS_SAM3_WEIGHTS=1 (needs the gated SAM 3 weights)",
+)
+def test_real_sam3_agrees_with_cellpose_on_real_nuclei() -> None:
+    """SAM 3 'cell nucleus' vs Cellpose on scikit-image's confocal cells3d (plane 30)."""
+    import skimage.data
+
+    plane = skimage.data.cells3d()[30, 1].astype(np.float32)
+    meta = ImageMetadata(channels=(ChannelInfo("DNA"),), pixel_size_um=0.5)
+    reference = (
+        create_module("segment_cellpose", {"channel": 1, "device": "cpu"})
+        .apply(ImageData(plane[None, None], meta), None)
+        .label_set("nuclei")
+        .data[0]
+    )
+    client = sam3_backend.Sam3Client(os.environ["HCS_SAM3_PYTHON"], device="cpu")
+    try:
+        client.set_image(sam3_backend.to_rgb(plane[None], [0]))
+        found = client.text("cell nucleus", 0.5).labels
+    finally:
+        client.close()
+    matched = 0
+    for i in np.unique(found)[1:]:
+        mask = found == i
+        candidates = [j for j in np.unique(reference[mask]) if j]
+        best = max(
+            ((mask & (reference == j)).sum() / (mask | (reference == j)).sum() for j in candidates),
+            default=0,
+        )
+        matched += best > 0.5
+    n_reference = len(np.unique(reference)) - 1
+    assert matched >= 0.9 * n_reference
