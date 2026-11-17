@@ -41,6 +41,23 @@ Intensity measurements and colocalization use linear data (AF-corrected, optiona
 | Packaging | PyInstaller or Briefcase → Windows installer; also `python -m hcs_studio` | |
 | Tests | pytest, pytest-qt, hypothesis | |
 
+## Architecture decisions (approved)
+
+1. Core is headless: only `hcs_studio.gui` may import PySide6 or napari (enforced by a test). GUI is the `gui` extra.
+2. Modules declare a scope (field / well / plate) and typed inputs/outputs (image, labels, table), with an optional plate-level `fit` before per-field `apply`.
+3. Images carry a `linear` flag; CLAHE/gamma/sharpening clear it; analyzer and colocalization refuse or warn on non-linear input.
+4. Pipeline schema, executor, run-folder writer and manifest are built in Phase 2; Phase 6 keeps builder UI, job queue, resume, CLI.
+5. Cellpose, SAM 3.1, micro-sam, careamics, CuPy are optional extras, imported lazily. SAM 3.1 pins `numpy<2`; run it in a separate process/environment if that conflicts.
+6. No `bioio` (use `nd2`, `tifffile`, `ome-zarr`); pyqtgraph for in-app plots and plain embedded JS in `index.html` (no plotly/QtWebEngine); Leiden optional; no BM3D.
+7. Packaging tool is chosen in Phase 10.
+
+All napari access goes through `gui/viewer.py` (`ViewerPanel`).
+
 ## Commands
 
-To be filled in at Phase 0 (environment setup, launch, lint, type-check, tests).
+Run from this folder (`hcs-studio/`).
+
+- Environment: `uv venv --python 3.12 .venv` then `uv pip install --python .venv/bin/python -e ".[gui,dev]"`
+- Launch: `python -m hcs_studio` (or `hcs-studio`); `hcs-studio info` prints version and GPU status
+- All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)
+- Headless Linux needs `xvfb libegl1 libgl1-mesa-dri libxcb-cursor0`; `ci.sh` wraps pytest in `xvfb-run`. `QT_QPA_PLATFORM=offscreen` does not work (napari needs a real OpenGL context).
