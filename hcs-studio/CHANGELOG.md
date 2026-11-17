@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Phase 10 — hardening and packaging
+- Performance record: time per step (summed over fields), reading, writing, fields per
+  minute, peak memory per worker and output size in `run_manifest.json` → `performance`;
+  per well in `well_summary.json` → `timing`. Profiled on a synthetic 384-well plate
+  (`scripts/make_test_plate.py`, `scripts/pipelines/perf_384.yaml`); see validation.md.
+- Faster granularity features (OpenCV morphology with cached footprints; identical
+  openings): object measurement about 40 % faster.
+- Plate summaries are computed well by well; the plate object table and per-object
+  colocalization rows are never loaded at once (10⁷-object plates). Training a classifier
+  from the command line reads only the labelled wells and a sample.
+- Run options: do not save corrected images (`--no-images`; masks, previews and tables are
+  still written) and a RAM limit for the whole run (`--max-memory-gb`, also in the run
+  dialog), which limits the worker count and the deconvolution tile size.
+- Error handling: free disk space is checked before a run starts; a full disk stops the run
+  at once (resumable) instead of failing every well; clear out-of-memory messages; Ctrl+C
+  in the command line stops after the current field and prints the resume command (exit
+  code 130); the application logs to `~/.hcs_studio/logs/hcs-studio.log` and shows
+  unexpected errors without closing.
+- `hcs-studio selftest` checks an installation end to end; `hcs-studio gui --smoke-test`.
+- Windows installer: PyInstaller bundle (`HCS Studio.exe` + `hcs-studio.exe`) and Inno
+  Setup (`packaging/`), CPU and CUDA variants, built and self-tested by the
+  `hcs-studio-windows` GitHub workflow, which also runs the test suite on Windows.
+- User guide shipped as HTML (`scripts/build_docs.py`); new `docs/install.md` and
+  `docs/troubleshooting.md`.
+- Fixed: profiling failed on integer features (counts); flat-field test data now shades
+  the background like real optics.
+
 ### Phase 9 — phenotypic profiles
 - Profiling of one or more runs: feature selection (missing, near-constant, |r| > 0.95),
   robust Z per plate relative to negative-control objects, optional plate centring, PCA

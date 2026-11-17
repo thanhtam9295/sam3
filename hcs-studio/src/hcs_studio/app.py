@@ -18,7 +18,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"hcs-studio {__version__}")
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("gui", help="launch the desktop application (default)")
+    gui = sub.add_parser("gui", help="launch the desktop application (default)")
+    gui.add_argument(
+        "--smoke-test",
+        action="store_true",
+        help="open the window, show the test image and close (checks an installation)",
+    )
     sub.add_parser("info", help="print version and GPU status, then exit")
     inspect = sub.add_parser(
         "inspect",
@@ -48,6 +53,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="apply only these steps (default: the run's own table steps first)",
     )
+    selftest = sub.add_parser(
+        "selftest", help="check this installation on a small synthetic plate (about a minute)"
+    )
+    selftest.add_argument("--workers", type=int, default=2)
+    selftest.add_argument("--keep", type=Path, help="keep the test plate and run in this folder")
     profile = sub.add_parser(
         "profile",
         help="PCA/UMAP phenotypic profiles, distance to control and dose-response of runs",
@@ -122,6 +132,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--output", type=Path, help="output root (default: next to the raw data)")
     run.add_argument("--layout", type=Path, help="plate layout CSV")
     run.add_argument(
+        "--no-images",
+        action="store_true",
+        help="do not save corrected images (masks, previews and tables are still written)",
+    )
+    run.add_argument(
+        "--max-memory-gb", type=float, help="RAM the whole run may use (all workers together)"
+    )
+    run.add_argument(
         "--no-checksums",
         action="store_true",
         help="record input file size and time only, instead of SHA-256 checksums",
@@ -160,6 +178,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "analyze":
         return _analyze(args)
+    if args.command == "selftest":
+        from hcs_studio.selftest import run_selftest
+
+        checks = run_selftest(workers=args.workers, keep=args.keep)
+        failed = [c.name for c in checks if not c.ok]
+        print(
+            f"\n{len(checks) - len(failed)} of {len(checks)} checks passed"
+            + (f"; failed: {', '.join(failed)}" if failed else "")
+        )
+        return 1 if failed else 0
     if args.command == "profile":
         return _profile(args)
     if args.command == "train-classifier":
@@ -208,7 +236,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             'Install them with: pip install "hcs-studio[gui]"'
         )
         return 1
-    return run_gui()
+    return run_gui(smoke_test=bool(getattr(args, "smoke_test", False)))
 
 
 def _describe_modules() -> str:
@@ -240,7 +268,7 @@ def _run(args: argparse.Namespace) -> int:
     from hcs_studio.io.base import ReaderError, open_plate, reopen_plate
     from hcs_studio.io.sidecar import apply_overrides
     from hcs_studio.model.layout import read_plate_layout
-    from hcs_studio.pipeline.executor import parse_wells, run_pipeline
+    from hcs_studio.pipeline.executor import parse_wells
     from hcs_studio.pipeline.schema import Pipeline
     from hcs_studio.processing.base import ModuleError
 
@@ -281,6 +309,39 @@ def _run(args: argparse.Namespace) -> int:
         print(f"Error: {exc}")
         return 2
 
+    # Ctrl+C stops after the current field; the run folder can then be resumed.
+    import signal
+    import threading
+
+    cancel = threading.Event()
+
+    def interrupt(signum: int, frame: Any) -> None:
+        if cancel.is_set():
+            raise KeyboardInterrupt
+        print("\nStopping after the current field (Ctrl+C again to quit at once)…", flush=True)
+        cancel.set()
+
+    previous_handler = signal.signal(signal.SIGINT, interrupt)
+    try:
+        return _run_jobs(args, jobs, workers, folder, progress, cancel)
+    finally:
+        signal.signal(signal.SIGINT, previous_handler)
+
+
+def _run_jobs(
+    args: argparse.Namespace,
+    jobs: list[Any],
+    workers: int | None,
+    folder: Path | None,
+    progress: Any,
+    cancel: Any,
+) -> int:
+    from pydantic import ValidationError
+
+    from hcs_studio.io.base import ReaderError
+    from hcs_studio.pipeline.executor import run_pipeline
+    from hcs_studio.processing.base import ModuleError
+
     code = 0
     for plate, pipeline, wells, layout, layout_path in jobs:
         if len(jobs) > 1:
@@ -297,12 +358,18 @@ def _run(args: argparse.Namespace) -> int:
                 progress=progress,
                 workers=workers,
                 resume=folder,
+                save_images=not args.no_images,
+                max_memory_gb=args.max_memory_gb,
+                cancel=cancel,
             )
         except (OSError, ValueError, ValidationError, ReaderError, ModuleError) as exc:
             print(f"Error: {exc}")
             code = 2
             continue
         print(f"Output folder: {result.folder}")
+        if result.cancelled:
+            print(f'Interrupted. Continue with: hcs-studio run --resume "{result.folder}"')
+            return 130
         if result.skipped_wells:
             print(f"Already complete (skipped): {len(result.skipped_wells)} well(s)")
         print(f"Fields written: {result.fields_written}")

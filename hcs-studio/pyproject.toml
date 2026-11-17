@@ -43,6 +43,10 @@ gpu = [
     # Install the CUDA build that matches your driver, see https://pytorch.org/get-started/
     "torch>=2.2",
 ]
+packaging = [
+    "pyinstaller>=6.10",
+    "markdown-it-py>=3",
+]
 dev = [
     "pytest>=8",
     "pytest-qt>=4.4",

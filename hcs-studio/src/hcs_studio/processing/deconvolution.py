@@ -180,6 +180,8 @@ def _padding(shape: tuple[int, ...], psf_shape: tuple[int, ...]) -> list[tuple[i
 
 #: Fraction of the machine this process may use; set to 1/workers in batch worker processes.
 MEMORY_SHARE = 1.0
+#: Run-wide RAM limit in bytes (set by the batch runner from ``max_memory_gb``), or None.
+MEMORY_LIMIT: float | None = None
 
 #: Peak working memory of one Richardson-Lucy + TV run, per padded voxel (measured: ~80).
 BYTES_PER_PADDED_VOXEL = 96
@@ -251,7 +253,10 @@ def memory_budget(backend: Backend, max_memory_gb: float | None) -> float:
         free, _ = backend._torch.cuda.mem_get_info(backend.device)
         return 0.8 * float(free)
     available = _available_ram()
-    return (0.5 * MEMORY_SHARE) * (available if available else 8 * 1024**3)
+    budget = (0.5 * MEMORY_SHARE) * (available if available else 8 * 1024**3)
+    if MEMORY_LIMIT is not None:
+        budget = min(budget, 0.5 * MEMORY_SHARE * MEMORY_LIMIT)
+    return budget
 
 
 def _prepare(

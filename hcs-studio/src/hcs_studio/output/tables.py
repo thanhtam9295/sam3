@@ -119,6 +119,77 @@ def qc_flags(fields: pd.DataFrame, params: Any) -> pd.DataFrame:
     return flags
 
 
+_SKIP_STATS = {
+    "object_id",
+    "parent_id",
+    "row",
+    "col",
+    "field",
+    "timepoint",
+    "well_x_um",
+    "well_y_um",
+}
+_LABEL_PREFIXES = ("centroid_", "gate_", "class_", "cluster_", "spatial_")
+
+
+def object_statistics(
+    objects: pd.DataFrame, excluded: set[tuple[str, int]]
+) -> tuple[dict[str, dict[str, Any]], dict[tuple[str, str], int]]:
+    """Per-well object statistics (count measured; mean, median, SD of every numeric
+    feature per object type), leaving out excluded fields and overlap duplicates.
+
+    Returns (rows by well, counts of unique objects by (well, type) — only for stitched
+    wells, where field counts would include duplicates)."""
+    rows: dict[str, dict[str, Any]] = {}
+    unique_counts: dict[tuple[str, str], int] = {}
+    if objects.empty:
+        return rows, unique_counts
+    if excluded:
+        kept = [
+            (str(w), int(f)) not in excluded
+            for w, f in zip(objects.well, objects.field, strict=True)
+        ]
+        objects = objects[np.asarray(kept, dtype=bool)]
+    duplicate = objects.get("in_overlap_duplicate")
+    if duplicate is not None:
+        objects = objects[~duplicate.fillna(False).astype(bool)]
+    numeric = [
+        c
+        for c in objects.select_dtypes("number").columns
+        if c not in _SKIP_STATS and not str(c).startswith(_LABEL_PREFIXES)
+    ]
+    for keys, group in objects.groupby(["well", "object_type"]):
+        well, kind = str(keys[0]), str(keys[1])
+        row = rows.setdefault(well, {"well": well})
+        row[f"{kind}_objects_measured"] = len(group)
+        if duplicate is not None:
+            unique_counts[(well, kind)] = len(group)
+        stats = group[numeric].agg(["mean", "median", "std"])
+        for column in numeric:
+            if group[column].notna().any():
+                for stat in ("mean", "median", "std"):
+                    row[f"{kind}_{column}_{stat}"] = float(stats.loc[stat, column])  # type: ignore[arg-type]
+    return rows, unique_counts
+
+
+def coloc_statistics(coloc: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    """Median of each colocalization statistic per well and channel pair."""
+    rows: dict[str, dict[str, Any]] = {}
+    for keys, group in coloc.groupby(["well", "channel_a", "channel_b"]):
+        well, a, b = (str(k) for k in keys)
+        row = rows.setdefault(well, {"well": well})
+        for metric in ("pearson", "m1", "m2", "tm1", "tm2", "icq"):
+            if metric in group:
+                row[f"coloc_{a}_{b}_{metric}_median"] = float(group[metric].median())
+    return rows
+
+
+def _excluded_fields(flags: pd.DataFrame | None) -> set[tuple[str, int]]:
+    if flags is None or flags.empty:
+        return set()
+    return {(str(w), int(f)) for w, f in flags[flags.excluded][["well", "field"]].to_numpy()}
+
+
 def well_summary(
     objects: pd.DataFrame | None,
     flags: pd.DataFrame | None,
@@ -126,9 +197,16 @@ def well_summary(
     params: Any,
     analysis: dict[str, dict[str, Any]] | None = None,
     field_rects: dict[str, dict[int, tuple[float, float, float, float]]] | None = None,
+    object_rows: dict[str, dict[str, Any]] | None = None,
+    unique_counts: dict[tuple[str, str], int] | None = None,
+    coloc_rows: dict[str, dict[str, Any]] | None = None,
 ) -> pd.DataFrame:
     """One row per well: counts, density, feature means/medians/SDs, colocalization, and
     the values of table steps (``analysis``, by well).
+
+    Object and colocalization statistics come from ``objects`` / ``coloc`` (whole-plate
+    frames), or precomputed well by well (``object_rows``, ``unique_counts``,
+    ``coloc_rows``) so that a plate's objects never need to be in memory at once.
 
     Stitched wells (``field_rects``: well → field → (y0, x0, y1, x1) µm) count each object
     once: objects marked ``in_overlap_duplicate`` are left out of counts and statistics, and
@@ -136,21 +214,11 @@ def well_summary(
     """
     rows: dict[str, dict[str, Any]] = {}
     field_rects = field_rects or {}
-    unique_counts: dict[tuple[str, str], int] = {}
-    if objects is not None and "in_overlap_duplicate" in objects and flags is not None:
-        excluded_fields = set(map(tuple, flags[flags.excluded][["well", "field"]].values.tolist()))
-        keep = ~objects["in_overlap_duplicate"].fillna(False).astype(bool)
-        keep &= np.asarray(
-            [
-                (w, f) not in excluded_fields
-                for w, f in zip(objects.well, objects.field, strict=True)
-            ],
-            dtype=bool,
-        )
-        sizes = objects[keep].groupby(["well", "object_type"]).size()
-        for key, n in sizes.to_dict().items():
-            parts: tuple[Any, ...] = tuple(key)  # type: ignore[arg-type]
-            unique_counts[(str(parts[0]), str(parts[1]))] = int(n)
+    if objects is not None:
+        object_rows, unique_counts = object_statistics(objects, _excluded_fields(flags))
+    if coloc is not None and not coloc.empty:
+        coloc_rows = coloc_statistics(coloc)
+    unique_counts = unique_counts or {}
     if flags is not None and not flags.empty:
         count_columns = [c for c in flags.columns if c.startswith("n_")]
         for well, group in flags.groupby("well"):
@@ -178,50 +246,9 @@ def well_summary(
         median = float(counts.median()) if counts.notna().any() else np.nan
         for well, row in rows.items():
             row["low_count"] = bool(counts.get(well, np.nan) < params.low_count_fraction * median)
-    if objects is not None and not objects.empty:
-        excluded = set()
-        if flags is not None and not flags.empty:
-            excluded = set(map(tuple, flags[flags.excluded][["well", "field"]].to_numpy().tolist()))
-        if excluded:
-            kept = [
-                (w, f) not in excluded for w, f in zip(objects.well, objects.field, strict=True)
-            ]
-            objects = objects[kept]
-        duplicate = objects.get("in_overlap_duplicate")
-        if duplicate is not None:
-            objects = objects[~duplicate.fillna(False).astype(bool)]
-        skip = {
-            "object_id",
-            "parent_id",
-            "row",
-            "col",
-            "field",
-            "timepoint",
-            "well_x_um",
-            "well_y_um",
-        } | {
-            c
-            for c in objects.columns
-            if c.startswith(("centroid_", "gate_", "class_", "cluster_", "spatial_"))
-        }
-        numeric = [c for c in objects.select_dtypes("number").columns if c not in skip]
-        for keys, group in objects.groupby(["well", "object_type"]):
-            well, kind = str(keys[0]), str(keys[1])
-            row = rows.setdefault(str(well), {"well": well})
-            row[f"{kind}_objects_measured"] = len(group)
-            stats = group[numeric].agg(["mean", "median", "std"])
-            for column in numeric:
-                if group[column].notna().any():
-                    for stat in ("mean", "median", "std"):
-                        row[f"{kind}_{column}_{stat}"] = float(stats.loc[stat, column])  # type: ignore[arg-type]
-    if coloc is not None and not coloc.empty:
-        for keys, group in coloc.groupby(["well", "channel_a", "channel_b"]):
-            well, a, b = (str(k) for k in keys)
-            row = rows.setdefault(str(well), {"well": well})
-            for metric in ("pearson", "m1", "m2", "tm1", "tm2", "icq"):
-                row[f"coloc_{a}_{b}_{metric}_median"] = float(group[metric].median())
-    for well, values in (analysis or {}).items():
-        rows.setdefault(str(well), {"well": well}).update(values)
+    for extra in (object_rows or {}, coloc_rows or {}, analysis or {}):
+        for well, values in extra.items():
+            rows.setdefault(str(well), {"well": well}).update(values)
     return pd.DataFrame(list(rows.values())).sort_values("well") if rows else pd.DataFrame()
 
 
@@ -265,33 +292,52 @@ def aggregate_run(
         record.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
     else:
         record.unlink(missing_ok=True)
-    n_objects = merge_object_tables(well_dirs, tables / "per_object_all.parquet")
-
-    def gather(name: str) -> pd.DataFrame | None:
-        parts = [pd.read_csv(d / name) for d in well_dirs if (d / name).exists()]
-        return pd.concat(parts, ignore_index=True) if parts else None
-
-    fields = gather("fields.csv")
-    coloc = gather("coloc.csv")
+    merge_object_tables(well_dirs, tables / "per_object_all.parquet")
+    fields_parts = [pd.read_csv(d / "fields.csv") for d in well_dirs if (d / "fields.csv").exists()]
+    fields = pd.concat(fields_parts, ignore_index=True) if fields_parts else None  # 1 row/field
     flags = None
     if fields is not None:
         flags = qc_flags(fields, params)
         fields.to_csv(tables / "per_field.csv", index=False)
-    objects = None
-    if n_objects:
-        import pyarrow.parquet as pq
+    # Objects and colocalization rows are summarised one well at a time (plates can hold
+    # 10⁷ objects); coloc_all.csv is written by appending.
+    from hcs_studio.analysis.table_steps import read_well_objects
 
-        # Summary statistics need numbers only; read the plate file column-wise.
-        objects = pq.read_table(tables / "per_object_all.parquet").to_pandas()
+    excluded = _excluded_fields(flags)
+    object_rows: dict[str, dict[str, Any]] = {}
+    unique_counts: dict[tuple[str, str], int] = {}
+    coloc_rows: dict[str, dict[str, Any]] = {}
+    coloc_file = tables / "coloc_all.csv"
+    coloc_part = coloc_file.with_name(coloc_file.name + ".part")
+    coloc_part.unlink(missing_ok=True)
+    for d in well_dirs:
+        if (d / "objects.parquet").exists():
+            rows, counts = object_statistics(read_well_objects(d), excluded)
+            object_rows.update(rows)
+            unique_counts.update(counts)
+        if (d / "coloc.csv").exists():
+            coloc = pd.read_csv(d / "coloc.csv")
+            coloc_rows.update(coloc_statistics(coloc))
+            coloc.to_csv(coloc_part, mode="a", header=not coloc_part.exists(), index=False)
+    if coloc_part.exists():
+        coloc_part.replace(coloc_file)
+    else:
+        coloc_file.unlink(missing_ok=True)
     summary = well_summary(
-        objects, flags, coloc, params, analysis.per_well, _field_rects(well_dirs)
+        None,
+        flags,
+        None,
+        params,
+        analysis.per_well,
+        _field_rects(well_dirs),
+        object_rows=object_rows,
+        unique_counts=unique_counts,
+        coloc_rows=coloc_rows,
     )
     if flags is not None:
         well_flags = summary.set_index("well")["low_count"] if "low_count" in summary else None
         flags["low_count_well"] = flags.well.map(well_flags) if well_flags is not None else False
         flags.to_csv(tables / "qc_flags.csv", index=False)
-    if coloc is not None:
-        coloc.to_csv(tables / "coloc_all.csv", index=False)
     if not summary.empty:
         summary.to_csv(tables / "per_well_summary.csv", index=False)
     return {str(r["well"]): r for r in summary.to_dict("records")} if not summary.empty else {}

@@ -47,6 +47,11 @@ def load_field_output(folder: Path, well: str, index: int, stage: str = "Correct
     )
     entry = next(f for f in summary["fields"] if int(f["field"]) == index)
     files = entry["files"]
+    if "corrected" not in files:
+        raise ValueError(
+            "this run did not save images (run option 'save corrected images' was off); "
+            "open the raw field from the Plate tab instead"
+        )
     key = (
         "enhanced_display_only"
         if stage == "Enhanced" and "enhanced_display_only" in files

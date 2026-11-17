@@ -2,9 +2,12 @@
 
 ## Start
 
-`python -m hcs_studio` opens the application. The status bar shows the detected GPU, or
-"CPU only" with the reason. Help → Show test image displays a synthetic image to confirm
-that the viewer works.
+Install HCS Studio with the Windows installer or from Python (see [install.md](install.md)),
+then start **HCS Studio** from the Start menu, or `python -m hcs_studio`. The status bar
+shows the detected GPU, or "CPU only" with the reason. Help → Show test image displays a
+synthetic image to confirm that the viewer works; `hcs-studio selftest` checks the whole
+installation in about a minute. If something goes wrong, see
+[troubleshooting.md](troubleshooting.md).
 
 ## Open a plate
 
@@ -126,11 +129,21 @@ hcs-studio run --pipeline pipe.yaml --input <plate folder> --wells A01-H12 --wor
 | `--output` | output root (default: next to the raw data, never inside it) |
 | `--layout` | plate layout CSV |
 | `--no-checksums` | record input file size and time instead of SHA-256 |
+| `--no-images` | do not save corrected images; masks, previews and all tables are still written (run folders shrink to about a quarter) |
+| `--max-memory-gb` | RAM the whole run may use; limits the number of workers and the deconvolution tile size |
 | `--resume <run folder>` | continue an interrupted run (plate and pipeline are read from the folder) |
 | `--retry-failed <run folder>` | rerun only the wells that failed |
 
-The exit code is 0 when every well succeeded, 1 when some wells failed, and 2 when the
-run could not start. Each run folder is named `<Plate>__<Pipeline>__<date-time>` and
+The exit code is 0 when every well succeeded, 1 when some wells failed, 2 when the run
+could not start, and 130 when it was stopped with Ctrl+C (it stops after the current
+field; resume it later with `--resume`).
+
+Before it starts, a run checks that the output disk has room for its outputs and refuses
+otherwise. If the disk fills up during a run anyway, the run stops at once (instead of
+failing every remaining well) and can be resumed once space is freed. Each run records
+where its time went (`performance` in `run_manifest.json`: time per step summed over all
+fields, reading, writing, fields per minute, peak memory per worker, output size) and
+each well its own timings in `well_summary.json`. Each run folder is named `<Plate>__<Pipeline>__<date-time>` and
 contains `run_manifest.json` (with the history of every attempt), `pipeline.yaml`,
 `logs/run.log`, `wells/<well>/…` and `tables/`.
 

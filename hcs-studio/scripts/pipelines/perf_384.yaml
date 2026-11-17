@@ -1,0 +1,9 @@
+# Typical high-content pipeline used for the Phase 10 performance profile.
+name: perf384
+steps:
+  - {module: flatfield, params: {dark_offset: 100}}
+  - {module: segment_classical, params: {channel: 1}}
+  - {module: expand_cells, params: {distance_um: 6}}
+  - {module: measure_objects}
+  - {module: colocalization, params: {channel_a: 1, channel_b: 2, labels: cells}}
+  - {module: qc}

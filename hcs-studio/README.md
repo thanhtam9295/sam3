@@ -4,7 +4,8 @@ Desktop image analysis for high-content and high-throughput fluorescence microsc
 (Nikon `.nd2`, Operetta CLS, ImageXpress). The full specification is in `PROMPT.md`;
 the project rules are in `CLAUDE.md`.
 
-**Status: Phase 9 (phenotypic profiles).** Plates from Nikon, Operetta CLS,
+**Status: Phase 10 (hardening and packaging) — all build phases done; validation on real
+instrument data pending.** Plates from Nikon, Operetta CLS,
 ImageXpress, OME-TIFF, OME-Zarr and plain TIFF folders can be browsed and viewed.
 Correction, enhancement, deconvolution, segmentation (Cellpose 4, SAM 3, threshold +
 watershed) and measurement steps (object features, colocalization, QC and counts) are
@@ -19,7 +20,11 @@ real-data validation is pending. See `docs/index.md`, `docs/processing.md`,
 
 ## Install
 
-Python 3.11 or 3.12 is required. With [uv](https://docs.astral.sh/uv/):
+On Windows, use the installer (`HCS-Studio-<version>-cpu-setup.exe`, or `-cuda-` for
+NVIDIA GPUs), built by the `hcs-studio-windows` GitHub workflow; see `docs/install.md`.
+Then run `hcs-studio selftest`.
+
+From Python 3.11 or 3.12, with [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv venv --python 3.12 .venv
@@ -40,7 +45,8 @@ Deconvolution then runs on the GPU; without it everything runs on the CPU.
 python -m hcs_studio
 ```
 
-`hcs-studio info` prints the version and GPU status without opening a window.
+`hcs-studio info` prints the version and GPU status without opening a window;
+`hcs-studio selftest` checks the installation end to end.
 `hcs-studio inspect <path>` describes how a plate folder is read.
 `hcs-studio run --pipeline pipe.yaml --input <plate> --workers auto` runs a pipeline unattended;
 `--resume <run folder>` continues an interrupted run.

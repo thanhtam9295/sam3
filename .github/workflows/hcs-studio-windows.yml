@@ -1,0 +1,75 @@
+# HCS Studio (hcs-studio/ folder): tests on Windows and the Windows installer.
+name: hcs-studio-windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: "Installer variant: cpu (smaller) or cuda (NVIDIA GPUs)"
+        default: cpu
+        type: choice
+        options: [cpu, cuda]
+  push:
+    tags: ["hcs-studio-v*"]
+
+defaults:
+  run:
+    working-directory: hcs-studio
+    shell: pwsh
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install uv
+          uv venv --python 3.12 .venv
+          uv pip install --python .venv\Scripts\python.exe torch --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --python .venv\Scripts\python.exe -e ".[gui,dev,segmentation]"
+      - name: Lint and type check
+        run: |
+          .venv\Scripts\ruff.exe check .
+          .venv\Scripts\mypy.exe
+      - name: Tests (no GUI)
+        run: .venv\Scripts\python.exe -m pytest -m "not gui" -q -p no:cacheprovider
+      - name: Self-test
+        run: .venv\Scripts\hcs-studio.exe selftest
+
+  installer:
+    runs-on: windows-latest
+    needs: tests
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tools
+        run: |
+          python -m pip install uv
+          choco install innosetup -y --no-progress
+      - name: Build installer
+        run: ./packaging/build_windows.ps1 -Variant ${{ inputs.variant || 'cpu' }}
+      - name: Install silently and run the self-test from the installed copy
+        run: |
+          $setup = Get-ChildItem dist\HCS-Studio-*-setup.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/CURRENTUSER", "/DIR=$env:RUNNER_TEMP\hcs" -Wait
+          & "$env:RUNNER_TEMP\hcs\hcs-studio.exe" selftest
+          if ($LASTEXITCODE -ne 0) { throw "self-test of the installed copy failed" }
+      - name: GUI smoke test (needs OpenGL; informative only)
+        continue-on-error: true
+        run: |
+          $p = Start-Process "$env:RUNNER_TEMP\hcs\HCS Studio.exe" -ArgumentList "gui", "--smoke-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "GUI smoke test exit code $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hcs-studio-windows-installer
+          path: |
+            hcs-studio/dist/HCS-Studio-*-setup*
+          if-no-files-found: error

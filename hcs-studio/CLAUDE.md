@@ -49,7 +49,7 @@ Intensity measurements and colocalization use linear data (AF-corrected, optiona
 4. Pipeline schema, executor, run-folder writer and manifest are built in Phase 2; Phase 6 keeps builder UI, job queue, resume, CLI.
 5. Cellpose, SAM 3.1, micro-sam, careamics, CuPy are optional extras, imported lazily. SAM 3.1 pins `numpy<2`; run it in a separate process/environment if that conflicts.
 6. No `bioio` (use `nd2`, `tifffile`, `ome-zarr`); pyqtgraph for in-app plots and plain embedded JS in `index.html` (no plotly/QtWebEngine); Leiden optional; no BM3D.
-7. Packaging tool is chosen in Phase 10.
+7. Packaging (Phase 10): PyInstaller one-folder bundle with two executables (`HCS Studio.exe` windowed GUI, `hcs-studio.exe` console CLI) + Inno Setup installer; built on Windows by `packaging/build_windows.ps1` and the `hcs-studio-windows` GitHub workflow. SAM 3 is never bundled.
 
 All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 
@@ -116,6 +116,16 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - Figures for files go through matplotlib (`save_scatter`, `_figures`); pyqtgraph's SVG exporter fails with this Qt version.
 - UMAP is seeded (single-threaded); record every option in `profiling.json`.
 
+## Hardening conventions
+
+- Never load a whole plate's objects or colocalization rows: `aggregate_run` summarises well by well (`object_statistics`, `coloc_statistics`) and streams the plate files. Sample (`sample_objects`, `_sample`) for anything plate-wide.
+- `run_pipeline` checks free disk space before starting (`estimate_output_bytes`, `check_disk_space`); a full disk (ENOSPC) marks the outcome `fatal` and stops the run (resumable). `MemoryError` gives an actionable message. Keep these messages written for users.
+- Per-step timings: `PipelineRunner.timings`; per well in `well_summary.json` → `timing`; per run in `run_manifest.json` → `performance` (`run_performance`). Use them before optimising.
+- Run options `save_images` and `max_memory_gb` travel through `RunPlan`, `Job`, the run dialog and the CLI; `deconvolution.MEMORY_LIMIT` caps the deconvolution budget in workers.
+- The GUI logs to `<settings>/logs/hcs-studio.log` and shows unexpected errors without closing (`gui/launch.py`). `hcs-studio selftest` (`selftest.py`) and `hcs-studio gui --smoke-test` check installations; keep them fast and dependency-light.
+- `multiprocessing.freeze_support()` must run first in the frozen entry (`packaging/entry.py`); worker processes of the bundle restart the executable.
+- `scripts/make_test_plate.py` writes realistic synthetic plates (384 wells); `scripts/pipelines/perf_384.yaml` is the reference pipeline for performance numbers in docs/validation.md.
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).
@@ -129,5 +139,8 @@ Run from this folder (`hcs-studio/`).
 - Regenerate a run's report: `hcs-studio report <run folder>`
 - Profiles: `hcs-studio profile <run> [<run> ...] --object-type nuclei [--level well] [--no-umap]`
 - Apply table steps to a finished run: `hcs-studio analyze <run folder> --pipeline steps.yaml [--only]`; train a classifier from a labels CSV: `hcs-studio train-classifier --run <folder> --labels labels.csv --output model.joblib`
+- Check an installation: `hcs-studio selftest`; GUI: `hcs-studio gui --smoke-test`
+- Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
+- Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)
 - Headless Linux needs `xvfb libegl1 libgl1-mesa-dri libxcb-cursor0`; `ci.sh` wraps pytest in `xvfb-run`. `QT_QPA_PLATFORM=offscreen` does not work (napari needs a real OpenGL context).

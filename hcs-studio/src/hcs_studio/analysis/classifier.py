@@ -246,21 +246,32 @@ def uncertain_objects(
     return candidates.head(n)
 
 
-def run_objects(folder: Path, object_type: str) -> pd.DataFrame:
-    """Objects of one type from a run folder (each object once where fields overlap)."""
-    path = Path(folder) / "tables" / "per_object_all.parquet"
-    if not path.exists():
-        raise ModuleError(f"{folder} has no object table (tables/per_object_all.parquet)")
-    import pyarrow.parquet as pq
+def run_objects(
+    folder: Path, object_type: str, wells: list[str] | None = None, max_per_well: int | None = None
+) -> pd.DataFrame:
+    """Objects of one type from a run folder, read well by well (each object once where
+    fields overlap): all wells or ``wells``, at most ``max_per_well`` per well (evenly
+    sampled). Never loads the plate table at once."""
+    import numpy as np
 
-    frame: pd.DataFrame = pq.read_table(
-        path, filters=[("object_type", "=", object_type)]
-    ).to_pandas()
-    if frame.empty:
+    from hcs_studio.analysis.table_steps import read_well_objects, unique_rows
+
+    root = Path(folder) / "wells"
+    names = wells if wells is not None else sorted(p.name for p in root.iterdir() if p.is_dir())
+    rng = np.random.default_rng(0)
+    parts = []
+    for name in names:
+        directory = root / name
+        if not (directory / "objects.parquet").exists():
+            continue
+        frame = read_well_objects(directory)
+        frame = frame[(frame["object_type"] == object_type) & unique_rows(frame)]
+        if max_per_well is not None and len(frame) > max_per_well:
+            frame = frame.iloc[np.sort(rng.choice(len(frame), max_per_well, replace=False))]
+        parts.append(frame)
+    if not parts or not any(len(p) for p in parts):
         raise ModuleError(f"The run has no '{object_type}' objects")
-    if "in_overlap_duplicate" in frame:
-        frame = frame[~frame["in_overlap_duplicate"].fillna(False).astype(bool)]
-    return frame.reset_index(drop=True)
+    return pd.concat(parts, ignore_index=True)
 
 
 def labelled_examples(objects: pd.DataFrame, labels: pd.DataFrame) -> pd.DataFrame:
@@ -288,15 +299,19 @@ def train_from_run(
     **options: Any,
 ) -> TrainedClassifier:
     """Train on objects of a run folder labelled in ``labels``; plate statistics come from
-    all objects of the run."""
-    objects = run_objects(folder, object_type)
-    examples = labelled_examples(objects, labels)
-    features = feature_columns(objects, options.pop("features", None))
+    up to 200 000 objects sampled evenly over the run's wells."""
+    from hcs_studio.output.results import RunResults
+
+    wells = sorted({str(w) for w in labels["well"]})
+    examples = labelled_examples(run_objects(folder, object_type, wells), labels)
+    per_well = max(1, 200_000 // max(1, len(RunResults(Path(folder)).wells)))
+    sample = run_objects(folder, object_type, max_per_well=per_well)
+    features = feature_columns(sample, options.pop("features", None))
     return train_classifier(
         examples,
         examples["label"].astype(str).tolist(),
         features=features,
-        plate_stats=robust_stats(objects, features),
+        plate_stats=robust_stats(sample, features),
         object_type=object_type,
         **options,
     )

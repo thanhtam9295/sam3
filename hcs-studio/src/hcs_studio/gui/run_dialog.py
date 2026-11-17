@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -88,6 +89,20 @@ class RunDialog(QDialog):
         self.workers.setValue(0)
         self.checksums = QCheckBox("Record SHA-256 checksums of the input files (slower)")
         self.checksums.setChecked(True)
+        self.save_images = QCheckBox(
+            "Save corrected images (needed to reopen fields in the viewer)"
+        )
+        self.save_images.setChecked(True)
+        self.save_images.setToolTip(
+            "Off: only masks, previews and tables are written (much smaller run folders)"
+        )
+        self.memory = QDoubleSpinBox()
+        self.memory.setRange(0, 4096)
+        self.memory.setDecimals(1)
+        self.memory.setSuffix(" GB")
+        self.memory.setSpecialValueText("automatic")
+        self.memory.setValue(0)
+        self.memory.setToolTip("RAM the whole run may use (all worker processes together)")
         self.message = QLabel("")
         self.message.setStyleSheet("color: #b00020;")
 
@@ -100,7 +115,9 @@ class RunDialog(QDialog):
         form = QFormLayout()
         form.addRow("Output folder", output_row)
         form.addRow("Worker processes", self.workers)
+        form.addRow("Memory limit", self.memory)
         form.addRow(self.checksums)
+        form.addRow(self.save_images)
         box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -150,6 +167,8 @@ class RunDialog(QDialog):
             "output_root": self.output.text().strip() or None,
             "workers": self.workers.value() or None,
             "checksums": self.checksums.isChecked(),
+            "save_images": self.save_images.isChecked(),
+            "max_memory_gb": self.memory.value() or None,
         }
         plate = self.plate
         base = Job(

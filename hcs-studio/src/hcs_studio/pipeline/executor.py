@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import logging
@@ -50,6 +51,7 @@ from hcs_studio.utils.display import (
     make_thumbnail,
     outline_overlay,
 )
+from hcs_studio.utils.resources import peak_rss_bytes
 
 _UNFITTED = object()
 Progress = Callable[[int, int, str], None]
@@ -132,6 +134,8 @@ class PipelineRunner:
         self.gpu_lock: Any = None
         #: Fields that plate-level estimates skipped because they could not be read.
         self.fit_skipped: list[str] = []
+        #: Seconds spent in each step ("<number> <module>") since the last reset.
+        self.timings: dict[str, float] = {}
         #: Steps applied to each field (table steps run later, on the run's tables).
         self.steps = pipeline.image_steps()
         self.modules: list[Module] = [s.create() for s in self.steps]
@@ -206,13 +210,14 @@ class PipelineRunner:
         tables: dict[str, list[Any]] = {}
         for i, module in enumerate(self.modules[:end]):
             self.check_cancelled()
+            started = time.perf_counter()
             try:
                 if isinstance(module, MeasurementModule):
                     context = MeasureContext(raw=raw, corrected=corrected, labels=image.labels)
                     context.check_shapes()
                     for name, table in module.measure(context).items():
                         tables.setdefault(name, []).append(table)
-                    continue
+                    continue  # (the finally clause below still records the time)
                 if self.gpu_lock is not None and (module.uses_gpu() or module.exclusive):
                     with self.gpu_lock:
                         image = module.apply(image, self.states[i])
@@ -220,6 +225,9 @@ class PipelineRunner:
                     image = module.apply(image, self.states[i])
             except ModuleError as exc:
                 raise ModuleError(f"Step {i + 1} ({module.title}): {exc}") from None
+            finally:
+                key = f"{i + 1} {module.name}"
+                self.timings[key] = self.timings.get(key, 0.0) + time.perf_counter() - started
             if image.linear:
                 corrected = image
         return ProcessResult(final=image, corrected=corrected, tables=_concat(tables))
@@ -305,6 +313,19 @@ def make_run_folder(plate: Plate, pipeline: Pipeline, output_root: Path | None) 
     return folder
 
 
+def check_disk_space(path: Path, needed: int) -> None:
+    """Refuse to start when the output disk clearly cannot hold the run's outputs."""
+    from hcs_studio.utils.resources import free_disk_bytes
+
+    free = free_disk_bytes(Path(path))
+    if free is not None and needed > free:
+        raise ValueError(
+            f"The run needs about {needed / 1024**3:.1f} GB but only {free / 1024**3:.1f} GB "
+            f"is free on the disk of {path}. Free space, choose another output folder, or do "
+            "not save corrected images (masks, previews and tables are still written)."
+        )
+
+
 def pipeline_hash(
     plate: Plate, pipeline: Pipeline, layout: dict[tuple[int, int], WellAnnotation]
 ) -> str:
@@ -351,6 +372,8 @@ class RunPlan:
     states: list[Any]
     run_hash: str
     field_filter: dict[tuple[int, int], list[int]] | None = None
+    save_images: bool = True
+    max_memory_bytes: float | None = None
 
 
 @dataclass
@@ -360,6 +383,8 @@ class WellOutcome:
     inputs: list[str] = field(default_factory=list)
     error: str | None = None
     cancelled: bool = False
+    #: The run cannot continue (e.g. the output disk is full).
+    fatal: bool = False
 
 
 def process_well(
@@ -387,6 +412,9 @@ def process_well(
     small: dict[int, Any] = {}  # downsampled fields for stitching
     previews: dict[int, Any] = {}
     field_shape: tuple[int, ...] | None = None
+    runner.timings = {}
+    clock: dict[str, float] = {"read": 0.0, "write": 0.0}
+    well_started = time.perf_counter()
     emit({"type": "well_started", "well": name, "fields": len(items)})
     try:
         for item in items:
@@ -394,7 +422,9 @@ def process_well(
             finals, correcteds = [], []
             raw_first: ImageData | None = None
             for t in range(n_timepoints):
+                started = time.perf_counter()
                 raw_image = runner.load(item, t)
+                clock["read"] += time.perf_counter() - started
                 if t == 0:
                     raw_first = raw_image
                 processed = runner.process(raw_image)
@@ -416,9 +446,18 @@ def process_well(
                     well_tables.setdefault(table_name, []).append(table)
             assert raw_first is not None
             raw_colormaps = channel_colormaps(plate.metadata.channels)
+            started = time.perf_counter()
             record, previews[item.index] = _write_field(
-                well_dir, item.index, finals, correcteds, colormaps, raw_first, raw_colormaps
+                well_dir,
+                item.index,
+                finals,
+                correcteds,
+                colormaps,
+                raw_first,
+                raw_colormaps,
+                save_images=plan.save_images,
             )
+            clock["write"] += time.perf_counter() - started
             written.append(record)
             field_shape = finals[0].data.shape[-2:]
             if stitcher is not None:
@@ -429,6 +468,17 @@ def process_well(
             emit({"type": "field_done", "well": name, "field": item.index})
     except RunCancelled:
         outcome.cancelled = True
+    except OSError as exc:
+        if exc.errno in (errno.ENOSPC, errno.EDQUOT):
+            outcome.error = f"the output disk is full ({exc}); free space, then resume the run"
+            outcome.fatal = True
+        else:
+            outcome.error = f"{type(exc).__name__}: {exc}"
+    except MemoryError:
+        outcome.error = (
+            "out of memory: use fewer worker processes, set a memory limit, or process "
+            "fewer channels / Z planes at once"
+        )
     except Exception as exc:
         outcome.error = f"{type(exc).__name__}: {exc}"
         import traceback
@@ -460,7 +510,17 @@ def process_well(
     table_files: dict[str, str] = {}
     if well_tables:
         well_dir.mkdir(parents=True, exist_ok=True)
+        started = time.perf_counter()
         table_files = write_well_tables(well_dir, well_tables)
+        clock["write"] += time.perf_counter() - started
+    peak = peak_rss_bytes()
+    extra["timing"] = {
+        "total_s": round(time.perf_counter() - well_started, 3),
+        "read_s": round(clock["read"], 3),
+        "write_s": round(clock["write"], 3),
+        "steps_s": {k: round(v, 3) for k, v in runner.timings.items()},
+        "worker_peak_memory_mb": round(peak / 1024**2) if peak else None,
+    }
     well_dir.mkdir(parents=True, exist_ok=True)
     write_json(
         well_dir / "well_summary.json",
@@ -543,6 +603,8 @@ def _write_field(
     colormaps: list[str],
     raw: ImageData,
     raw_colormaps: list[str],
+    *,
+    save_images: bool = True,
 ) -> tuple[dict[str, Any], Any]:
     """Write one field: images, masks, and previews of each stage plus outline overlays.
 
@@ -551,12 +613,14 @@ def _write_field(
     (well_dir / "enhanced").mkdir(parents=True, exist_ok=True)
     (well_dir / "previews").mkdir(exist_ok=True)
     corrected = np.stack([c.data for c in correcteds])
-    write_ome_tiff(
-        well_dir / "enhanced" / f"{stem}_corrected.ome.tif", corrected, correcteds[0].metadata
-    )
-    files: dict[str, Any] = {"corrected": f"enhanced/{stem}_corrected.ome.tif"}
+    files: dict[str, Any] = {}
+    if save_images:
+        write_ome_tiff(
+            well_dir / "enhanced" / f"{stem}_corrected.ome.tif", corrected, correcteds[0].metadata
+        )
+        files["corrected"] = f"enhanced/{stem}_corrected.ome.tif"
     final = np.stack([f.data for f in finals])
-    if not finals[0].linear:
+    if save_images and not finals[0].linear:
         write_ome_tiff(
             well_dir / "enhanced" / f"{stem}_enhanced.ome.tif", final, finals[0].metadata
         )
@@ -620,6 +684,7 @@ def _worker_init(plan: RunPlan, events: Any, cancel: Any, gpu_lock: Any, workers
     from hcs_studio.processing import deconvolution
 
     deconvolution.MEMORY_SHARE = 1.0 / max(1, workers)
+    deconvolution.MEMORY_LIMIT = plan.max_memory_bytes
     plate = replace(reopen_plate(plan.plate_source), metadata=plan.metadata)
     runner = PipelineRunner(
         plate, Pipeline.model_validate(plan.pipeline), plan.layout, cancel=cancel
@@ -634,17 +699,36 @@ def _worker_well(key: tuple[int, int]) -> WellOutcome:
     return process_well(_worker["plan"], _worker["runner"], key, events.put)
 
 
-def auto_workers(plate: Plate, modules: list[Module]) -> int:
-    """Worker count from CPU cores and memory: about 40 × the field size per worker."""
+def worker_memory_bytes(plate: Plate) -> int:
+    """Estimated peak memory of one worker: about 40 × a field as float32, plus 600 MB."""
+    shape = plate.shape_tczyx or (1, 1, 1, 1024, 1024)
+    return 40 * 4 * int(np.prod(shape[1:])) + 600 * 1024**2
+
+
+def auto_workers(plate: Plate, modules: list[Module], max_memory_bytes: float | None = None) -> int:
+    """Worker count from CPU cores and memory (and an optional run memory limit)."""
     if any(m.exclusive for m in modules):
         return 1
     cores = max(1, (os.cpu_count() or 2) - 1)
     from hcs_studio.processing.deconvolution import _available_ram
 
-    ram = _available_ram() or 8 * 1024**3
-    shape = plate.shape_tczyx or (1, 1, 1, 1024, 1024)
-    per_worker = 40 * 4 * int(np.prod(shape[1:])) + 600 * 1024**2
-    return max(1, min(cores, int(0.6 * ram // per_worker), len(plate.wells)))
+    ram = 0.6 * (_available_ram() or 8 * 1024**3)
+    if max_memory_bytes is not None:
+        ram = min(ram, max_memory_bytes)
+    return max(1, min(cores, int(ram // worker_memory_bytes(plate)), len(plate.wells)))
+
+
+def estimate_output_bytes(
+    plate: Plate, n_fields: int, metadata: ImageMetadata, save_images: bool
+) -> int:
+    """Rough size of a run's outputs: corrected images (float32, if saved), masks and
+    previews; tables are small in comparison."""
+    t, c, z, y, x = plate.shape_tczyx or (1, 1, 1, 1024, 1024)
+    per_field = 3 * 1024**2  # previews and outlines
+    per_field += 2 * z * y * x  # masks (compressed int32, a rough allowance)
+    if save_images:
+        per_field += 4 * t * max(c, len(metadata.channels)) * z * y * x
+    return int(n_fields * per_field * 1.1)
 
 
 # -------------------------------------------------------------------- orchestration
@@ -666,13 +750,18 @@ def run_pipeline(
     pause: Any = None,
     workers: int | None = 1,
     resume: Path | None = None,
+    save_images: bool = True,
+    max_memory_gb: float | None = None,
 ) -> RunResult:
     """Process ``wells`` (default: all) and write the run folder. Raw data is only read.
 
     ``workers``: 1 runs in this process; more uses that many worker processes; ``None``
     chooses from CPU cores and memory. ``resume``: continue an earlier run folder, skipping
     wells it completed. ``cancel`` / ``pause``: events (threading or multiprocessing).
+    ``save_images``: write corrected (and enhanced) OME-TIFFs; masks, previews and tables
+    are always written. ``max_memory_gb``: RAM the whole run may use (all workers).
     """
+    max_memory = max_memory_gb * 1024**3 if max_memory_gb else None
     started = datetime.now(UTC)
     layout = layout or {}
     runner = PipelineRunner(plate, pipeline, layout)
@@ -697,6 +786,21 @@ def run_pipeline(
         history = list(previous.get("history", []))
         (folder / "logs").mkdir(exist_ok=True)
     else:
+        n_fields = sum(
+            len(
+                [
+                    f
+                    for f in plate.wells[w].fields
+                    if not fields or w not in fields or f.index in fields[w]
+                ]
+            )
+            for w in selected
+        )
+        raw = _plate_folder(plate)
+        check_disk_space(
+            output_root if output_root is not None else raw.parent,
+            estimate_output_bytes(plate, n_fields, runner.output_metadata, save_images),
+        )
         folder = make_run_folder(plate, pipeline, output_root)
     result = RunResult(folder=folder)
     history.append({"started": datetime.now(UTC).isoformat(), "wells_requested": len(selected)})
@@ -779,9 +883,18 @@ def run_pipeline(
         )
         record["pipeline_hash"] = run_hash
         record["history"] = history
+        record["options"] = {
+            "save_images": save_images,
+            "max_memory_gb": max_memory_gb,
+            "workers_requested": workers,
+        }
+        if performance:
+            record["performance"] = performance
         write_json(folder / "run_manifest.json", record)
 
     status = "failed"
+    performance: dict[str, Any] = {}
+    phase_started = time.monotonic()
     try:
         (folder / "pipeline.yaml").write_text(pipeline.to_yaml(), encoding="utf-8")
         if layout_path is not None:
@@ -805,7 +918,9 @@ def run_pipeline(
             }
         )
         emit({"type": "status", "text": "Estimating plate-level corrections"})
+        fit_started = time.monotonic()
         _fit_or_load(runner, folder, run_hash, cancel)
+        fit_seconds = time.monotonic() - fit_started
         for entry in runner.fitted_summary():
             log.info("Fitted step %s (%s): %s", entry["step"], entry["module"], entry)
         for skipped in runner.fit_skipped:
@@ -822,8 +937,26 @@ def run_pipeline(
             runner.states,
             run_hash,
             fields,
+            save_images=save_images,
+            max_memory_bytes=max_memory,
         )
-        count = workers if workers is not None else auto_workers(plate, runner.modules)
+        if resume is not None:
+            check_disk_space(
+                folder,
+                estimate_output_bytes(plate, total, runner.output_metadata, save_images),
+            )
+        count = (
+            workers
+            if workers is not None
+            else auto_workers(plate, runner.modules, max_memory_bytes=max_memory)
+        )
+        if max_memory is not None and count * worker_memory_bytes(plate) > max_memory:
+            log.warning(
+                "%d worker(s) may need about %.1f GB, more than the %.1f GB limit",
+                count,
+                count * worker_memory_bytes(plate) / 1024**3,
+                max_memory / 1024**3,
+            )
         if count > 1 and any(m.exclusive for m in runner.modules):
             log.info("A step needs exclusive use of the machine (SAM 3): using one worker")
             count = 1
@@ -834,10 +967,17 @@ def run_pipeline(
         log.info("Processing %d wells with %d worker(s)", len(todo), count)
         emit({"type": "status", "text": f"Processing {len(todo)} wells with {count} worker(s)"})
 
+        stop = threading.Event()  # set when the run cannot continue (disk full)
+        fatal: list[str] = []
+
         def finished(outcome: WellOutcome) -> None:
             result.fields_written += outcome.fields_written
             if outcome.error:
                 result.failed_wells[outcome.well] = outcome.error
+            if outcome.fatal and outcome.error:
+                fatal.append(outcome.error)
+                stop.set()
+                log.error("Stopping the run: %s", outcome.error)
             state = "cancelled" if outcome.cancelled else ("failed" if outcome.error else "done")
             emit(
                 {
@@ -852,21 +992,41 @@ def run_pipeline(
                 log.info("Well %s done (%d fields)", outcome.well, outcome.fields_written)
 
         if count == 1:
+            from hcs_studio.processing import deconvolution
+
             runner._cancel = cancel
-            for key in todo:
-                if _wait_while_paused(pause, cancel):
-                    break
-                outcome = process_well(plan, runner, key, emit)
-                finished(outcome)
-                if outcome.cancelled:
-                    break
+            previous_limit, deconvolution.MEMORY_LIMIT = deconvolution.MEMORY_LIMIT, max_memory
+            try:
+                for key in todo:
+                    if stop.is_set() or _wait_while_paused(pause, cancel):
+                        break
+                    outcome = process_well(plan, runner, key, emit)
+                    finished(outcome)
+                    if outcome.cancelled:
+                        break
+            finally:
+                deconvolution.MEMORY_LIMIT = previous_limit
         else:
-            _run_parallel(plan, todo, count, emit, finished, cancel, pause)
+            _run_parallel(plan, todo, count, emit, finished, cancel, pause, stop)
         if cancel is not None and cancel.is_set():
             raise RunCancelled
+        if stop.is_set():
+            raise OSError(errno.ENOSPC, f"Run stopped: {fatal[0]}")
+        wells_seconds = time.monotonic() - fit_started - fit_seconds
         emit({"type": "status", "text": "Summarising tables"})
         table_modules = [s.create() for s in pipeline.table_steps()]
+        summary_started = time.monotonic()
         summarise_run(folder, runner.modules, table_modules, log)
+        performance = run_performance(
+            folder,
+            [well_name(*w) for w in todo],
+            workers=count,
+            fit_s=fit_seconds,
+            wells_s=wells_seconds,
+            tables_s=time.monotonic() - summary_started,
+            total_s=time.monotonic() - phase_started,
+        )
+        log.info("Performance: %s", json.dumps(performance))
         status = "completed_with_failures" if result.failed_wells else "completed"
     except RunCancelled:
         result.cancelled = True
@@ -895,6 +1055,59 @@ def run_pipeline(
     )
     emit({"type": "status", "text": "Finished" if not result.cancelled else "Cancelled"})
     return result
+
+
+def run_performance(
+    folder: Path,
+    wells: list[str],
+    *,
+    workers: int,
+    fit_s: float,
+    wells_s: float,
+    tables_s: float,
+    total_s: float,
+) -> dict[str, Any]:
+    """Where the time went in this attempt: wall-clock phases, and the time summed over all
+    fields per step (CPU-seconds across workers), from each well's ``timing``."""
+    steps: dict[str, float] = {}
+    read = write = 0.0
+    fields = 0
+    peaks = []
+    for name in wells:
+        try:
+            data = json.loads(
+                (folder / "wells" / name / "well_summary.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            continue
+        timing = data.get("timing") or {}
+        fields += len(data.get("fields", []))
+        read += timing.get("read_s", 0.0)
+        write += timing.get("write_s", 0.0)
+        for key, value in (timing.get("steps_s") or {}).items():
+            steps[key] = steps.get(key, 0.0) + value
+        if timing.get("worker_peak_memory_mb"):
+            peaks.append(timing["worker_peak_memory_mb"])
+    output_bytes = sum(f.stat().st_size for f in (folder / "wells").rglob("*") if f.is_file())
+    return {
+        "workers": workers,
+        "wells": len(wells),
+        "fields": fields,
+        "wall_s": {
+            "fit": round(fit_s, 1),
+            "wells": round(wells_s, 1),
+            "tables_and_report": round(tables_s, 1),
+            "total": round(total_s, 1),
+        },
+        "fields_per_minute": round(60 * fields / wells_s, 1) if wells_s > 0 else None,
+        "summed_s": {
+            "read": round(read, 1),
+            "write": round(write, 1),
+            **{k: round(v, 1) for k, v in sorted(steps.items())},
+        },
+        "worker_peak_memory_mb": max(peaks) if peaks else None,
+        "output_gb": round(output_bytes / 1024**3, 3),
+    }
 
 
 def summarise_run(
@@ -996,6 +1209,7 @@ def _run_parallel(
     finished: Callable[[WellOutcome], None],
     cancel: Any,
     pause: Any,
+    stop: threading.Event | None = None,
 ) -> None:
     """Process wells in ``count`` worker processes; at most ``count`` wells in flight."""
     context = multiprocessing.get_context("spawn")
@@ -1021,7 +1235,7 @@ def _run_parallel(
             initargs=(plan, events, worker_cancel, gpu_lock, count),
         ) as pool:
             while pending or running:
-                if cancel is not None and cancel.is_set():
+                if (cancel is not None and cancel.is_set()) or (stop is not None and stop.is_set()):
                     worker_cancel.set()
                     pending.clear()
                 paused = pause is not None and pause.is_set()

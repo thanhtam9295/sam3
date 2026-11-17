@@ -7,6 +7,7 @@ texture, ``<child label set>_<feature>`` for counts of contained objects (e.g. s
 
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -279,20 +280,40 @@ def texture(
     return pd.DataFrame(rows)
 
 
+@functools.lru_cache(maxsize=64)
+def _footprint(radius: int, ndim: int) -> NDArray[np.uint8]:
+    from skimage.morphology import ball, disk
+
+    return np.asarray(disk(radius) if ndim == 2 else ball(radius), dtype=np.uint8)
+
+
+def _opening(work: NDArray[np.float32], radius: int) -> NDArray[np.float32]:
+    """Grey opening with a disk (2D, OpenCV) or ball (3D, SciPy) of ``radius``."""
+    footprint = _footprint(radius, work.ndim)
+    if work.ndim == 2:
+        import cv2
+
+        opened = cv2.morphologyEx(work, cv2.MORPH_OPEN, footprint, borderType=cv2.BORDER_REPLICATE)
+        return np.asarray(opened, dtype=np.float32)
+    return np.asarray(ndimage.grey_opening(work, footprint=footprint.astype(bool)), np.float32)
+
+
 def _granularity(
     values: NDArray[Any], mask: NDArray[Any], prefix: str, max_radius: int
 ) -> dict[str, float]:
-    """% of the object's signal removed by grey opening at each radius (CellProfiler-style)."""
-    from skimage.morphology import ball, disk
+    """% of the object's signal removed by grey opening at each radius (CellProfiler-style).
 
-    work = np.where(mask, values - values[mask].min(), 0).astype(np.float64)
-    total = work[mask].sum()
+    Pixels outside the object count as 0; the crop is padded with zeros so that the
+    object's edge is treated the same wherever it lies in the crop.
+    """
+    work = np.where(mask, values - values[mask].min(), 0).astype(np.float32)
+    work = np.pad(work, max_radius + 1)
+    inside = np.pad(mask, max_radius + 1)
+    total = float(work[inside].sum(dtype=np.float64))
     out = {}
     previous = total
     for radius in range(1, max_radius + 1):
-        footprint = disk(radius) if work.ndim == 2 else ball(radius)
-        opened = ndimage.grey_opening(work, footprint=footprint)
-        current = opened[mask].sum()
+        current = float(_opening(work, radius)[inside].sum(dtype=np.float64))
         out[f"{prefix}_granularity_r{radius}"] = (
             float(100 * (previous - current) / total) if total > 0 else np.nan
         )

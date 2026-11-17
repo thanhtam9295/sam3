@@ -230,6 +230,8 @@ def plate_stats(frame: pd.DataFrame, features: list[str], reference: pd.Series) 
 
 def apply_stats(frame: pd.DataFrame, features: list[str], stats: Stats) -> pd.DataFrame:
     out = frame.copy()
+    # Integer features (counts) become fractional Z-scores.
+    out[features] = out[features].apply(pd.to_numeric, errors="coerce").astype(float)
     for plate, rows in frame.groupby("plate").groups.items():
         for name in features:
             median, scale = stats[str(plate)][name]
