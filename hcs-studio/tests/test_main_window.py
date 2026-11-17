@@ -46,7 +46,7 @@ def test_test_image_is_shown_in_napari_with_micrometre_scale(
     layer = panel.viewer.layers[0]
     assert tuple(layer.scale) == pytest.approx((0.325, 0.325))
     assert [str(u) for u in layer.units] == ["micrometer", "micrometer"]
-    assert window.centralWidget() is panel.widget
+    assert window.tabs.currentWidget() is panel.widget
     qtbot.wait(200)
     canvas = panel.viewer.screenshot(canvas_only=True, flash=False)
     assert np.asarray(canvas)[..., :3].std() > 5, "canvas rendered blank"

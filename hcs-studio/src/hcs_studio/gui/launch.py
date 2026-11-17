@@ -14,5 +14,5 @@ def run_gui() -> int:
     app.setApplicationName("HCS Studio")
     window = MainWindow()
     window.show()
-    window.show_test_image()
+    window.show_test_image(switch_tab=False)
     return int(app.exec())

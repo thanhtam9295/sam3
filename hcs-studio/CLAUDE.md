@@ -53,11 +53,19 @@ Intensity measurements and colocalization use linear data (AF-corrected, optiona
 
 All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 
+## Reader conventions
+
+- Readers live in `io/`, subclass `PlateReader`, register in `READERS`, and return a `Plate` whose fields load lazy dask `(T, C, Z, Y, X)` arrays. Anything a reader assumes goes into `Plate.notes`.
+- Reader tests use `tests/builders.py`: synthetic vendor layouts whose pixel values encode (well, field, channel, z).
+- No public `.nd2` sample is reachable from the cloud container; the Nikon reader is tested against `FakeND2` and still needs validation on real files.
+- User settings (overrides, favourites) go to `~/.hcs_studio` or `HCS_STUDIO_HOME`, never into raw folders.
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).
 
 - Environment: `uv venv --python 3.12 .venv` then `uv pip install --python .venv/bin/python -e ".[gui,dev]"`
 - Launch: `python -m hcs_studio` (or `hcs-studio`); `hcs-studio info` prints version and GPU status
+- Describe how a path is read: `hcs-studio inspect <path>`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)
 - Headless Linux needs `xvfb libegl1 libgl1-mesa-dri libxcb-cursor0`; `ci.sh` wraps pytest in `xvfb-run`. `QT_QPA_PLATFORM=offscreen` does not work (napari needs a real OpenGL context).
