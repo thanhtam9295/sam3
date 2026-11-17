@@ -24,8 +24,9 @@ uv pip install --python .venv/bin/python -e ".[gui,dev]"
 ```
 
 On Windows the interpreter path is `.venv\Scripts\python.exe`. The GPU is optional:
-install PyTorch with CUDA (and optionally CuPy) into the same environment and the status
-bar will report the device; without them the app runs on the CPU.
+install PyTorch with CUDA into the same environment (`pip install -e ".[gpu]"`, or the
+CUDA build for your driver from pytorch.org) and the status bar will report the device.
+Deconvolution then runs on the GPU; without it everything runs on the CPU.
 
 ## Run
 

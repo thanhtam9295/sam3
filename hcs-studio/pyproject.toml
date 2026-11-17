@@ -29,6 +29,10 @@ gui = [
     "napari>=0.9",
     "pyqtgraph>=0.13",
 ]
+gpu = [
+    # Install the CUDA build that matches your driver, see https://pytorch.org/get-started/
+    "torch>=2.2",
+]
 dev = [
     "pytest>=8",
     "pytest-qt>=4.4",
