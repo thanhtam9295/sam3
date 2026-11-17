@@ -94,6 +94,13 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - Modules that use the GPU override `uses_gpu()`; modules that must not run in several processes set `exclusive = True`.
 - Jobs (pipeline/jobs.py) run in their own process and report dict events (`run_started`, `well_started`, `field_done`, `well_finished`, `status`, `log`, `finished`); the GUI Jobs dock only listens.
 
+## Results conventions
+
+- `output/results.py` (`RunResults`) reads a run folder for display: readouts, % positive, robust Z, Z′, previews. The app's Results tab and `index.html` use it; keep their maths identical (the browser test compares them).
+- `index.html` (template `output/templates/report.html.j2`) must stay self-contained: inline CSS/JS, data as embedded JSON (escape `</`), images by relative path only. `test_report_works_offline_in_a_browser` runs it in Chromium via Node Playwright with the network blocked.
+- Per field, previews are `fNNN.png` (enhanced), `fNNN_corrected.png`, `fNNN_raw.png` and `fNNN_outline_<labels>.png` (RGBA); never burn outlines into the composites.
+- The focus score measures edge sharpness relative to contrast; it must not depend on cell number (sparse wells are often the interesting ones).
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).
@@ -104,5 +111,6 @@ Run from this folder (`hcs-studio/`).
 - Run a pipeline: `hcs-studio run --pipeline p.yaml --input <plate> --wells A01-H12 --workers auto`; `--resume <folder>`, `--retry-failed <folder>`; list modules: `hcs-studio modules`
 - Deconvolution timing: `hcs-studio benchmark --shape 30 2048 2048 --iterations 40 [--device gpu]`
 - Fine-tune Cellpose: `hcs-studio train-cellpose --data <folder>`; real-SAM 3 tests: `HCS_SAM3_PYTHON=.venv-sam3/bin/python HCS_SAM3_WEIGHTS=1 pytest -k real_sam3`
+- Regenerate a run's report: `hcs-studio report <run folder>`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)
 - Headless Linux needs `xvfb libegl1 libgl1-mesa-dri libxcb-cursor0`; `ci.sh` wraps pytest in `xvfb-run`. `QT_QPA_PLATFORM=offscreen` does not work (napari needs a real OpenGL context).

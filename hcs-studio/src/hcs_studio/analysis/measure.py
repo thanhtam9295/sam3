@@ -365,12 +365,35 @@ class QcParams(ModuleParams):
 
 
 def focus_score(plane: Any) -> float:
-    """Normalised variance of the Laplacian: high for sharp images, independent of brightness."""
-    plane = np.asarray(plane, dtype=np.float64)
-    mean = plane.mean()
-    if mean <= 0:
-        return 0.0
-    return float(ndimage.laplace(ndimage.gaussian_filter(plane, 1.0)).var() / mean**2)
+    """Sharpness of object edges: 90th percentile of the gradient around object boundaries,
+    divided by the object contrast.
+
+    Independent of brightness and of how many objects the field contains (an earlier,
+    whole-image score made sparse fields, such as wells where cells died, look out of
+    focus). NaN when the field has no clear foreground; such fields are never flagged.
+    """
+    from skimage.filters import threshold_otsu
+
+    smooth = ndimage.gaussian_filter(np.asarray(plane, dtype=np.float64), 1.0)
+    if np.ptp(smooth) == 0:
+        return float("nan")
+    foreground = smooth > threshold_otsu(smooth)
+    if foreground.sum() < 20 or (~foreground).sum() < 20:
+        return float("nan")
+    band = ndimage.binary_dilation(foreground, iterations=2) & ~ndimage.binary_erosion(
+        foreground, iterations=2
+    )
+    contrast = float(np.percentile(smooth[foreground], 95) - np.median(smooth[~foreground]))
+    if contrast <= 0:
+        return float("nan")
+    gradient = np.hypot(ndimage.sobel(smooth, 0), ndimage.sobel(smooth, 1)) / 8
+    return float(np.percentile(gradient[band], 90) / contrast)
+
+
+def _best_focus(planes: Any) -> float:
+    scores = [focus_score(p) for p in planes]
+    finite = [v for v in scores if np.isfinite(v)]
+    return max(finite) if finite else float("nan")
 
 
 @MODULES.register("qc")
@@ -390,7 +413,7 @@ class FieldQc(MeasurementModule):
         raw = context.raw
         planes = raw.data[params.focus_channel - 1]
         row: dict[str, Any] = {
-            "focus_score": max(focus_score(p) for p in planes),
+            "focus_score": _best_focus(planes),
             "saturated_fraction": max(_saturated(raw, c) for c in range(raw.data.shape[0])),
         }
         pixel = raw.metadata.pixel_size_um

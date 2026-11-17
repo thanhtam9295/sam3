@@ -510,9 +510,28 @@ steps:
     import imagecodecs
 
     preview = imagecodecs.png_decode((well / "previews" / "f001.png").read_bytes())
-    yellow = np.all(preview == (255, 255, 0), axis=-1).sum()
-    magenta = np.all(preview == (255, 0, 255), axis=-1).sum()
-    assert yellow > 50 and magenta > 50  # nucleus and cell outlines drawn
+    assert preview.shape[-1] == 3  # composite without outlines burned in
+    nuclei_overlay = imagecodecs.png_decode(
+        (well / "previews" / "f001_outline_nuclei.png").read_bytes()
+    )
+    cells_overlay = imagecodecs.png_decode(
+        (well / "previews" / "f001_outline_cells.png").read_bytes()
+    )
+    assert nuclei_overlay.shape == (*preview.shape[:2], 4)
+    drawn = nuclei_overlay[..., 3] > 0
+    assert drawn.sum() > 50 and np.all(nuclei_overlay[drawn][:, :3] == (255, 255, 0))
+    assert (cells_overlay[..., 3] > 0).sum() > 50 and np.all(
+        cells_overlay[cells_overlay[..., 3] > 0][:, :3] == (255, 0, 255)
+    )
+    assert not nuclei_overlay[~drawn].any()  # transparent elsewhere
+    assert (well / "previews" / "f001_raw.png").exists() and (
+        well / "previews" / "f001_corrected.png"
+    ).exists()
+    files = summary["fields"][0]["files"]
+    assert files["overlays"] == {
+        "nuclei": "previews/f001_outline_nuclei.png",
+        "cells": "previews/f001_outline_cells.png",
+    }
 
 
 @pytest.mark.skipif(

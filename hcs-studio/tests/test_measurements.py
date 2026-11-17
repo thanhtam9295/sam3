@@ -456,12 +456,19 @@ def test_measure_objects_needs_labels_and_matching_shapes() -> None:
 
 
 def test_focus_score_and_plate_flags() -> None:
-    rng = np.random.default_rng(8)
-    sharp = rng.uniform(0, 1000, (64, 64)) + 100
-    assert focus_score(ndimage.gaussian_filter(sharp, 3)) < 0.1 * focus_score(sharp)
-    assert focus_score(sharp * 10) == pytest.approx(
-        focus_score(sharp), rel=0.05
-    )  # brightness invariant
+    from tests.test_segmentation import CENTRES, nuclei_image
+
+    dense = nuclei_image(CENTRES).data[0, 0]
+    sparse = nuclei_image(CENTRES[:1]).data[0, 0]
+    sharp = focus_score(dense)
+    # Independent of how many cells the field holds, and of brightness.
+    assert focus_score(sparse) == pytest.approx(sharp, rel=0.05)
+    assert focus_score(dense * 10) == pytest.approx(sharp, rel=0.01)
+    # Blur lowers it steadily.
+    blurred = [focus_score(ndimage.gaussian_filter(dense, s)) for s in (1, 2, 3, 5)]
+    assert blurred == sorted(blurred, reverse=True) and blurred[2] < 0.5 * sharp
+    assert np.isnan(focus_score(np.full((64, 64), 100.0)))  # no foreground: never flagged
+    assert np.isnan(focus_score(np.zeros((64, 64))))
 
     rows = []
     for well, count in (("A01", 100), ("A02", 90), ("A03", 10)):

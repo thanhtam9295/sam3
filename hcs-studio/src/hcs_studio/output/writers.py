@@ -36,6 +36,7 @@ def write_ome_tiff(path: Path, data: NDArray[Any], metadata: ImageMetadata) -> N
 
 
 def write_png(path: Path, rgb: NDArray[np.uint8]) -> None:
+    """Write an RGB or RGBA uint8 image as PNG."""
     import imagecodecs
 
     tmp = path.with_name(path.name + ".part")

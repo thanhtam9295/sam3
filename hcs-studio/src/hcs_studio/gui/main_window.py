@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ from hcs_studio.gui.pattern_dialog import PatternDialog
 from hcs_studio.gui.pipeline_panel import PipelinePanel
 from hcs_studio.gui.plate_panel import PlatePanel
 from hcs_studio.gui.psf_dialog import PsfDialog
+from hcs_studio.gui.results_panel import ResultsPanel
 from hcs_studio.gui.run_dialog import RunDialog
 from hcs_studio.gui.sam_settings import Sam3SettingsDialog
 from hcs_studio.gui.segmentation_panel import SegmentationPanel
@@ -39,12 +41,19 @@ from hcs_studio.io.base import detect_reader
 from hcs_studio.io.generic import TiffFolderReader
 from hcs_studio.io.sidecar import load_overrides, save_overrides
 from hcs_studio.model.layout import WellAnnotation, read_plate_layout
-from hcs_studio.model.plate import Plate, well_name
+from hcs_studio.model.plate import Plate, parse_well_name, well_name
 from hcs_studio.pipeline.executor import PipelineRunner, ProcessResult
 from hcs_studio.pipeline.schema import Pipeline
 from hcs_studio.processing.base import ImageData
 from hcs_studio.utils.gpu import GpuStatus, detect_gpu
 from hcs_studio.utils.synthetic import make_cell_field
+
+
+def manifest_steps(folder: Path) -> list[str]:
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
+    return [
+        s["module"] for s in manifest.get("pipeline", {}).get("steps", []) if s.get("enabled", True)
+    ]
 
 
 class MainWindow(QMainWindow):
@@ -72,6 +81,8 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self.plate_panel, "Plate")
         self.tabs.addTab(self.viewer_panel.widget, "Viewer")
+        self.results_panel = ResultsPanel()
+        self.tabs.addTab(self.results_panel, "Results")
         self.setCentralWidget(self.tabs)
 
         self.browser = BrowserPanel()
@@ -138,6 +149,8 @@ class MainWindow(QMainWindow):
         self.pipeline_panel.compare_mode_changed.connect(self.viewer_panel.set_compare_mode)
         self.segmentation_panel.model_trained.connect(self._on_model_trained)
         self.pipeline_panel.run_requested.connect(self.open_run_dialog)
+        self.results_panel.open_field.connect(self.open_result_field)
+        self.results_panel.compare_field.connect(self.compare_result_field)
         self.jobs_panel.job_finished.connect(self._on_job_finished)
         self.jobs_panel.event_received.connect(self._on_job_event)
         self.plate_panel.plate_map.selection_changed.connect(self._on_selection_changed)
@@ -172,6 +185,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._action("Open plate &folder…", self._choose_folder, "Ctrl+O"))
         file_menu.addAction(self._action("Open &image file…", self._choose_file))
         file_menu.addAction(self._action("Import plate &layout (CSV)…", self._choose_layout))
+        file_menu.addAction(self._action("Open &results…", self._choose_results))
         file_menu.addSeparator()
         file_menu.addAction(self._action("&Quit", self.close, "Ctrl+Q"))
 
@@ -349,6 +363,69 @@ class MainWindow(QMainWindow):
         failed = f", {len(state.failed)} failed well(s)" if state.failed else ""
         self.log(f"Job '{state.job.label}' {state.status}{failed}. Output: {state.folder or '-'}")
         self.statusBar().showMessage(f"Job {state.status}: {state.job.label}", 10000)
+        if state.status in ("completed", "completed_with_failures") and state.folder:
+            self.show_results(Path(state.folder))
+
+    # --------------------------------------------------------------- results
+
+    def _choose_results(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Run folder")
+        if folder:
+            self.show_results(Path(folder))
+
+    def show_results(self, folder: Path) -> None:
+        self.results_panel.load(folder)
+        self.tabs.setCurrentWidget(self.results_panel)
+        report = folder / "index.html"
+        if report.exists():
+            self.log(f"Results of {folder.name}; shareable report: {report}")
+
+    def open_result_field(self, folder: Path, well: str, index: int, stage: str) -> None:
+        """Show a field's output image (corrected or enhanced) with its masks in the viewer."""
+        from hcs_studio.output.load import load_field_output
+
+        try:
+            image = load_field_output(folder, well, index, stage)
+        except (OSError, ValueError, KeyError, StopIteration) as exc:
+            self.log(f"Could not open {well} field {index}: {exc}")
+            return
+        self.viewer_panel.show_stages([(stage.lower(), image)])
+        self.tabs.setCurrentWidget(self.viewer_panel.widget)
+        self.log(f"Showing {stage.lower()} {well} field {index} from {folder.name}")
+
+    def compare_result_field(self, folder: Path, well: str, index: int) -> None:
+        """Raw, corrected (incl. deconvolution) and enhanced versions of a field, side by side."""
+        from dataclasses import replace as replace_metadata
+
+        from hcs_studio.io.base import reopen_plate
+        from hcs_studio.output.load import load_field_output, run_metadata
+
+        stages: list[tuple[str, ImageData]] = []
+        try:
+            manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
+            source = manifest["plate"].get("source") or {"path": manifest["plate"]["path"]}
+            plate = reopen_plate(source)
+            item = next(f for f in plate.wells[parse_well_name(well)].fields if f.index == index)
+            metadata = run_metadata(folder)
+            raw = np.asarray(item.load()[0], dtype=np.float32)
+            stages.append(("raw", ImageData(raw, replace_metadata(metadata))))
+        except Exception as exc:  # raw data moved or unavailable: compare what the run holds
+            self.log(f"Raw data not available for comparison: {exc}")
+        try:
+            corrected = load_field_output(folder, well, index, "Corrected")
+            steps = manifest_steps(folder)
+            stages.append(
+                ("corrected + deconvolved" if "deconvolution" in steps else "corrected", corrected)
+            )
+            enhanced = load_field_output(folder, well, index, "Enhanced")
+            if not enhanced.linear:
+                stages.append(("enhanced", enhanced))
+        except (OSError, ValueError, KeyError, StopIteration) as exc:
+            self.log(f"Could not read the run outputs of {well} field {index}: {exc}")
+            return
+        self.viewer_panel.show_stages(stages)
+        self.tabs.setCurrentWidget(self.viewer_panel.widget)
+        self.log(f"Comparing {', '.join(t for t, _ in stages)} for {well} field {index}")
 
     def _on_selection_changed(self, wells: list[tuple[int, int]]) -> None:
         if len(wells) > 1:

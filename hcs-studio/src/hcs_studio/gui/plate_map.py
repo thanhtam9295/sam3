@@ -25,6 +25,7 @@ _PITCH = 30.0
 _EMPTY = QColor(225, 225, 225)
 _FILLED = QColor(70, 130, 200)
 _SELECTED = QColor(240, 150, 30)
+_NAN = QColor(200, 204, 210)
 _CONTROL = {"negative": QColor(120, 120, 120), "positive": QColor(200, 70, 70)}
 
 
@@ -84,34 +85,69 @@ class PlateMapView(QGraphicsView):
         self._items: dict[tuple[int, int], _WellItem] = {}
         self._plate: Plate | None = None
         self._layout: dict[tuple[int, int], WellAnnotation] = {}
+        self._fills: dict[tuple[int, int], QColor] | None = None
         self.selected: tuple[int, int] | None = None
 
     def set_plate(
         self, plate: Plate | None, layout: dict[tuple[int, int], WellAnnotation] | None = None
     ) -> None:
+        self._plate = plate
+        if plate is None:
+            self.set_grid(0, 0, set(), {}, layout)
+            return
+        self._layout = layout or {}  # tooltips include the layout's annotations
+        tooltips = {key: self._tooltip(*key) for key in plate.wells}
+        self.set_grid(plate.rows, plate.cols, set(plate.wells), tooltips, layout)
+
+    def set_grid(
+        self,
+        rows: int,
+        cols: int,
+        present: set[tuple[int, int]],
+        tooltips: dict[tuple[int, int], str],
+        layout: dict[tuple[int, int], WellAnnotation] | None = None,
+    ) -> None:
+        """Draw a rows × cols plate; wells in ``present`` have data and can be clicked."""
         self._scene.clear()
         self._items.clear()
-        self._plate, self._layout, self.selected = plate, layout or {}, None
+        self._layout, self.selected = layout or {}, None
+        self._fills = None
         self._anchor = None
-        if plate is None:
+        if rows == 0:
             return
         font = QFont()
         font.setPixelSize(int(_PITCH * 0.42))
-        for col in range(plate.cols):
+        for col in range(cols):
             self._label(str(col + 1), col * _PITCH, -_PITCH * 0.75, font)
-        for row in range(plate.rows):
+        for row in range(rows):
             self._label(row_label(row), -_PITCH * 0.95, row * _PITCH, font)
-        for row in range(plate.rows):
-            for col in range(plate.cols):
-                well = plate.wells.get((row, col))
-                item = _WellItem(self, row, col, well is not None)
-                if well is not None:
-                    item.setToolTip(self._tooltip(row, col))
+        for row in range(rows):
+            for col in range(cols):
+                has_data = (row, col) in present
+                item = _WellItem(self, row, col, has_data)
+                if has_data:
+                    item.setToolTip(tooltips.get((row, col), well_name(row, col)))
                 self._scene.addItem(item)
                 self._items[(row, col)] = item
         self._restyle()
         self._scene.setSceneRect(self._scene.itemsBoundingRect().adjusted(-6, -6, 6, 6))
         self._fit()
+
+    def set_fills(
+        self,
+        fills: dict[tuple[int, int], QColor] | None,
+        tooltips: dict[tuple[int, int], str] | None = None,
+    ) -> None:
+        """Colour wells by value (a heatmap); None returns to the data/control colours."""
+        self._fills = fills
+        for key, text in (tooltips or {}).items():
+            item = self._items.get(key)
+            if item is not None and item.has_data:
+                item.setToolTip(text)
+        self._restyle()
+
+    def fill_of(self, key: tuple[int, int]) -> QColor:
+        return self._items[key].brush().color()
 
     def _label(self, text: str, x: float, y: float, font: QFont) -> None:
         item = QGraphicsSimpleTextItem(text)
@@ -142,6 +178,8 @@ class PlateMapView(QGraphicsView):
                 continue
             note = self._layout.get(key)
             colour = _CONTROL.get(note.control_type, _FILLED) if note else _FILLED
+            if self._fills is not None:
+                colour = self._fills.get(key, _NAN)
             item.setBrush(QBrush(colour))
             if key == self.selected:
                 item.setPen(QPen(_SELECTED, 3.5))

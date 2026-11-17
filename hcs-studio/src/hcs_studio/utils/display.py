@@ -93,3 +93,15 @@ def add_outlines(rgb: NDArray[np.uint8], label_planes: list[NDArray[Any]]) -> ND
         edges = edges[: rgb.shape[0], : rgb.shape[1]]
         out[edges] = OUTLINE_COLOURS[index % len(OUTLINE_COLOURS)]
     return out
+
+
+def outline_overlay(
+    shape: tuple[int, int], label_plane: NDArray[Any], colour: tuple[int, int, int]
+) -> NDArray[np.uint8]:
+    """Transparent RGBA image of a label plane's outlines, at a (smaller) preview size."""
+    rgba = np.zeros((*shape, 4), dtype=np.uint8)
+    drawn = add_outlines(np.zeros((*shape, 3), dtype=np.uint8), [label_plane])
+    edges = drawn.any(axis=-1)
+    rgba[edges, :3] = colour
+    rgba[edges, 3] = 255
+    return rgba

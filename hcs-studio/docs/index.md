@@ -134,6 +134,41 @@ run could not start. Each run folder is named `<Plate>__<Pipeline>__<date-time>`
 contains `run_manifest.json` (with the history of every attempt), `pipeline.yaml`,
 `logs/run.log`, `wells/<well>/…` and `tables/`.
 
+## Results
+
+When a job finishes, the **Results** tab opens with the run's plate. Open any earlier run
+with **File → Open results…**.
+
+- **Readout**: any per-well value (counts, density per mm², feature means and medians,
+  colocalization medians, QC counts). Type in the filter box to narrow the list.
+- **% positive**: choose an object type, a feature and a threshold, then
+  **Show % positive** (e.g. % nuclei with `ki67_mean` > 800). Fields excluded by QC are
+  left out.
+- **Scale**: the values, or robust Z-scores, (x − median) / (1.4826 × MAD), either over
+  the whole plate or over the negative-control wells of the plate layout.
+- **Z′** is shown when the layout marks at least two positive and two negative control
+  wells: ≥ 0.5 excellent, 0–0.5 acceptable, < 0 no separation.
+
+Click a well to see its annotation, QC flags, key statistics and fields. **Show** switches
+the previews between *Enhanced*, *Corrected* (linear, after flat-field, autofluorescence
+and deconvolution) and *Raw*; the tick boxes show or hide the outlines of each
+segmentation. **Open in viewer** opens the field's image and masks in the viewer;
+**Compare raw / corrected / enhanced** places the three side by side (the raw image is
+read again from the plate folder, so it must still be available).
+
+### Shareable report
+
+Each run folder contains `index.html`: the same results plate, readouts, robust Z,
+Z′ and well panels, in one file that opens in any browser. It needs no network
+connection or software. Zip the run folder (or at least `index.html` and `wells/`) to
+share it; clicking a well shows its previews with the stage and outline switches.
+Arrow keys move between wells, and `index.html#C07` opens well C07 directly.
+Regenerate it with:
+
+```bash
+hcs-studio report <run folder>
+```
+
 ## Deconvolution
 
 Add a **Deconvolution** step to the pipeline. By default it computes a theoretical

@@ -310,9 +310,8 @@ def test_field_filter_and_pause(plate_dir: Path, tmp_path: Path) -> None:
         plate, pipeline, output_root=tmp_path, wells=[(0, 0)], fields={(0, 0): [2]}, checksums=False
     )
     assert only.fields_written == 1
-    assert sorted(p.name for p in (only.folder / "wells" / "A01" / "previews").iterdir()) == [
-        "f002.png"
-    ]
+    previews = sorted(p.name for p in (only.folder / "wells" / "A01" / "previews").iterdir())
+    assert previews and all(name.startswith("f002") for name in previews)  # only field 2
 
     pause = threading.Event()
     events: list[dict[str, Any]] = []

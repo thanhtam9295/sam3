@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Phase 7 — results plate and report
+- Results tab: plate coloured by any per-well readout or by % positive above a threshold;
+  values or robust Z-scores (plate, or negative controls); colour bar; Z′ from the layout's
+  controls. Opens automatically when a job finishes; File → Open results….
+- Well panel: annotation, QC flags, key statistics, field previews switchable between
+  enhanced, corrected and raw, with toggleable outlines; Open in viewer (image and masks);
+  raw / corrected / enhanced side by side.
+- `index.html` in every run folder: the same results plate in a single self-contained file
+  (works offline, zipped and shared); `hcs-studio report <folder>` regenerates it.
+- Run folders now hold raw, corrected and enhanced previews per field and transparent
+  outline overlays per segmentation (outlines are no longer burned into the preview).
+- Fixed: the focus score depended on how many cells a field held, so sparse fields could
+  be flagged out of focus and excluded from counts; it now measures edge sharpness.
+
 ### Phase 6 — pipelines and batch runs
 - Pipeline builder: drag-and-drop step order, preview up to a step or all steps,
   **Run on plate…**.

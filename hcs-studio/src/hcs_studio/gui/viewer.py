@@ -255,6 +255,25 @@ class ViewerPanel:
             return 0
         return int(np.rint(float(layer.world_to_data(self.viewer.dims.point)[-3])))
 
+    def show_stages(self, stages: list[tuple[str, ImageData]]) -> None:
+        """Show several versions of a field side by side (e.g. raw, corrected, enhanced)."""
+        self.viewer.layers.clear()
+        self._before_layers, self._after_layers, self._label_layers = [], [], []
+        offset = 0.0
+        for title, image in stages:
+            layers = self._add_czyx(image, f" · {title}")
+            for layer in layers:
+                translate = [0.0] * layer.ndim
+                translate[-1] = offset
+                layer.translate = translate
+            if image.labels:
+                self.show_labels(image.labels, image.metadata, translate_x=offset)
+                for layer in self.viewer.layers[-len(image.labels) :]:
+                    layer.name = f"{layer.name} · {title}"
+            offset += image.data.shape[-1] * (image.metadata.pixel_size_um or 1.0) * 1.05
+        self.viewer.canvas.overlays.scale_bar.visible = True
+        self.viewer.reset_view()
+
     def layer_names(self) -> list[str]:
         return [layer.name for layer in self.viewer.layers]
 

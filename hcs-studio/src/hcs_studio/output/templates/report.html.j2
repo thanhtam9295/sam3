@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1d2330; --muted: #5d6676; --panel: #f4f6f9; --line: #d5dae2;
+  --empty: #ffffff; --nan: #c9ced6; --accent: #e8910c; --link: #1a5fb4;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171c; --fg: #e4e7ec; --muted: #9aa3b1; --panel: #1d2128; --line: #343a45;
+          --empty: #14171c; --nan: #4a515d; --accent: #f0a033; --link: #78aeff; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 14px 20px; border-bottom: 1px solid var(--line); }
+header h1 { margin: 0 0 4px; font-size: 20px; }
+header p { margin: 0; color: var(--muted); }
+main { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; padding: 16px 20px; }
+@media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; margin-bottom: 12px; }
+.controls label { display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: 12px; }
+select, input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 100%; }
+#readout { min-width: 260px; }
+#plate { display: grid; gap: 3px; width: 100%; overflow-x: auto; padding-bottom: 4px; }
+.lab { color: var(--muted); font-size: 11px; display: flex; align-items: center; justify-content: center; }
+.well { aspect-ratio: 1; border-radius: 50%; border: 1px solid var(--line); background: var(--empty); padding: 0; cursor: default; position: relative; min-width: 12px; }
+.well.data { cursor: pointer; }
+.well.nan { background: var(--nan); }
+.well.sel { outline: 3px solid var(--accent); outline-offset: 1px; }
+.well.ctrl::after { content: attr(data-ctrl); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: inherit; }
+.well:focus-visible { outline: 3px solid var(--link); }
+.colorbar { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-size: 12px; color: var(--muted); }
+.colorbar .bar { flex: 1; max-width: 360px; height: 12px; border-radius: 3px; border: 1px solid var(--line); }
+#zprime, #note { color: var(--muted); margin: 6px 0; }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+#well h2 { margin: 0 0 6px; font-size: 18px; }
+.flags { color: #b4232c; margin: 4px 0; }
+@media (prefers-color-scheme: dark) { .flags { color: #ff7b7b; } }
+table.stats { border-collapse: collapse; width: 100%; font-size: 12.5px; margin: 8px 0 12px; }
+table.stats td { padding: 3px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.stats td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+.thumb { border: 2px solid transparent; border-radius: 6px; padding: 0; background: none; cursor: pointer; text-align: center; color: var(--fg); font: inherit; font-size: 12px; }
+.thumb img { width: 120px; height: 120px; object-fit: contain; display: block; background: #000; border-radius: 4px; }
+.thumb.sel { border-color: var(--accent); }
+.viewer { margin-top: 12px; }
+.viewer .bar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-bottom: 8px; font-size: 12.5px; }
+.stage button { font: inherit; border: 1px solid var(--line); background: var(--bg); color: var(--fg); padding: 3px 9px; border-radius: 6px; cursor: pointer; }
+.stage button[aria-pressed="true"] { background: var(--accent); color: #000; border-color: var(--accent); }
+.stack { position: relative; width: 100%; background: #000; border-radius: 6px; overflow: hidden; }
+.stack img { display: block; width: 100%; height: auto; }
+.stack img.overlay { position: absolute; inset: 0; image-rendering: pixelated; }
+.empty { color: var(--muted); }
+footer { padding: 10px 20px 20px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{ plate_name }}</h1>
+  <p>{{ subtitle }}</p>
+</header>
+<main>
+  <section>
+    <div class="controls">
+      <label>Filter readouts <input id="filter" placeholder="e.g. nuclei_count" autocomplete="off"></label>
+      <label>Readout <select id="readout"></select></label>
+      <label>Scale <select id="norm">
+        <option value="none">values</option>
+        <option value="plate">robust Z (plate)</option>
+        <option value="negative">robust Z (negative controls)</option>
+      </select></label>
+    </div>
+    <div id="plate" role="grid" aria-label="Plate map"></div>
+    <div class="colorbar"><span id="cmin"></span><div class="bar" id="bar"></div><span id="cmax"></span></div>
+    <p id="zprime"></p>
+    <p id="note"></p>
+  </section>
+  <section class="panel" id="well" aria-live="polite">
+    <p class="empty">Click a well to see its fields and statistics. Arrow keys move between wells.</p>
+  </section>
+</main>
+<footer>{{ footer }}</footer>
+<script id="data" type="application/json">{{ data_json }}</script>
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("data").textContent);
+const VIRIDIS = ["#440154","#482878","#3e4a89","#31688e","#26828e","#1f9e89","#35b779","#6ece58","#b5de2b","#fde725"];
+const DIVERGING = ["#2166ac","#4393c3","#92c5de","#d1e5f0","#f7f7f7","#fddbc7","#f4a582","#d6604d","#b2182b"];
+const $ = (id) => document.getElementById(id);
+let selectedWell = null, selectedField = 0, stage = "enhanced";
+const hidden = new Set();
+
+function rowLabel(r) { return r < 26 ? String.fromCharCode(65 + r) : String.fromCharCode(64 + Math.floor(r / 26)) + String.fromCharCode(65 + r % 26); }
+function wellName(r, c) { return rowLabel(r) + String(c + 1).padStart(2, "0"); }
+function finite(v) { return typeof v === "number" && isFinite(v); }
+function median(a) { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function fmt(v) {
+  if (!finite(v)) return "–";
+  if (Number.isInteger(v)) return String(v);
+  const a = Math.abs(v);
+  if (a !== 0 && (a < 0.01 || a >= 1e6)) return v.toExponential(2);
+  return a >= 100 ? v.toFixed(0) : a >= 10 ? v.toFixed(1) : v.toFixed(3);
+}
+function interpolate(stops, t) {
+  t = Math.min(1, Math.max(0, t));
+  const x = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x)), f = x - i;
+  const a = stops[i], b = stops[i + 1];
+  const ch = (h, k) => parseInt(h.slice(1 + 2 * k, 3 + 2 * k), 16);
+  const mix = (k) => Math.round(ch(a, k) + (ch(b, k) - ch(a, k)) * f);
+  return `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})`;
+}
+
+function robustZ(values, reference) {
+  const pool = reference.map((w) => values[w]).filter(finite);
+  const out = {};
+  if (pool.length < 2) { for (const w in values) out[w] = NaN; return out; }
+  const m = median(pool), mad = 1.4826 * median(pool.map((v) => Math.abs(v - m)));
+  for (const w in values) out[w] = mad > 0 && finite(values[w]) ? (values[w] - m) / mad : NaN;
+  return out;
+}
+function controls(kind) { return Object.keys(DATA.layout).filter((w) => DATA.layout[w].control_type === kind); }
+function zPrime(values) {
+  const p = controls("positive").map((w) => values[w]).filter(finite), n = controls("negative").map((w) => values[w]).filter(finite);
+  if (p.length < 2 || n.length < 2) return null;
+  const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
+  const sd = (a) => { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1)); };
+  if (mean(p) === mean(n)) return null;
+  return 1 - 3 * (sd(p) + sd(n)) / Math.abs(mean(p) - mean(n));
+}
+
+function currentValues() {
+  const key = $("readout").value, raw = DATA.values[key] || {}, norm = $("norm").value;
+  if (norm === "none") return { values: raw, raw };
+  const reference = norm === "plate" ? Object.keys(raw) : controls("negative");
+  return { values: robustZ(raw, reference), raw };
+}
+
+function fillReadouts() {
+  const filter = $("filter").value.trim().toLowerCase(), select = $("readout"), keep = select.value;
+  select.innerHTML = "";
+  for (const r of DATA.readouts) {
+    if (filter && !r.toLowerCase().includes(filter)) continue;
+    const o = document.createElement("option"); o.value = r; o.textContent = r; select.appendChild(o);
+  }
+  if ([...select.options].some((o) => o.value === keep)) select.value = keep;
+  draw();
+}
+
+function buildPlate() {
+  const plate = $("plate");
+  plate.style.gridTemplateColumns = `24px repeat(${DATA.plate.cols}, minmax(12px, 1fr))`;
+  plate.appendChild(document.createElement("div"));
+  for (let c = 0; c < DATA.plate.cols; c++) { const d = document.createElement("div"); d.className = "lab"; d.textContent = c + 1; plate.appendChild(d); }
+  for (let r = 0; r < DATA.plate.rows; r++) {
+    const l = document.createElement("div"); l.className = "lab"; l.textContent = rowLabel(r); plate.appendChild(l);
+    for (let c = 0; c < DATA.plate.cols; c++) {
+      const name = wellName(r, c), b = document.createElement("button");
+      b.className = "well"; b.id = "w-" + name; b.dataset.well = name; b.dataset.r = r; b.dataset.c = c;
+      b.setAttribute("role", "gridcell");
+      const info = DATA.wells[name];
+      if (info) { b.classList.add("data"); b.addEventListener("click", () => selectWell(name)); } else { b.tabIndex = -1; b.disabled = true; }
+      const ctrl = DATA.layout[name] && DATA.layout[name].control_type;
+      if (ctrl === "negative" || ctrl === "positive") { b.classList.add("ctrl"); b.dataset.ctrl = ctrl === "negative" ? "N" : "P"; }
+      b.addEventListener("keydown", onKey);
+      plate.appendChild(b);
+    }
+  }
+}
+
+function draw() {
+  const key = $("readout").value, norm = $("norm").value, { values, raw } = currentValues();
+  const isZ = norm !== "none";
+  const finiteValues = Object.values(values).filter(finite);
+  let lo = finiteValues.length ? Math.min(...finiteValues) : 0, hi = finiteValues.length ? Math.max(...finiteValues) : 1;
+  if (isZ) { const m = Math.max(3, Math.abs(lo), Math.abs(hi)); lo = -Math.min(m, 6); hi = Math.min(m, 6); }
+  if (hi === lo) hi = lo + 1;
+  for (const b of document.querySelectorAll(".well.data")) {
+    const w = b.dataset.well, v = values[w];
+    b.classList.toggle("nan", !finite(v));
+    const colour = finite(v) ? interpolate(isZ ? DIVERGING : VIRIDIS, (v - lo) / (hi - lo)) : "";
+    b.style.background = colour;
+    const rgb = colour ? colour.match(/\d+/g).map(Number) : null;  // label text readable on the fill
+    b.style.color = rgb && 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] > 140 ? "#000" : "#fff";
+    const annotation = DATA.layout[w] ? " · " + [DATA.layout[w].compound, DATA.layout[w].concentration, DATA.layout[w].control_type].filter((x) => x !== "" && x !== null).join(" ") : "";
+    b.title = `${w}: ${fmt(raw[w])}${isZ ? ` (Z ${fmt(v)})` : ""}${annotation}`;
+    b.setAttribute("aria-label", b.title);
+  }
+  $("bar").style.background = `linear-gradient(to right, ${(isZ ? DIVERGING : VIRIDIS).join(", ")})`;
+  $("cmin").textContent = fmt(lo); $("cmax").textContent = fmt(hi);
+  const zp = zPrime(raw);
+  $("zprime").textContent = zp === null ? "Z′: needs at least two positive and two negative control wells in the plate layout." : `Z′ = ${zp.toFixed(2)} (${zp >= 0.5 ? "excellent" : zp > 0 ? "acceptable" : "no separation"}) for ${key}.`;
+  const nNeg = controls("negative").length;
+  $("note").textContent = norm === "negative" && nNeg < 2 ? "Robust Z against negative controls needs at least two negative-control wells." : "";
+  if (selectedWell) renderWell();
+}
+
+function selectWell(name) {
+  if (selectedWell) { const old = $("w-" + selectedWell); if (old) old.classList.remove("sel"); }
+  selectedWell = name; selectedField = 0;
+  const b = $("w-" + name); b.classList.add("sel"); b.focus({ preventScroll: true });
+  history.replaceState(null, "", "#" + name);
+  renderWell();
+}
+
+function onKey(e) {
+  const moves = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+  if (!moves[e.key]) return;
+  e.preventDefault();
+  let r = +e.currentTarget.dataset.r, c = +e.currentTarget.dataset.c;
+  for (let step = 0; step < DATA.plate.rows * DATA.plate.cols; step++) {
+    r += moves[e.key][0]; c += moves[e.key][1];
+    if (r < 0 || c < 0 || r >= DATA.plate.rows || c >= DATA.plate.cols) return;
+    const name = wellName(r, c);
+    if (DATA.wells[name]) { selectWell(name); return; }
+  }
+}
+
+function el(tag, attrs, text) { const e = document.createElement(tag); Object.assign(e, attrs || {}); if (text !== undefined) e.textContent = text; return e; }
+
+function renderWell() {
+  const name = selectedWell, info = DATA.wells[name], panel = $("well");
+  panel.innerHTML = "";
+  panel.appendChild(el("h2", {}, `Well ${name}`));
+  const a = DATA.layout[name];
+  if (a) panel.appendChild(el("p", {}, [a.compound, a.concentration !== null ? a.concentration : "", a.treatment, a.control_type ? `(${a.control_type} control)` : ""].filter((x) => x !== "").join(" ")));
+  if (info.flags.length) panel.appendChild(el("p", { className: "flags" }, "QC: " + info.flags.join("; ")));
+  const table = el("table", { className: "stats" });
+  const key = $("readout").value;
+  const shown = [key, ...DATA.key_readouts.filter((k) => k !== key)];
+  for (const k of shown) {
+    const v = (DATA.values[k] || {})[name];
+    const tr = el("tr"); tr.appendChild(el("td", {}, k)); tr.appendChild(el("td", {}, fmt(v))); table.appendChild(tr);
+  }
+  panel.appendChild(table);
+  if (!info.fields.length) { panel.appendChild(el("p", { className: "empty" }, "No fields were written for this well.")); return; }
+  const thumbs = el("div", { className: "thumbs" });
+  info.fields.forEach((f, i) => {
+    const b = el("button", { className: "thumb" + (i === selectedField ? " sel" : ""), type: "button" });
+    b.setAttribute("aria-label", `Field ${f.field}`);
+    const img = el("img", { src: f.enhanced, alt: `Field ${f.field}`, loading: "lazy" });
+    b.appendChild(img); b.appendChild(el("span", {}, `Field ${f.field}`));
+    b.addEventListener("click", () => { selectedField = i; renderWell(); });
+    thumbs.appendChild(b);
+  });
+  panel.appendChild(thumbs);
+  const f = info.fields[selectedField];
+  const viewer = el("div", { className: "viewer" }), bar = el("div", { className: "bar" });
+  const stages = el("div", { className: "stage" });
+  for (const [s, label] of [["enhanced", "Enhanced"], ["corrected", "Corrected"], ["raw", "Raw"]]) {
+    if (!f[s]) continue;
+    const b = el("button", { type: "button" }, label); b.setAttribute("aria-pressed", String(stage === s));
+    b.addEventListener("click", () => { stage = s; renderWell(); }); stages.appendChild(b);
+  }
+  bar.appendChild(stages);
+  for (const [layer] of Object.entries(f.overlays)) {
+    const label = el("label"), box = el("input", { type: "checkbox", checked: !hidden.has(layer) });
+    box.addEventListener("change", () => { box.checked ? hidden.delete(layer) : hidden.add(layer); renderWell(); });
+    label.appendChild(box); label.appendChild(document.createTextNode(` ${layer} (${f.objects[layer] ?? 0})`)); bar.appendChild(label);
+  }
+  viewer.appendChild(bar);
+  const stack = el("div", { className: "stack" });
+  stack.appendChild(el("img", { src: f[stage] || f.enhanced, alt: `${name} field ${f.field}, ${stage}`, id: "field-image" }));
+  for (const [layer, src] of Object.entries(f.overlays)) {
+    if (hidden.has(layer)) continue;
+    const overlay = el("img", { src, alt: "", className: "overlay" });
+    overlay.dataset.layer = layer;
+    stack.appendChild(overlay);
+  }
+  viewer.appendChild(stack);
+  panel.appendChild(viewer);
+}
+
+buildPlate();
+fillReadouts();
+$("filter").addEventListener("input", fillReadouts);
+$("readout").addEventListener("change", draw);
+$("norm").addEventListener("change", draw);
+function wellFromHash() {
+  const name = decodeURIComponent(location.hash.slice(1));
+  if (DATA.wells[name] && name !== selectedWell) selectWell(name);
+}
+window.addEventListener("hashchange", wellFromHash);
+wellFromHash();
+</script>
+</body>
+</html>

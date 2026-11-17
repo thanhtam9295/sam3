@@ -26,6 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inspect.add_argument("path", type=Path)
     sub.add_parser("modules", help="list processing modules and their parameters")
+    report = sub.add_parser("report", help="(re)write index.html of a run folder")
+    report.add_argument("folder", type=Path)
     train = sub.add_parser("train-cellpose", help="fine-tune Cellpose on edited masks")
     train.add_argument("--data", type=Path, required=True, help="training folder")
     train.add_argument("--base", default="cpsam_v2", help="model to start from")
@@ -88,6 +90,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "run":
         return _run(args)
+    if args.command == "report":
+        from hcs_studio.output.report import write_report
+
+        try:
+            path = write_report(args.folder)
+        except (OSError, ValueError, KeyError) as exc:
+            print(f"Error: {exc}")
+            return 2
+        print(f"Report: {path}")
+        return 0
     if args.command == "train-cellpose":
         from hcs_studio.processing.base import ModuleError
         from hcs_studio.segmentation.cellpose_backend import fine_tune

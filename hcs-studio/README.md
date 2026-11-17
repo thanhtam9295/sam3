@@ -4,14 +4,15 @@ Desktop image analysis for high-content and high-throughput fluorescence microsc
 (Nikon `.nd2`, Operetta CLS, ImageXpress). The full specification is in `PROMPT.md`;
 the project rules are in `CLAUDE.md`.
 
-**Status: Phase 6 (pipelines and batch runs).** Plates from Nikon, Operetta CLS,
+**Status: Phase 7 (results plate and report).** Plates from Nikon, Operetta CLS,
 ImageXpress, OME-TIFF, OME-Zarr and plain TIFF folders can be browsed and viewed.
 Correction, enhancement, deconvolution, segmentation (Cellpose 4, SAM 3, threshold +
 watershed) and measurement steps (object features, colocalization, QC and counts) are
-combined into pipelines, previewed on a field, and run on wells or whole plates as
-background jobs with worker processes, pause, cancel, retry and resume (also from the
-command line). Algorithms are tested on synthetic data; real-data validation is pending.
-See `docs/index.md`, `docs/processing.md`, `docs/measurements.md` and `docs/validation.md`.
+combined into pipelines and run on wells or plates as resumable background jobs. Results
+appear on a clickable plate (any readout, % positive, robust Z, Z′) in the app and in a
+self-contained `index.html` that works offline. Algorithms are tested on synthetic data;
+real-data validation is pending. See `docs/index.md`, `docs/processing.md`,
+`docs/measurements.md` and `docs/validation.md`.
 
 ## Install
 
@@ -40,6 +41,7 @@ python -m hcs_studio
 `hcs-studio inspect <path>` describes how a plate folder is read.
 `hcs-studio run --pipeline pipe.yaml --input <plate> --workers auto` runs a pipeline unattended;
 `--resume <run folder>` continues an interrupted run.
+`hcs-studio report <run folder>` regenerates the shareable `index.html`.
 `hcs-studio benchmark` times deconvolution on this machine.
 `hcs-studio train-cellpose --data <folder>` fine-tunes Cellpose on edited masks.
 

@@ -42,7 +42,12 @@ from hcs_studio.processing.base import (
     Module,
     ModuleError,
 )
-from hcs_studio.utils.display import add_outlines, channel_colormaps, make_thumbnail
+from hcs_studio.utils.display import (
+    OUTLINE_COLOURS,
+    channel_colormaps,
+    make_thumbnail,
+    outline_overlay,
+)
 
 _UNFITTED = object()
 Progress = Callable[[int, int, str], None]
@@ -372,8 +377,12 @@ def process_well(
         for item in items:
             runner.check_cancelled()
             finals, correcteds = [], []
+            raw_first: ImageData | None = None
             for t in range(n_timepoints):
-                processed = runner.process(runner.load(item, t))
+                raw_image = runner.load(item, t)
+                if t == 0:
+                    raw_first = raw_image
+                processed = runner.process(raw_image)
                 finals.append(processed.final)
                 correcteds.append(processed.corrected)
                 for table_name, table in processed.tables.items():
@@ -390,7 +399,13 @@ def process_well(
                     for position, (column, value) in enumerate(context.items()):
                         table.insert(position, column, value)
                     well_tables.setdefault(table_name, []).append(table)
-            written.append(_write_field(well_dir, item.index, finals, correcteds, colormaps))
+            assert raw_first is not None
+            raw_colormaps = channel_colormaps(plate.metadata.channels)
+            written.append(
+                _write_field(
+                    well_dir, item.index, finals, correcteds, colormaps, raw_first, raw_colormaps
+                )
+            )
             outcome.inputs.extend(str(p) for p in item.sources)
             outcome.fields_written += 1
             emit({"type": "field_done", "well": name, "field": item.index})
@@ -438,7 +453,10 @@ def _write_field(
     finals: list[ImageData],
     correcteds: list[ImageData],
     colormaps: list[str],
+    raw: ImageData,
+    raw_colormaps: list[str],
 ) -> dict[str, Any]:
+    """Write one field: images, masks, and previews of each stage plus outline overlays."""
     stem = f"f{index:03d}"
     (well_dir / "enhanced").mkdir(parents=True, exist_ok=True)
     (well_dir / "previews").mkdir(exist_ok=True)
@@ -446,7 +464,7 @@ def _write_field(
     write_ome_tiff(
         well_dir / "enhanced" / f"{stem}_corrected.ome.tif", corrected, correcteds[0].metadata
     )
-    files = {"corrected": f"enhanced/{stem}_corrected.ome.tif"}
+    files: dict[str, Any] = {"corrected": f"enhanced/{stem}_corrected.ome.tif"}
     final = np.stack([f.data for f in finals])
     if not finals[0].linear:
         write_ome_tiff(
@@ -454,11 +472,30 @@ def _write_field(
         )
         files["enhanced_display_only"] = f"enhanced/{stem}_enhanced.ome.tif"
     preview = make_thumbnail(final, colormaps, max_size=1024)
+    write_png(
+        well_dir / "previews" / f"{stem}_raw.png",
+        make_thumbnail(raw.data[None], raw_colormaps, max_size=1024),
+    )
+    write_png(
+        well_dir / "previews" / f"{stem}_corrected.png",
+        make_thumbnail(
+            corrected[:1], channel_colormaps(correcteds[0].metadata.channels), max_size=1024
+        ),
+    )
+    files["preview_raw"] = f"previews/{stem}_raw.png"
+    files["preview_corrected"] = f"previews/{stem}_corrected.png"
     label_sets = finals[0].labels
     if label_sets:
         (well_dir / "masks").mkdir(exist_ok=True)
-        middle = final.shape[2] // 2
-        preview = add_outlines(preview, [ls.data[middle] for ls in label_sets])
+    middle = final.shape[2] // 2
+    overlays: dict[str, str] = {}
+    for number, ls in enumerate(label_sets):
+        colour = OUTLINE_COLOURS[number % len(OUTLINE_COLOURS)]
+        overlay = outline_overlay(preview.shape[:2], ls.data[middle], colour)
+        name = f"previews/{stem}_outline_{ls.name}.png"
+        write_png(well_dir / name, overlay)
+        overlays[ls.name] = name
+    files["overlays"] = overlays
     objects: dict[str, Any] = {}
     for ls in label_sets:
         stack = np.stack([f.label_set(ls.name).data for f in finals])
@@ -745,6 +782,12 @@ def run_pipeline(
                 data["summary"] = summary
                 write_json(path, data)
         status = "completed_with_failures" if result.failed_wells else "completed"
+        try:
+            from hcs_studio.output.report import write_report
+
+            write_report(folder)
+        except Exception:  # the report must never make a finished run fail
+            log.exception("The HTML report could not be written")
     except RunCancelled:
         result.cancelled = True
         status = "cancelled"

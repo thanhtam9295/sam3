@@ -199,3 +199,23 @@ Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
 | Jobs in their own process: progress, pause, cancel, resume, interrupted job detected | yes | `test_job_process_runs_and_cancels`, `test_pause_cancel_resume_and_interrupted` |
 
 Still to do: time a real 384-well plate on the analysis workstation (Phase 10).
+
+## Results and report (Phase 7)
+
+| Check | Result | Test |
+|---|---|---|
+| Robust Z and Z′ against hand-computed values | exact | `test_robust_z_and_z_prime` |
+| Readouts, % positive, control wells, robust Z against negative controls on a real run | exact | `test_run_results` |
+| `index.html` contains no external resources; every preview it links exists, by relative path | yes | `test_report_is_self_contained` |
+| **Acceptance: a zipped and unpacked run folder, opened from `file://` in Chromium with all network requests blocked: clicking a well opens its enhanced previews**; stages, outlines, readout filter, robust Z (equal to Python's), keyboard and `#well` links work; no script errors | yes | `test_report_works_offline_in_a_browser` |
+| In-app results plate, % positive, well panel, viewer and side-by-side comparison | yes | `tests/test_gui_results.py` |
+
+### Correction found while building this phase
+
+The field focus score of Phase 5 grew with the number of cells in a field (0.031 for one
+nucleus, 0.073 for five), so sharp but sparse fields, such as wells where a compound
+killed cells, were flagged out of focus and left out of the counts. It is replaced by the
+sharpness of object edges relative to object contrast, which is independent of cell
+number (0.327 for 1 and 5 nuclei) and brightness and falls steadily with blur (0.39× at
+σ = 3 px). Fields without clear objects get no score and are never flagged. Runs made
+before this change may have excluded sparse fields; rerun them to be sure.
