@@ -27,6 +27,21 @@ are done.
 | Confocal PSF is narrower than widefield, laterally and axially | yes | `test_confocal_psf_is_narrower_than_widefield` |
 | Measured PSF from a bead stack recovers the true PSF | FWHM within 6 % in X, Y and Z; edge and crowded beads rejected | `test_measured_psf_from_beads_recovers_the_true_psf` |
 
+### Runtime
+
+`hcs-studio benchmark --shape 30 2048 2048 --iterations 40 --device cpu` on the
+development container (4 x86-64 CPU cores, 15 GB RAM, no GPU):
+
+| Stack | Backend | Tiles | Runtime | Per iteration | Peak memory |
+|---|---|---|---|---|---|
+| 2048 × 2048 × 30, PSF 79 × 79 × 19 | numpy, CPU | 4 (automatic) | 1826 s (30.4 min) | 45.7 s | 7.0 GB |
+
+The whole stack needs about 19 GB in one piece, so it was tiled automatically to stay
+within half the free RAM. A 384-well plate with one such stack per well would take
+about 8 days on this machine; this step needs a CUDA GPU (not yet measured) or
+fewer iterations for plate-scale use. Run the benchmark with `--device gpu` on the
+analysis workstation to get the real figure.
+
 ### Still to do on real data
 
 1. **Bead stack**: deconvolve your bead PSF stack with (a) the measured PSF and
