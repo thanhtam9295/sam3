@@ -18,6 +18,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMainWindow, QWidget
 
 from hcs_studio.model.plate import ImageMetadata
+from hcs_studio.processing.base import ImageData
 from hcs_studio.utils.display import channel_colormaps
 
 _CHANNEL_COLORMAPS = ("blue", "green", "red", "magenta", "cyan", "yellow", "gray")
@@ -37,6 +38,9 @@ class ViewerPanel:
         window.menuBar().setVisible(False)
         window.statusBar().setVisible(False)
         self.widget: QWidget = window
+        self._before_layers: list[Any] = []
+        self._after_layers: list[Any] = []
+        self._after_width = 0.0
 
     def show_channels(
         self,
@@ -99,6 +103,7 @@ class ViewerPanel:
         else:
             data = data[0]
         self.viewer.layers.clear()
+        self._before_layers, self._after_layers = [], []
         self.viewer.add_image(
             data,
             channel_axis=1 if n_t > 1 else 0,
@@ -112,6 +117,55 @@ class ViewerPanel:
             "x",
         ]
         self.viewer.canvas.overlays.scale_bar.visible = calibrated
+        self.viewer.reset_view()
+
+    def show_comparison(self, before: ImageData, after: ImageData, mode: str = "After") -> None:
+        """Show a field before and after processing. Both are (C, Z, Y, X) in memory."""
+        self.viewer.layers.clear()
+        self._before_layers = self._add_czyx(before, "")
+        suffix = " ▸ corrected" if after.linear else " ▸ enhanced (display only)"
+        self._after_layers = self._add_czyx(after, suffix)
+        self._after_width = float(after.data.shape[-1] * (after.metadata.pixel_size_um or 1.0))
+        self.viewer.canvas.overlays.scale_bar.visible = after.metadata.pixel_size_um is not None
+        self.set_compare_mode(mode)
+
+    def _add_czyx(self, image: ImageData, suffix: str) -> list[Any]:
+        metadata = image.metadata
+        calibrated = metadata.pixel_size_um is not None
+        pixel = metadata.pixel_size_um or 1.0
+        data = image.data
+        scale: list[float] = [pixel, pixel]
+        units = ["µm" if calibrated else "pixel"] * 2
+        if data.shape[1] > 1:
+            z_known = calibrated and metadata.z_step_um is not None
+            scale.insert(0, metadata.z_step_um if z_known and metadata.z_step_um else pixel)
+            units.insert(0, "µm" if z_known else "pixel")
+        else:
+            data = data[:, 0]
+        layers = self.viewer.add_image(
+            data,
+            channel_axis=0,
+            name=[c.name + suffix for c in metadata.channels],
+            colormap=channel_colormaps(metadata.channels),
+            scale=scale,
+            units=units,
+        )
+        return list(layers) if isinstance(layers, list) else [layers]
+
+    def set_compare_mode(self, mode: str) -> None:
+        """'After', 'Before' or 'Side by side' for the layers of ``show_comparison``."""
+        if not self._after_layers:
+            return
+        if mode not in ("After", "Before", "Side by side"):
+            raise ValueError(f"Unknown comparison mode {mode!r}")
+        side = mode == "Side by side"
+        for layer in self._before_layers:
+            layer.visible = mode != "After"
+        for layer in self._after_layers:
+            layer.visible = mode != "Before"
+            translate = [0.0] * layer.ndim
+            translate[-1] = self._after_width * 1.05 if side else 0.0
+            layer.translate = translate
         self.viewer.reset_view()
 
     def layer_names(self) -> list[str]:

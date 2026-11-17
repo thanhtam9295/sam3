@@ -210,6 +210,7 @@ class NikonReader(PlateReader):
                         load=_loader(info.path, p),
                         x_um=pos.x_um,
                         y_um=pos.y_um,
+                        sources=(info.path,),
                     )
                 )
             wells = {
@@ -234,7 +235,13 @@ class NikonReader(PlateReader):
             for i, info in enumerate(infos):
                 row, col = divmod(i, cols)
                 fields_ = tuple(
-                    Field(index=p + 1, load=_loader(info.path, p), x_um=pos.x_um, y_um=pos.y_um)
+                    Field(
+                        index=p + 1,
+                        load=_loader(info.path, p),
+                        x_um=pos.x_um,
+                        y_um=pos.y_um,
+                        sources=(info.path,),
+                    )
                     for p, pos in enumerate(info.positions)
                 )
                 wells[(row, col)] = Well(row=row, col=col, fields=fields_, label=info.path.stem)

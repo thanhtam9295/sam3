@@ -202,6 +202,7 @@ class ImageXpressReader(PlateReader):
                         load=load,
                         x_um=gx * step_x if step_x is not None else None,
                         y_um=gy * step_y if step_y is not None else None,
+                        sources=tuple(sorted(planes.values())),
                     )
                 )
             wells[position] = Well(row=position[0], col=position[1], fields=tuple(fields))

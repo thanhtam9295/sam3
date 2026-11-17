@@ -254,6 +254,7 @@ class OperettaReader(PlateReader):
                         load=load,
                         x_um=entries[0]["pos_x"],
                         y_um=entries[0]["pos_y"],
+                        sources=tuple(sorted(files.values())),
                     )
                 )
             wells[(row, col)] = Well(row=row, col=col, fields=tuple(fields))

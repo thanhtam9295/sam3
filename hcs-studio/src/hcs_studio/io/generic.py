@@ -136,7 +136,12 @@ class OmeTiffReader(PlateReader):
             rows=rows,
             cols=cols,
             wells={
-                (0, 0): Well(row=0, col=0, fields=(Field(index=1, load=load),), label=path.stem)
+                (0, 0): Well(
+                    row=0,
+                    col=0,
+                    fields=(Field(index=1, load=load, sources=(path,)),),
+                    label=path.stem,
+                )
             },
             metadata=metadata,
             shape_tczyx=tczyx,
@@ -240,7 +245,9 @@ class TiffFolderReader(PlateReader):
                 def load(planes: dict[tuple[int, int, int], Path] = planes) -> Any:
                     return lazy_tiff_stack(planes, shape_tcz, plane_shape, dtype)
 
-                fields.append(Field(index=field_id, load=load))
+                fields.append(
+                    Field(index=field_id, load=load, sources=tuple(sorted(planes.values())))
+                )
             wells[position] = Well(row=position[0], col=position[1], fields=tuple(fields))
 
         notes = ["Optical metadata is not available for plain TIFF folders; enter it manually."]

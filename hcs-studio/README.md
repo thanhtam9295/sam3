@@ -4,10 +4,12 @@ Desktop image analysis for high-content and high-throughput fluorescence microsc
 (Nikon `.nd2`, Operetta CLS, ImageXpress). The full specification is in `PROMPT.md`;
 the project rules are in `CLAUDE.md`.
 
-**Status: Phase 1 (readers and browser).** Plates from Nikon, Operetta CLS, ImageXpress,
-OME-TIFF, OME-Zarr and plain TIFF folders can be browsed on a plate map and opened in the
-embedded napari viewer. The readers are tested on synthetic plates only; no processing
-modules exist yet. See `docs/index.md`.
+**Status: Phase 2 (correction and enhancement).** Plates from Nikon, Operetta CLS,
+ImageXpress, OME-TIFF, OME-Zarr and plain TIFF folders can be browsed and viewed.
+Flat-field, autofluorescence, background and enhancement steps can be combined into a
+pipeline, previewed on a field, and run on a plate from the command line. Readers and
+algorithms are tested on synthetic data only so far. See `docs/index.md` and
+`docs/processing.md`.
 
 ## Install
 
@@ -33,6 +35,7 @@ python -m hcs_studio
 
 `hcs-studio info` prints the version and GPU status without opening a window.
 `hcs-studio inspect <path>` describes how a plate folder is read.
+`hcs-studio run --pipeline pipe.yaml --input <plate>` runs a pipeline unattended.
 
 ## Develop
 

@@ -100,3 +100,35 @@ class ThumbnailLoader(QObject):
 
     def wait(self) -> None:
         self._pool.waitForDone()
+
+
+class PreviewWorker(QObject):
+    """Runs a pipeline on one field in a worker thread; only the latest request reports."""
+
+    finished = Signal(object, object)  # raw ImageData, ProcessResult
+    failed = Signal(str)
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._generation = 0
+        self._pool = QThreadPool(self)
+        self._pool.setMaxThreadCount(1)
+
+    def request(self, work: Callable[[], tuple[Any, Any]]) -> None:
+        self._generation += 1
+        generation = self._generation
+
+        def run() -> None:
+            try:
+                raw, result = work()
+            except Exception as exc:
+                if generation == self._generation:
+                    self.failed.emit(str(exc) or type(exc).__name__)
+                return
+            if generation == self._generation:
+                self.finished.emit(raw, result)
+
+        self._pool.start(_Task(run))
+
+    def wait(self) -> None:
+        self._pool.waitForDone()

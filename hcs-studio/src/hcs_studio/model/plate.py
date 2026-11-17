@@ -124,6 +124,8 @@ class Field:
     load: Callable[[], Any] = field(repr=False, compare=False)
     x_um: float | None = None
     y_um: float | None = None
+    #: Raw files this field is read from (for provenance checksums).
+    sources: tuple[Path, ...] = field(default=(), repr=False, compare=False)
 
 
 @dataclass(frozen=True)

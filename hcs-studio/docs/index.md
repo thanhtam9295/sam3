@@ -52,6 +52,41 @@ File → Import plate layout reads a CSV with a `well` column and optional `comp
 optics, channels and the first wells. Compare these with the values shown by
 NIS-Elements, Harmony or MetaXpress.
 
+## Correction and enhancement
+
+The **Pipeline** dock (tab next to Metadata) holds an ordered list of steps. Choose a
+module, click **Add step**, and edit its parameters below the list. Untick a step to
+skip it. **Save…** and **Load…** store the pipeline as a YAML file that can be re-run
+on another plate. See [processing.md](processing.md) for every module.
+
+**Preview on current field** runs the steps up to the selected one on the field shown
+in the viewer. **Show** switches between After, Before and Side by side, and the
+histograms compare one channel before and after. Tick **Live** to re-run the preview
+whenever a parameter changes. Previews estimate plate-level corrections from at most
+24 fields and show the first timepoint only.
+
+### Display-only results
+
+Steps marked **◐ display only** (contrast, CLAHE, sharpen, clarity) change intensities
+non-linearly. Their output is for viewing and as segmentation input. Each run writes
+two images per field: `*_corrected.ome.tif` (linear data from before the first ◐ step:
+use this for measurements) and `*_enhanced.ome.tif` (display only).
+
+### Running a pipeline on a plate
+
+Until the job queue arrives in Phase 6, plate runs are started from the command line:
+
+```bash
+hcs-studio run --pipeline pipe.yaml --input <plate folder> --wells A01-H12
+```
+
+Options: `--output <folder>` (default: next to the raw data, never inside it),
+`--layout layout.csv`, `--no-checksums` (skip SHA-256 of the input files).
+The run folder is named `<Plate>__<Pipeline>__<date-time>` and contains
+`run_manifest.json`, `pipeline.yaml`, `logs/run.log` and, per well,
+`enhanced/`, `previews/` and `well_summary.json`. A well that fails is recorded in
+the manifest and the run continues.
+
 ## Limitations in this phase
 
 - Readers have been tested on synthetic plates only, not yet on real instrument exports.
@@ -59,3 +94,6 @@ NIS-Elements, Harmony or MetaXpress.
 - ImageXpress does not record confocal vs widefield; set the modality manually.
 - ImageXpress field positions are nominal (site grid), not measured stage positions.
 - Operetta flat-field profiles are not read yet.
+- The correction and enhancement modules are verified on synthetic images only.
+- Noise2Void and BM3D denoising are not included yet.
+- Every field is processed whole in memory; tiling for very large fields comes later.

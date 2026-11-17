@@ -60,6 +60,15 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - No public `.nd2` sample is reachable from the cloud container; the Nikon reader is tested against `FakeND2` and still needs validation on real files.
 - User settings (overrides, favourites) go to `~/.hcs_studio` or `HCS_STUDIO_HOME`, never into raw folders.
 
+## Processing conventions
+
+- Modules live in `processing/`, subclass `Module`, register in `MODULES`, and take a `ModuleParams` pydantic model (`extra="forbid"`). User-facing channel numbers start at 1.
+- `ImageData` is one timepoint, float32 `(C, Z, Y, X)`, with a `linear` flag. Set `preserves_linearity = False` on any module whose output must not be measured; linearity is never regained.
+- Plate-level estimates go in `fit(context)`; `context.sample()` yields fields already processed by earlier steps. Summarise the state in `describe_state` for the manifest.
+- `PipelineRunner.process` returns `final` and `corrected` (last linear image). Measurement code must use `corrected`.
+- Every module needs a known-answer test in `tests/test_processing.py`. `docs/processing.md` is generated from the module definitions; regenerate it when parameters change.
+- Run outputs go through `pipeline/executor.py` (`run_pipeline`), which refuses output folders inside raw data.
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).
@@ -67,5 +76,6 @@ Run from this folder (`hcs-studio/`).
 - Environment: `uv venv --python 3.12 .venv` then `uv pip install --python .venv/bin/python -e ".[gui,dev]"`
 - Launch: `python -m hcs_studio` (or `hcs-studio`); `hcs-studio info` prints version and GPU status
 - Describe how a path is read: `hcs-studio inspect <path>`
+- Run a pipeline: `hcs-studio run --pipeline p.yaml --input <plate> --wells A01-H12`; list modules: `hcs-studio modules`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)
 - Headless Linux needs `xvfb libegl1 libgl1-mesa-dri libxcb-cursor0`; `ci.sh` wraps pytest in `xvfb-run`. `QT_QPA_PLATFORM=offscreen` does not work (napari needs a real OpenGL context).

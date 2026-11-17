@@ -24,14 +24,18 @@ from hcs_studio import __version__
 from hcs_studio.gui.browser import BrowserPanel
 from hcs_studio.gui.metadata_panel import MetadataPanel
 from hcs_studio.gui.pattern_dialog import PatternDialog
+from hcs_studio.gui.pipeline_panel import PipelinePanel
 from hcs_studio.gui.plate_panel import PlatePanel
 from hcs_studio.gui.viewer import ViewerPanel
-from hcs_studio.gui.workers import PlateLoader
+from hcs_studio.gui.workers import PlateLoader, PreviewWorker
 from hcs_studio.io.base import detect_reader
 from hcs_studio.io.generic import TiffFolderReader
 from hcs_studio.io.sidecar import load_overrides, save_overrides
 from hcs_studio.model.layout import WellAnnotation, read_plate_layout
 from hcs_studio.model.plate import Plate, well_name
+from hcs_studio.pipeline.executor import PipelineRunner, ProcessResult
+from hcs_studio.pipeline.schema import Pipeline
+from hcs_studio.processing.base import ImageData
 from hcs_studio.utils.gpu import GpuStatus, detect_gpu
 from hcs_studio.utils.synthetic import make_cell_field
 
@@ -49,6 +53,9 @@ class MainWindow(QMainWindow):
         self.plate: Plate | None = None
         self._file_plate: Plate | None = None
         self.layout_annotations: dict[tuple[int, int], WellAnnotation] = {}
+        #: (row, col, field position) of the field shown in the viewer.
+        self.current_field: tuple[int, int, int] | None = None
+        self._fit_cache: dict[str, Any] = {}
 
         self.viewer_panel = ViewerPanel()
         self.plate_panel = PlatePanel()
@@ -71,8 +78,14 @@ class MainWindow(QMainWindow):
         self.log_dock = self._add_dock(
             "Log", "logDock", self.log_view, Qt.DockWidgetArea.BottomDockWidgetArea
         )
+        self.pipeline_panel = PipelinePanel()
+        self.pipeline_dock = self._add_dock(
+            "Pipeline", "pipelineDock", self.pipeline_panel, Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        self.tabifyDockWidget(self.metadata_dock, self.pipeline_dock)
+        self.metadata_dock.raise_()
         self.resizeDocks(
-            [self.browser_dock, self.metadata_dock], [300, 300], Qt.Orientation.Horizontal
+            [self.browser_dock, self.metadata_dock], [300, 380], Qt.Orientation.Horizontal
         )
         self.resizeDocks([self.log_dock], [130], Qt.Orientation.Vertical)
 
@@ -86,6 +99,11 @@ class MainWindow(QMainWindow):
         self.browser.plate_requested.connect(self.open_path)
         self.plate_panel.field_requested.connect(self.open_field)
         self.metadata_panel.overrides_saved.connect(self._on_overrides_saved)
+        self.preview = PreviewWorker(self)
+        self.preview.finished.connect(self._on_preview_finished)
+        self.preview.failed.connect(self._on_preview_failed)
+        self.pipeline_panel.preview_requested.connect(self.preview_pipeline)
+        self.pipeline_panel.compare_mode_changed.connect(self.viewer_panel.set_compare_mode)
 
         self._build_menus()
         self.log(f"HCS Studio {__version__} started. {self.gpu_status.summary}")
@@ -119,7 +137,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._action("&Quit", self.close, "Ctrl+Q"))
 
         view_menu = self.menuBar().addMenu("&View")
-        for dock in (self.browser_dock, self.metadata_dock, self.log_dock):
+        for dock in (self.browser_dock, self.metadata_dock, self.pipeline_dock, self.log_dock):
             view_menu.addAction(dock.toggleViewAction())
 
         help_menu = self.menuBar().addMenu("&Help")
@@ -191,6 +209,8 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError) as exc:
             self.log(f"Saved metadata overrides could not be applied: {exc}")
         self.layout_annotations = {}
+        self.current_field = None
+        self._fit_cache.clear()
         self._refresh_plate()
         self.tabs.setCurrentWidget(self.plate_panel)
         self.statusBar().showMessage(f"Opened {plate.name}", 5000)
@@ -221,8 +241,53 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.log(f"Could not open {well_name(row, col)} field {field.index}: {exc}")
             return
+        self.current_field = (row, col, position)
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Showing {self.plate.name} · {well_name(row, col)} · field {field.index}")
+
+    # ---------------------------------------------------------------- preview
+
+    #: Fields sampled per plate-level estimate during previews (full runs use the step setting).
+    PREVIEW_FIT_FIELDS = 24
+
+    def preview_pipeline(self, pipeline: Pipeline) -> None:
+        """Run ``pipeline`` on the field in the viewer, in the background."""
+        panel = self.pipeline_panel
+        if self.plate is None or self.current_field is None:
+            panel.status.setText("Open a field from the plate map first.")
+            return
+        plate, layout, cache = self.plate, self.layout_annotations, self._fit_cache
+        row, col, position = self.current_field
+        field = plate.wells[(row, col)].fields[position]
+        limit = self.PREVIEW_FIT_FIELDS
+
+        def work() -> tuple[ImageData, ProcessResult]:
+            runner = PipelineRunner(plate, pipeline, layout, fit_field_limit=limit, fit_cache=cache)
+            raw = runner.load(field)
+            return raw, runner.process(raw)
+
+        panel.status.setText(f"Computing preview for {well_name(row, col)} field {field.index} …")
+        self.preview.request(work)
+
+    def _on_preview_finished(self, raw: ImageData, result: ProcessResult) -> None:
+        panel = self.pipeline_panel
+        self.viewer_panel.show_comparison(raw, result.final, panel.compare.currentText())
+        panel.set_histograms(raw, result.final)
+        steps = " → ".join(result.final.history) or "no steps"
+        if result.final.linear:
+            note = "intensities remain linear (usable for measurement)"
+        else:
+            note = "DISPLAY ONLY: not for intensity measurement"
+        panel.status.setText(
+            f"Preview: {steps}. {note}. Plate-level estimates use up to "
+            f"{self.PREVIEW_FIT_FIELDS} fields in previews; first timepoint shown."
+        )
+        self.tabs.setCurrentWidget(self.viewer_panel.widget)
+        self.log(f"Preview: {steps} ({note})")
+
+    def _on_preview_failed(self, message: str) -> None:
+        self.pipeline_panel.status.setText(f"Preview failed: {message}")
+        self.log(f"Preview failed: {message}")
 
     def _on_overrides_saved(self, overrides: dict[str, Any]) -> None:
         if self._file_plate is None:
@@ -234,6 +299,7 @@ class MainWindow(QMainWindow):
             self.log(f"Overrides not saved: {exc}")
             return
         self.plate = replace(self._file_plate, metadata=metadata)
+        self._fit_cache.clear()
         self._refresh_plate()
         if overrides:
             self.log(f"Saved metadata overrides ({', '.join(sorted(overrides))}) to {where}")
@@ -283,6 +349,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         self.plate_panel.thumbnails.set_plate(None)
         self.loader.wait()
+        self.preview.wait()
         self.plate_panel.thumbnails.wait()
         self.viewer_panel.close()
         super().closeEvent(event)

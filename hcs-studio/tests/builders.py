@@ -134,7 +134,11 @@ def _metaseries_description(wave_name: str, wavelength: int, pixel_size: float) 
 
 
 def make_imagexpress(
-    root: Path, wells: list[tuple[int, int]], n_sites: int = 2, z_steps: int = 1
+    root: Path,
+    wells: list[tuple[int, int]],
+    n_sites: int = 2,
+    z_steps: int = 1,
+    image_fn: Any = None,
 ) -> Path:
     """MetaXpress export: ``.HTD`` + GUID-suffixed TIFFs + thumbnails, optional ZStep folders."""
     root.mkdir(parents=True)
@@ -146,7 +150,7 @@ def make_imagexpress(
         stem = f"Plate1_{well_name(row, col)}_s{s + 1}_w{w + 1}"
         tifffile.imwrite(
             folder / f"{stem}{guid}.tif",
-            plane(row, col, s, w, z),
+            plane(row, col, s, w, z) if image_fn is None else image_fn(row, col, s, w),
             description=_metaseries_description(waves[w][0], waves[w][1], 0.65),
             software="MetaSeries",
             metadata=None,

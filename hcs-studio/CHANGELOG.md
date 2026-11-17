@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Phase 2 — correction and enhancement
+- Processing-module interface: pydantic parameters, optional plate-level `fit`, per-field `apply`,
+  and a `linear` flag that marks display-only results.
+- Flat-field correction estimated from many fields (median-based), with dark offset.
+- Autofluorescence: reference wells (scalar or image), AF-channel subtraction with robust
+  bleed-through estimation, background subtraction (top-hat, rolling ball), linear unmixing.
+- Enhancement: denoise (Gaussian, median, non-local means), contrast/gamma, CLAHE, sharpening
+  (unsharp, DoG), clarity preset with a noise gate, Z projection (max, mean, extended depth of field).
+- Pipelines as YAML/JSON files; executor writing a run folder with `run_manifest.json`
+  (versions, parameters, fitted estimates, input checksums), `pipeline.yaml`, corrected and
+  enhanced OME-TIFFs, PNG previews, per-well summaries and `logs/run.log`.
+- `hcs-studio run` (unattended runs) and `hcs-studio modules` (parameter reference).
+- Pipeline dock: step list, generated parameter forms, preview on the current field with
+  before / after / side-by-side display and histograms, optional live preview, load and save.
+- Deferred: Noise2Void and BM3D denoising, Operetta FFC profiles, 3D CLAHE, the OME-Zarr
+  cache, and starting plate runs from the GUI (Phase 6; use `hcs-studio run` until then).
+
 ### Phase 1 — readers and browser
 - Unified data model (plate → well → field → lazy T,C,Z,Y,X image) with optical metadata.
 - Readers with auto-detection: Nikon `.nd2` (single file or folder), Operetta CLS Harmony index

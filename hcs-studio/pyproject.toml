@@ -16,12 +16,17 @@ dependencies = [
     "imagecodecs>=2024.1",
     "nd2>=0.11",
     "zarr>=2.17",
+    "scipy>=1.11",
+    "scikit-image>=0.22",
+    "opencv-python-headless>=4.8",
+    "pyyaml>=6",
 ]
 
 [project.optional-dependencies]
 gui = [
     "PySide6>=6.7",
     "napari>=0.9",
+    "pyqtgraph>=0.13",
 ]
 dev = [
     "pytest>=8",
@@ -29,6 +34,8 @@ dev = [
     "hypothesis>=6",
     "ruff>=0.6",
     "mypy>=1.10",
+    "types-PyYAML",
+    "scipy-stubs",
 ]
 
 [project.scripts]
@@ -62,6 +69,6 @@ strict = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*"]
+module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
