@@ -78,6 +78,14 @@ footer { padding: 10px 20px 20px; color: var(--muted); font-size: 12px; }
     <p id="zprime"></p>
     <p id="note"></p>
   </section>
+  {% if analysis %}
+  <section>
+    <h2>Analysis of the object tables</h2>
+    <ul>
+    {% for title, text in analysis %}<li><b>{{ title }}</b>: {{ text }}</li>
+    {% endfor %}</ul>
+  </section>
+  {% endif %}
   <section class="panel" id="well" aria-live="polite">
     <p class="empty">Click a well to see its fields and statistics. Arrow keys move between wells.</p>
   </section>
@@ -246,6 +254,10 @@ function renderWell() {
     thumbs.appendChild(b);
   });
   panel.appendChild(thumbs);
+  if (info.mosaic) {
+    const link = el("a", { href: info.mosaic, target: "_blank" }, "Whole-well mosaic");
+    panel.appendChild(el("p", {})).appendChild(link);
+  }
   const f = info.fields[selectedField];
   const viewer = el("div", { className: "viewer" }), bar = el("div", { className: "bar" });
   const stages = el("div", { className: "stage" });

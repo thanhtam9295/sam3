@@ -30,8 +30,15 @@ def make_operetta(
     n_fields: int = 2,
     n_planes: int = 3,
     harmony_v5: bool = False,
+    shape: tuple[int, int] = SHAPE,
+    image_fn: Any = None,
+    position_fn: Any = None,
 ) -> Path:
-    """Harmony export: ``<root>/Images/Index.idx.xml`` plus one TIFF per plane."""
+    """Harmony export: ``<root>/Images/Index.idx.xml`` plus one TIFF per plane.
+
+    ``image_fn(row, col, field, channel, plane)`` → 2D uint16 image of ``shape``;
+    ``position_fn(field)`` → stage (x, y) in metres (default: fields 0.5 mm apart in x).
+    """
     images_dir = root / "Images"
     images_dir.mkdir(parents=True)
     channels = [("HOECHST 33342", 405, 456, "0.1"), ("Alexa 488", 488, 522, "0.2")]
@@ -42,15 +49,21 @@ def make_operetta(
                 for c, (name, ex, em, exposure) in enumerate(channels):
                     stem = f"r{row + 1:02d}c{col + 1:02d}f{f + 1:02d}p{p + 1:02d}"
                     url = f"{stem}-ch{c + 1}sk1fk1fl1.tiff"
-                    tifffile.imwrite(images_dir / url, plane(row, col, f, c, p))
+                    image = (
+                        plane(row, col, f, c, p)
+                        if image_fn is None
+                        else image_fn(row, col, f, c, p)
+                    )
+                    tifffile.imwrite(images_dir / url, image)
+                    pos_x, pos_y = (f * 0.0005, -0.00025) if position_fn is None else position_fn(f)
                     per_channel = f"""
       <ChannelName>{name}</ChannelName>
       <AcquisitionType>NipkowConfocal</AcquisitionType>
       <ChannelType>Fluorescence</ChannelType>
       <ImageResolutionX Unit="m">2.9901E-07</ImageResolutionX>
       <ImageResolutionY Unit="m">2.9901E-07</ImageResolutionY>
-      <ImageSizeX>{SHAPE[1]}</ImageSizeX>
-      <ImageSizeY>{SHAPE[0]}</ImageSizeY>
+      <ImageSizeX>{shape[1]}</ImageSizeX>
+      <ImageSizeY>{shape[0]}</ImageSizeY>
       <MaxIntensity>65536</MaxIntensity>
       <MainExcitationWavelength Unit="nm">{ex}</MainExcitationWavelength>
       <MainEmissionWavelength Unit="nm">{em}</MainEmissionWavelength>
@@ -68,8 +81,8 @@ def make_operetta(
       <PlaneID>{p + 1}</PlaneID>
       <TimepointID>0</TimepointID>
       <ChannelID>{c + 1}</ChannelID>{"" if harmony_v5 else per_channel}
-      <PositionX Unit="m">{f * 0.0005}</PositionX>
-      <PositionY Unit="m">-0.00025</PositionY>
+      <PositionX Unit="m">{pos_x}</PositionX>
+      <PositionY Unit="m">{pos_y}</PositionY>
       <PositionZ Unit="m">{p * 2e-6}</PositionZ>
     </Image>""")
     maps = ""
@@ -82,8 +95,8 @@ def make_operetta(
         <ChannelType>Fluorescence</ChannelType>
         <ImageResolutionX Unit="m">2.9901E-07</ImageResolutionX>
         <ImageResolutionY Unit="m">2.9901E-07</ImageResolutionY>
-        <ImageSizeX>{SHAPE[1]}</ImageSizeX>
-        <ImageSizeY>{SHAPE[0]}</ImageSizeY>
+        <ImageSizeX>{shape[1]}</ImageSizeX>
+        <ImageSizeY>{shape[0]}</ImageSizeY>
         <MaxIntensity>65536</MaxIntensity>
         <MainExcitationWavelength Unit="nm">{ex}</MainExcitationWavelength>
         <MainEmissionWavelength Unit="nm">{em}</MainEmissionWavelength>

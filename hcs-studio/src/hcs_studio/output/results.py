@@ -20,7 +20,16 @@ from hcs_studio.model.plate import parse_well_name, well_name
 Normalisation = Literal["none", "robust_z_plate", "robust_z_negative"]
 
 #: Readouts listed first when present (in this order).
-_PREFERRED = ("count", "per_mm2", "objects_measured", "_mean_mean", "coloc_", "pearson", "fields_")
+_PREFERRED = (
+    "count",
+    "per_mm2",
+    "_fraction",
+    "objects_measured",
+    "_mean_mean",
+    "coloc_",
+    "pearson",
+    "fields_",
+)
 
 
 @dataclass
@@ -122,7 +131,17 @@ class RunResults:
         import pyarrow.parquet as pq
 
         schema = pq.read_schema(self._objects_file)
-        skip = {"object_id", "parent_id", "row", "col", "field", "timepoint"}
+        skip = {
+            "object_id",
+            "parent_id",
+            "row",
+            "col",
+            "field",
+            "timepoint",
+            "well_x_um",
+            "well_y_um",
+            "spatial_colony",
+        }
         numeric = [
             f.name
             for f in schema

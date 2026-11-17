@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from hcs_studio.analysis.table_steps import TableModule
 from hcs_studio.processing.base import MODULES, load_builtin_modules
 
 NOTES = {
@@ -82,10 +83,46 @@ NOTES = {
     "subtraction. Warns about saturated pixels and chromatic shift. Optional object-based "
     "colocalization: the fraction of objects in one label set near objects of another. "
     "Writes `coloc.csv` per well.",
-    "qc": "Per field: focus score (normalised variance of the Laplacian), fraction of saturated "
+    "qc": "Per field: focus score (edge sharpness relative to contrast, independent of the "
+    "number of cells), fraction of saturated "
     "pixels, imaged area and object counts. After the run, fields are flagged as out of focus "
     "or saturated relative to the plate, wells with low counts are flagged, and counts and "
     "densities per well leave out the excluded fields. Writes `tables/qc_flags.csv`.",
+    "stitch_well": "Places the fields of each well in one coordinate system from their stage "
+    "positions. When fields overlap, the way stage axes map to image axes is found from the "
+    "overlaps (or set), and positions are refined by phase correlation of each overlap "
+    "(sub-pixel, Hanning-windowed) and solved together by least squares; overlaps that "
+    "correlate poorly or would move a field by more than `max_correction_fraction` are "
+    "ignored. Objects get `well_x_um`, `well_y_um` and `in_overlap_duplicate` (the copy seen "
+    "in a field whose centre is farther away), so each object is counted once; well counts "
+    "and densities use the area the fields cover together. Writes `previews/mosaic.png` and "
+    "the field positions to `well_summary.json`. Images are not resampled or fused.",
+    "gate_objects": "Marks objects of one type whose features lie inside thresholds (min "
+    "and/or max per feature, all or any rule), e.g. drawn on a histogram or scatter plot in "
+    "the Classify panel. Writes `gate_<name>` per object and the count and fraction per well.",
+    "classify_objects": "Applies an object classifier trained in the Classify panel (or with "
+    "`hcs-studio train-classifier`) on example objects: random forest or histogram gradient "
+    "boosting on the measured features. With `plate_robust_z` normalisation each plate's "
+    "features become robust Z-scores of that plate first, which removes plate-to-plate "
+    "intensity offsets but assumes most objects on a plate are alike. Writes the class, its "
+    "probability and every class probability per object, and class counts and fractions per "
+    "well; the classifier file's SHA-256, classes and cross-validated accuracy go into "
+    "`tables/analysis_summary.json`.",
+    "phenotypic_clusters": "Groups objects by their features without labels: k-means, "
+    "HDBSCAN, or Leiden (needs the optional `leidenalg` and `igraph`). Features are robust "
+    "Z-scores clipped to ±10, optionally reduced by PCA. Clusters are learned on objects "
+    "sampled across the plate; each object is then assigned (k-means: nearest centre; "
+    "HDBSCAN and Leiden: majority of the 5 nearest sampled objects, an approximation). "
+    "Cluster 1 is the largest, -1 is noise. Writes `cluster_<name>` per object and fractions "
+    "per well; the features that set each cluster apart are listed in the analysis summary.",
+    "spatial_clusters": "Spatial organisation of objects in the whole well (needs `stitch_well`) "
+    "or in each field: colonies by DBSCAN or HDBSCAN, nearest-neighbour distances, the "
+    "Clark-Evans ratio (Donnelly edge correction), Voronoi cell area and Delaunay neighbours "
+    "(NaN where the cell is not closed inside the imaged area), Ripley's K, L and H = L − r "
+    "with border correction, and the pair correlation g(r), compared with envelopes from "
+    "simulated complete spatial randomness in the same area. `spatial_pattern_<r>um` is +1 "
+    "(clustered), -1 (regular) or 0 (consistent with randomness at the 5 % pointwise level "
+    "with 39 simulations). Full curves per well are in `wells/<W>/analysis.json`.",
     "register_channels": "Corrects chromatic shift by translating channels, either by given "
     "shifts in µm or by shifts measured on an image of multicolour beads. Linear (sub-pixel "
     "interpolation), so measurements stay valid. Place it before segmentation and "
@@ -112,7 +149,13 @@ def render() -> str:
         module = MODULES.get(name)
         flag = "" if module.preserves_linearity else " — **display only**"
         lines += [f"## {module.title} (`{name}`){flag}", "", NOTES[name], ""]
-        if module.needs_fit:
+        if issubclass(module, TableModule):
+            lines += [
+                "Table step: runs on the object tables after all wells are processed, and can "
+                "be applied to a finished run with `hcs-studio analyze`.",
+                "",
+            ]
+        elif module.needs_fit:
             lines += [
                 "Learns a plate-level estimate before processing; the estimate is recorded in "
                 "`run_manifest.json`.",

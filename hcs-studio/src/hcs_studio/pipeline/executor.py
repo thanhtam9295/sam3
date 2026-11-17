@@ -22,6 +22,7 @@ from typing import Any
 
 import numpy as np
 
+from hcs_studio.analysis.stitching import StitchWell, mosaic, owner_fields, stitch
 from hcs_studio.io.base import reopen_plate
 from hcs_studio.io.sidecar import load_overrides
 from hcs_studio.model.layout import WellAnnotation
@@ -41,6 +42,7 @@ from hcs_studio.processing.base import (
     MeasurementModule,
     Module,
     ModuleError,
+    block_reduce_mean,
 )
 from hcs_studio.utils.display import (
     OUTLINE_COLOURS,
@@ -130,7 +132,9 @@ class PipelineRunner:
         self.gpu_lock: Any = None
         #: Fields that plate-level estimates skipped because they could not be read.
         self.fit_skipped: list[str] = []
-        self.modules: list[Module] = [s.create() for s in pipeline.enabled_steps()]
+        #: Steps applied to each field (table steps run later, on the run's tables).
+        self.steps = pipeline.image_steps()
+        self.modules: list[Module] = [s.create() for s in self.steps]
         self.states: list[Any] = [_UNFITTED] * len(self.modules)
         metadata = plate.metadata
         for number, module in enumerate(self.modules, start=1):
@@ -172,7 +176,7 @@ class PipelineRunner:
 
     def _fit_key(self, step: int) -> str:
         """Identifies fitted state: same plate, metadata, layout and steps up to ``step``."""
-        steps = [s.model_dump(mode="json") for s in self.pipeline.enabled_steps()[: step + 1]]
+        steps = [s.model_dump(mode="json") for s in self.steps[: step + 1]]
         return json.dumps(
             [
                 str(self.plate.path),
@@ -304,10 +308,17 @@ def make_run_folder(plate: Plate, pipeline: Pipeline, output_root: Path | None) 
 def pipeline_hash(
     plate: Plate, pipeline: Pipeline, layout: dict[tuple[int, int], WellAnnotation]
 ) -> str:
-    """Identifies what a run computes: pipeline, plate, metadata (with overrides) and layout."""
+    """Identifies what a run's wells contain: image steps, plate, metadata (with overrides)
+    and layout. Table steps are left out: they are recomputed from the tables every time."""
+    data = pipeline.to_dict()
+    data["steps"] = [
+        step
+        for step, parsed in zip(data["steps"], pipeline.steps, strict=True)
+        if not parsed.is_table_step()
+    ]
     payload = json.dumps(
         [
-            pipeline.to_dict(),
+            data,
             str(Path(plate.path).resolve()),
             repr(plate.metadata),
             sorted((f"{k}", repr(v)) for k, v in layout.items()),
@@ -372,6 +383,10 @@ def process_well(
     items = [f for f in plate.wells[key].fields if wanted is None or f.index in wanted]
     written: list[dict[str, Any]] = []
     well_tables: dict[str, list[Any]] = {}
+    stitcher = next((m for m in runner.modules if isinstance(m, StitchWell)), None)
+    small: dict[int, Any] = {}  # downsampled fields for stitching
+    previews: dict[int, Any] = {}
+    field_shape: tuple[int, ...] | None = None
     emit({"type": "well_started", "well": name, "fields": len(items)})
     try:
         for item in items:
@@ -401,11 +416,14 @@ def process_well(
                     well_tables.setdefault(table_name, []).append(table)
             assert raw_first is not None
             raw_colormaps = channel_colormaps(plate.metadata.channels)
-            written.append(
-                _write_field(
-                    well_dir, item.index, finals, correcteds, colormaps, raw_first, raw_colormaps
-                )
+            record, previews[item.index] = _write_field(
+                well_dir, item.index, finals, correcteds, colormaps, raw_first, raw_colormaps
             )
+            written.append(record)
+            field_shape = finals[0].data.shape[-2:]
+            if stitcher is not None:
+                plane = correcteds[0].data[stitcher.params.channel - 1].max(axis=0)
+                small[item.index] = block_reduce_mean(plane, stitcher.params.image_max_size)
             outcome.inputs.extend(str(p) for p in item.sources)
             outcome.fields_written += 1
             emit({"type": "field_done", "well": name, "field": item.index})
@@ -426,6 +444,19 @@ def process_well(
         if well_dir.exists():
             shutil.rmtree(well_dir)  # incomplete: redone on resume
         return outcome
+    extra: dict[str, Any] = {}
+    pixel = runner.output_metadata.pixel_size_um
+    if field_shape is not None and pixel is not None:
+        shape = field_shape
+        size_um = (shape[0] * pixel, shape[1] * pixel)
+        extra["field_size_um"] = list(size_um)
+        if stitcher is not None and outcome.error is None:
+            try:
+                extra["stitching"] = _stitch_well(
+                    stitcher, items, size_um, small, previews, well_dir, well_tables
+                )
+            except Exception as exc:  # stitching must not lose the well's measurements
+                outcome.error = f"stitching failed: {type(exc).__name__}: {exc}"
     table_files: dict[str, str] = {}
     if well_tables:
         well_dir.mkdir(parents=True, exist_ok=True)
@@ -442,9 +473,66 @@ def process_well(
             "measurement_note": "Measure intensities on the *_corrected files only; "
             "*_enhanced files are for viewing and segmentation.",
             "error": outcome.error,
+            **extra,
         },
     )
     return outcome
+
+
+def _stitch_well(
+    stitcher: StitchWell,
+    items: list[Field],
+    size_um: tuple[float, float],
+    small: dict[int, Any],
+    previews: dict[int, Any],
+    well_dir: Path,
+    well_tables: dict[str, list[Any]],
+) -> dict[str, Any]:
+    """Place the well's fields, write the mosaic and add well coordinates to the tables."""
+    import pandas as pd
+
+    positions = {f.index: (f.x_um, f.y_um) for f in items}
+    if any(x is None or y is None for x, y in positions.values()):
+        return {"notes": ["stage positions are unknown: fields were not stitched"]}
+    images = {i: small[i] for i in positions}
+    first = next(iter(images.values()))
+    image_scale = size_um[0] / first.shape[0]
+    result = stitch(
+        {i: (float(x), float(y)) for i, (x, y) in positions.items()},  # type: ignore[arg-type]
+        size_um,
+        images,
+        image_scale,
+        orientation=stitcher.orientation(),
+        refine=stitcher.params.refine,
+        max_correction_fraction=stitcher.params.max_correction_fraction,
+        min_correlation=stitcher.params.min_correlation,
+    )
+    tile = next(iter(previews.values()))
+    canvas, mosaic_scale = mosaic(previews, result, size_um[0] / tile.shape[0])
+    write_png(well_dir / "previews" / "mosaic.png", canvas)
+    offsets = result.offsets_um
+    if "objects" in well_tables:
+        frame = pd.concat(well_tables["objects"], ignore_index=True)
+        dy = frame.field.map(lambda f: offsets.get(int(f), (np.nan, np.nan))[0])
+        dx = frame.field.map(lambda f: offsets.get(int(f), (np.nan, np.nan))[1])
+        frame["well_y_um"] = dy.to_numpy(float) + frame["centroid_y_um"].to_numpy(float)
+        frame["well_x_um"] = dx.to_numpy(float) + frame["centroid_x_um"].to_numpy(float)
+        owners = owner_fields(frame[["well_y_um", "well_x_um"]].to_numpy(), result, size_um)
+        frame["in_overlap_duplicate"] = (owners != frame.field.to_numpy()) & (owners >= 0)
+        well_tables["objects"] = [frame]
+    if "fields" in well_tables:
+        frame = pd.concat(well_tables["fields"], ignore_index=True)
+        frame["field_y_um"] = frame.field.map(lambda f: offsets[int(f)][0])
+        frame["field_x_um"] = frame.field.map(lambda f: offsets[int(f)][1])
+        well_tables["fields"] = [frame]
+    return {
+        "orientation": list(result.orientation),
+        "refined_pairs": result.refined_pairs,
+        "notes": result.notes,
+        "field_offsets_um": {str(i): list(p) for i, p in sorted(offsets.items())},
+        "mosaic": "previews/mosaic.png",
+        "mosaic_um_per_px": mosaic_scale,
+    }
 
 
 def _write_field(
@@ -455,8 +543,10 @@ def _write_field(
     colormaps: list[str],
     raw: ImageData,
     raw_colormaps: list[str],
-) -> dict[str, Any]:
-    """Write one field: images, masks, and previews of each stage plus outline overlays."""
+) -> tuple[dict[str, Any], Any]:
+    """Write one field: images, masks, and previews of each stage plus outline overlays.
+
+    Returns the field's record for ``well_summary.json`` and its enhanced RGB preview."""
     stem = f"f{index:03d}"
     (well_dir / "enhanced").mkdir(parents=True, exist_ok=True)
     (well_dir / "previews").mkdir(exist_ok=True)
@@ -509,7 +599,7 @@ def _write_field(
             files[f"parents_{ls.name}"] = links
     write_png(well_dir / "previews" / f"{stem}.png", preview)
     files["preview"] = f"previews/{stem}.png"
-    return {
+    record = {
         "field": index,
         "files": files,
         "steps_corrected": list(correcteds[0].history),
@@ -517,6 +607,7 @@ def _write_field(
         "reports": [list(f.reports) for f in finals],
         "objects": objects,
     }
+    return record, preview
 
 
 # ------------------------------------------------------------ worker processes
@@ -774,20 +865,9 @@ def run_pipeline(
         if cancel is not None and cancel.is_set():
             raise RunCancelled
         emit({"type": "status", "text": "Summarising tables"})
-        summaries = aggregate_run(folder, _qc_params(runner.modules))
-        for name, summary in summaries.items():
-            path = folder / "wells" / name / "well_summary.json"
-            if path.exists():
-                data = json.loads(path.read_text(encoding="utf-8"))
-                data["summary"] = summary
-                write_json(path, data)
+        table_modules = [s.create() for s in pipeline.table_steps()]
+        summarise_run(folder, runner.modules, table_modules, log)
         status = "completed_with_failures" if result.failed_wells else "completed"
-        try:
-            from hcs_studio.output.report import write_report
-
-            write_report(folder)
-        except Exception:  # the report must never make a finished run fail
-            log.exception("The HTML report could not be written")
     except RunCancelled:
         result.cancelled = True
         status = "cancelled"
@@ -815,6 +895,69 @@ def run_pipeline(
     )
     emit({"type": "status", "text": "Finished" if not result.cancelled else "Cancelled"})
     return result
+
+
+def summarise_run(
+    folder: Path, image_modules: list[Module], table_modules: list[Module], log: logging.Logger
+) -> None:
+    """Run table steps, build tables/, update each well's summary and write the report."""
+    summaries = aggregate_run(folder, _qc_params(image_modules), table_modules, log.info)
+    for name, summary in summaries.items():
+        path = folder / "wells" / name / "well_summary.json"
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["summary"] = summary
+            write_json(path, data)
+    try:
+        from hcs_studio.output.report import write_report
+
+        write_report(folder)
+    except Exception:  # the report must never make a finished run fail
+        log.exception("The HTML report could not be written")
+
+
+def analyze_run(
+    folder: Path, table_steps: Pipeline | list[Any], *, include_run_steps: bool = True
+) -> dict[str, Any]:
+    """Apply table steps (gates, classifiers, clustering, spatial statistics) to a finished
+    run without reprocessing images. ``table_steps``: a pipeline (its table steps are used)
+    or a list of ``PipelineStep``. With ``include_run_steps`` the run pipeline's own table
+    steps run first. Replaces any earlier analysis of the run; returns the record added to
+    the manifest's ``analyses``."""
+    folder = Path(folder)
+    manifest_path = folder / "run_manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        run_pipeline_def = Pipeline.model_validate(manifest["pipeline"])
+    except (OSError, ValueError, KeyError):
+        raise ValueError(f"{folder} is not an HCS Studio run folder") from None
+    steps = table_steps.table_steps() if isinstance(table_steps, Pipeline) else list(table_steps)
+    if include_run_steps:
+        steps = run_pipeline_def.table_steps() + steps
+    image_modules = [s.create() for s in run_pipeline_def.image_steps()]
+    table_modules = [s.create() for s in steps]
+    if not all(s.is_table_step() for s in steps):
+        raise ValueError("Only table steps can be applied to a finished run")
+    log = logging.getLogger(f"hcs_studio.analyze.{folder.name}")
+    log.setLevel(logging.INFO)
+    log.propagate = False
+    (folder / "logs").mkdir(exist_ok=True)
+    handler = logging.FileHandler(folder / "logs" / "run.log", encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    log.addHandler(handler)
+    try:
+        log.info("Analysis: applying %d table step(s) to the finished run", len(steps))
+        summarise_run(folder, image_modules, table_modules, log)
+    finally:
+        log.removeHandler(handler)
+        handler.close()
+    record = {
+        "finished": datetime.now(UTC).isoformat(),
+        "steps": [s.model_dump(mode="json") for s in steps],
+    }
+    manifest.setdefault("analyses", []).append(record)
+    write_json(manifest_path, manifest)
+    return record
 
 
 def _fit_or_load(runner: PipelineRunner, folder: Path, run_hash: str, cancel: Any) -> None:

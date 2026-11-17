@@ -9,8 +9,9 @@ from typing import Any
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtGui import QAction, QCloseEvent, QShowEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QDockWidget,
     QFileDialog,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from hcs_studio import __version__
 from hcs_studio.gui.browser import BrowserPanel
+from hcs_studio.gui.classify_panel import ClassifyPanel
 from hcs_studio.gui.jobs_panel import JobsPanel
 from hcs_studio.gui.measurements_panel import MeasurementsPanel
 from hcs_studio.gui.metadata_panel import MetadataPanel
@@ -36,7 +38,7 @@ from hcs_studio.gui.run_dialog import RunDialog
 from hcs_studio.gui.sam_settings import Sam3SettingsDialog
 from hcs_studio.gui.segmentation_panel import SegmentationPanel
 from hcs_studio.gui.viewer import ViewerPanel
-from hcs_studio.gui.workers import PlateLoader, PreviewWorker
+from hcs_studio.gui.workers import BackgroundTask, PlateLoader, PreviewWorker
 from hcs_studio.io.base import detect_reader
 from hcs_studio.io.generic import TiffFolderReader
 from hcs_studio.io.sidecar import load_overrides, save_overrides
@@ -117,6 +119,13 @@ class MainWindow(QMainWindow):
             self.measurements_panel,
             Qt.DockWidgetArea.RightDockWidgetArea,
         )
+        self.classify_panel = ClassifyPanel(self.viewer_panel, self.log)
+        self.classify_dock = self._add_dock(
+            "Classify", "classifyDock", self.classify_panel, Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        self.analysis_task = BackgroundTask(self)
+        self.analysis_task.finished.connect(self._on_analysis_finished)
+        self.analysis_task.failed.connect(self._on_analysis_failed)
         self.jobs_panel = JobsPanel()
         self.jobs_dock = self._add_dock(
             "Jobs", "jobsDock", self.jobs_panel, Qt.DockWidgetArea.BottomDockWidgetArea
@@ -126,6 +135,7 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.metadata_dock, self.pipeline_dock)
         self.tabifyDockWidget(self.pipeline_dock, self.segmentation_dock)
         self.tabifyDockWidget(self.segmentation_dock, self.measurements_dock)
+        self.tabifyDockWidget(self.measurements_dock, self.classify_dock)
         self.metadata_dock.raise_()
         self.resizeDocks(
             [self.browser_dock, self.metadata_dock], [300, 380], Qt.Orientation.Horizontal
@@ -151,6 +161,10 @@ class MainWindow(QMainWindow):
         self.pipeline_panel.run_requested.connect(self.open_run_dialog)
         self.results_panel.open_field.connect(self.open_result_field)
         self.results_panel.compare_field.connect(self.compare_result_field)
+        self.results_panel.open_mosaic.connect(self.open_mosaic)
+        self.classify_panel.show_field.connect(self._classify_show_field)
+        self.classify_panel.add_steps.connect(self._add_table_steps)
+        self.classify_panel.apply_steps.connect(self.apply_table_steps)
         self.jobs_panel.job_finished.connect(self._on_job_finished)
         self.jobs_panel.event_received.connect(self._on_job_event)
         self.plate_panel.plate_map.selection_changed.connect(self._on_selection_changed)
@@ -161,6 +175,21 @@ class MainWindow(QMainWindow):
         self.log(f"HCS Studio {__version__} started. {self.gpu_status.summary}")
         for note in self.gpu_status.notes:
             self.log(f"GPU detection: {note}")
+        self._fitted = False
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        if not self._fitted:  # sizes set before the first show do not stick
+            self._fitted = True
+            self._fit_to_screen()
+
+    def _fit_to_screen(self) -> None:
+        """Open at 1500 × 950, never larger than the screen (docks may have grown it)."""
+        screen = self.screen() or QApplication.primaryScreen()
+        available = screen.availableGeometry() if screen is not None else None
+        width = min(1500, available.width()) if available else 1500
+        height = min(950, available.height()) if available else 950
+        self.resize(width, height)
 
     # ------------------------------------------------------------------ layout
 
@@ -375,6 +404,7 @@ class MainWindow(QMainWindow):
 
     def show_results(self, folder: Path) -> None:
         self.results_panel.load(folder)
+        self.classify_panel.set_run(folder)
         self.tabs.setCurrentWidget(self.results_panel)
         report = folder / "index.html"
         if report.exists():
@@ -392,6 +422,61 @@ class MainWindow(QMainWindow):
         self.viewer_panel.show_stages([(stage.lower(), image)])
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Showing {stage.lower()} {well} field {index} from {folder.name}")
+
+    def _classify_show_field(self, folder: Path, well: str, index: int) -> None:
+        self.open_result_field(folder, well, index, "Corrected")
+        self.classify_panel.field_shown(well, index)
+
+    def open_mosaic(self, folder: Path, well: str) -> None:
+        """Show a well's stitched mosaic (preview resolution) in the viewer."""
+        from PIL import Image
+
+        well_dir = folder / "wells" / well
+        try:
+            rgb = np.asarray(Image.open(well_dir / "previews" / "mosaic.png").convert("RGB"))
+            summary = json.loads((well_dir / "well_summary.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            self.log(f"Could not open the mosaic of {well}: {exc}")
+            return
+        stitching = summary.get("stitching") or {}
+        self.viewer_panel.show_rgb(f"{well} mosaic", rgb, stitching.get("mosaic_um_per_px"))
+        self.tabs.setCurrentWidget(self.viewer_panel.widget)
+        notes = "; ".join(stitching.get("notes", []))
+        self.log(
+            f"Mosaic of {well}: {stitching.get('refined_pairs', 0)} overlaps refined"
+            + (f" ({notes})" if notes else "")
+        )
+
+    def _add_table_steps(self, steps: list[dict[str, Any]]) -> None:
+        for step in steps:
+            self.pipeline_panel.add_step(step["module"], step["params"])
+        self.pipeline_dock.raise_()
+        self.log(f"Added {len(steps)} table step(s) to the pipeline (they run after all wells)")
+
+    def apply_table_steps(self, folder: Path, steps: list[dict[str, Any]]) -> None:
+        """Apply gates / classifiers to a finished run in the background."""
+        from hcs_studio.pipeline.executor import analyze_run
+        from hcs_studio.pipeline.schema import PipelineStep
+
+        try:
+            parsed = [PipelineStep.model_validate(s) for s in steps]
+        except ValueError as exc:
+            self.log(f"Cannot apply: {exc}")
+            return
+        self.log(f"Applying {len(parsed)} table step(s) to {folder.name}…")
+        self.statusBar().showMessage("Applying table steps to the run…")
+        self.analysis_task.request(lambda: (folder, analyze_run(folder, parsed)))
+
+    def _on_analysis_finished(self, outcome: tuple[Path, dict[str, Any]]) -> None:
+        folder, record = outcome
+        self.log(f"Applied {len(record['steps'])} table step(s) to {folder.name}")
+        self.statusBar().showMessage("Analysis applied", 5000)
+        self.results_panel.load(folder)
+        self.classify_panel.refresh()
+
+    def _on_analysis_failed(self, message: str) -> None:
+        self.log(f"Applying table steps failed: {message}")
+        self.statusBar().showMessage("Analysis failed", 5000)
 
     def compare_result_field(self, folder: Path, well: str, index: int) -> None:
         """Raw, corrected (incl. deconvolution) and enhanced versions of a field, side by side."""

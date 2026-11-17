@@ -200,6 +200,46 @@ Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
 
 Still to do: time a real 384-well plate on the analysis workstation (Phase 10).
 
+## Stitching, classification, clustering and spatial statistics (Phase 8)
+
+### Verified on synthetic data
+
+| Check | Result | Test |
+|---|---|---|
+| Stage orientation (stage y up or down) found from the overlaps | correct in all cases | `test_detects_stage_orientation`, run test |
+| 3 × 3 fields, stage error SD 1.5 µm: position error after refinement | max 0.34 µm at 0.5 µm/px (7.4 µm without) | `test_refinement_reaches_subpixel_accuracy` |
+| Featureless overlaps and fields without overlap keep stage positions, with a note | yes | `test_featureless_overlaps_are_rejected`, `test_no_overlap_falls_back_to_stage_positions` |
+| **Whole run, 2 × 2 Operetta fields with 25 % overlap, one field 2 µm off**: field offsets within 1 px of the truth; nuclei seen in two or four fields counted once (25 of 25 per well); well area within 1 % of the true union | yes | `test_run_with_stitching_and_table_steps` |
+| Gate counts with min/max, all/any, missing values | exact | `test_gate_counts_objects_inside_thresholds` |
+| Two separable classes: cross-validated accuracy | random forest 99.2 %, gradient boosting 97.5 %; confusion matrix sums to the examples | `test_classifier_cross_validation_and_round_trip` |
+| A second plate 3 SD brighter in every feature | 98.8 % correct with plate robust Z, 59 % without | `test_plate_normalisation_removes_a_plate_offset` |
+| Active learning suggests objects at the class boundary, never already-labelled ones | yes | `test_active_learning_suggests_boundary_objects` |
+| Three well-separated groups: k-means and HDBSCAN recover them (adjusted Rand index) | > 0.95, fractions 1/3 each | `test_phenotypic_clusters_recover_blobs` |
+| Random (CSR) points, 1 × 1 mm window, 1500 points: L(r) − r | −0.35 to −0.65 µm at 20–80 µm; g 0.97–1.01; inside the 39-simulation envelope; Clark–Evans R 1.01 | `test_ripley_csr_is_flat_and_inside_the_envelope` |
+| Thomas cluster process (σ 12 µm) | H 19–37 µm, far above the envelope (< 1 µm); R 0.38 | `test_ripley_detects_clustering_and_regularity` |
+| Square lattice (20 µm) | R 1.98 (theory 2); Voronoi area 400 µm² (exact); K(10 µm) = 0 | same |
+| Hexagonal lattice | 6 Delaunay neighbours, Voronoi area √3/2·s² within 1 %, edge cells left empty | `test_voronoi_and_delaunay_on_a_hexagonal_lattice` |
+| DBSCAN / HDBSCAN colonies of 40 and 15 objects plus 2 isolated objects | exact | `test_dbscan_colonies` |
+| Classify dock: gate on histogram and scatter, examples labelled by clicking objects, training, uncertain objects, apply to the run, colour by class; mosaic | yes | `tests/test_gui_classify.py` |
+
+### Known limitations
+
+- Plate robust-Z normalisation assumes most objects on a plate are alike. In the test where
+  one well held only one class, 1 of its 10 objects changed class; on plates dominated by
+  one phenotype use no normalisation.
+- HDBSCAN and Leiden clusters are assigned to new objects by their 5 nearest sampled
+  neighbours (an approximation); k-means assignment is exact.
+- Ripley's K uses border correction, which discards centres near the edge of the imaged
+  area at large radii (`n_inner` in the curves); choose radii well below half the well
+  width. Clark–Evans uses Donnelly's correction, derived for rectangles.
+- Stitching corrects translation only (no rotation or scale), and matches downsampled
+  fields when they are larger than `image_max_size`.
+
+### Still to do on real data
+
+- Stitch a real Operetta and Nikon well and compare with the vendor's stitched image.
+- Train a classifier on a real screen and check the accuracy against held-out wells.
+
 ## Results and report (Phase 7)
 
 | Check | Result | Test |

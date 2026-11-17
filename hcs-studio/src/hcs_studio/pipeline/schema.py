@@ -32,6 +32,11 @@ class PipelineStep(BaseModel):
         object.__setattr__(self, "params", validated.model_dump(mode="json"))
         return self
 
+    def is_table_step(self) -> bool:
+        from hcs_studio.analysis.table_steps import is_table_module
+
+        return is_table_module(self.module)
+
     def create(self) -> Module:
         cls = MODULES.get(self.module)
         return cls(cls.Params.model_validate(self.params))
@@ -55,6 +60,14 @@ class Pipeline(BaseModel):
 
     def enabled_steps(self) -> list[PipelineStep]:
         return [s for s in self.steps if s.enabled]
+
+    def image_steps(self) -> list[PipelineStep]:
+        """Enabled steps that run on each field."""
+        return [s for s in self.enabled_steps() if not s.is_table_step()]
+
+    def table_steps(self) -> list[PipelineStep]:
+        """Enabled steps that run on the object tables after all wells, in order."""
+        return [s for s in self.enabled_steps() if s.is_table_step()]
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

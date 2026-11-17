@@ -42,7 +42,12 @@ def report_data(results: RunResults) -> dict[str, Any]:
             }
             for f in results.well_fields(well)
         ]
-        wells[well] = {"fields": fields, "flags": results.well_flags(well)}
+        mosaic = f"wells/{well}/previews/mosaic.png"
+        wells[well] = {
+            "fields": fields,
+            "flags": results.well_flags(well),
+            "mosaic": mosaic if (results.folder / mosaic).exists() else None,
+        }
     layout = {
         w: {
             "compound": a.compound,
@@ -65,6 +70,44 @@ def report_data(results: RunResults) -> dict[str, Any]:
         "wells": wells,
         "layout": layout,
     }
+
+
+def analysis_lines(folder: Path) -> list[tuple[str, str]]:
+    """(title, description) of each table step applied to the run, for the report."""
+    try:
+        record = json.loads((folder / "tables" / "analysis_summary.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return []
+    lines = []
+    for step in record.get("steps", []):
+        params, state = step.get("params", {}), step.get("state", {})
+        parts = [f"on {params.get('object_type', '')}"]
+        if step["module"] == "gate_objects":
+            parts += [
+                f"{r['feature']} in [{_text(r.get('min'))}, {_text(r.get('max'))}]"
+                for r in params.get("rules", [])
+            ]
+        elif step["module"] == "classify_objects":
+            parts.append(f"classes {', '.join(state.get('classes', []))}")
+            parts.append(f"{state.get('algorithm', '')}, {state.get('features', '?')} features")
+            accuracy = state.get("cv_accuracy")
+            if accuracy is not None:
+                parts.append(f"{state.get('cv_folds')}-fold CV accuracy {accuracy:.1%}")
+            parts.append(f"model SHA-256 {str(state.get('model_sha256', ''))[:12]}…")
+        elif step["module"] == "phenotypic_clusters":
+            sizes = state.get("cluster_sizes_in_sample", {})
+            parts.append(
+                f"{params.get('method')} → {len([k for k in sizes if int(k) > 0])} clusters"
+            )
+        elif step["module"] == "spatial_clusters":
+            parts.append(f"{params.get('scope')} scope, colonies by {params.get('method')}")
+            parts.append(f"Ripley radii {params.get('radii_um')} µm")
+        lines.append((f"{step['step']}. {step['title']}", "; ".join(p for p in parts if p)))
+    return lines
+
+
+def _text(value: Any) -> str:
+    return "–" if value is None else f"{value:.4g}"
 
 
 def write_report(folder: Path) -> Path:
@@ -96,6 +139,7 @@ def write_report(folder: Path) -> Path:
         "colours: viridis for values; blue–white–red for robust Z, symmetric around 0 "
         "(at least ±3, at most ±6)",
         data_json=data_json,
+        analysis=analysis_lines(folder),
     )
     target = folder / "index.html"
     part = target.with_name("index.html.part")

@@ -101,6 +101,14 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - Per field, previews are `fNNN.png` (enhanced), `fNNN_corrected.png`, `fNNN_raw.png` and `fNNN_outline_<labels>.png` (RGBA); never burn outlines into the composites.
 - The focus score measures edge sharpness relative to contrast; it must not depend on cell number (sparse wells are often the interesting ones).
 
+## Analysis conventions
+
+- Table steps subclass `TableModule` (`analysis/table_steps.py`) and register in `MODULES`. They run after all wells (`run_table_steps`, called by `aggregate_run`), never per field: `fit_table(sample)` for plate-level state, `transform` returns new columns aligned with the well's objects, `summarize` returns per-well values and JSON details. Column prefixes: `gate_`, `class_`, `cluster_`, `spatial_` (excluded from feature statistics and from features).
+- Annotations go to `wells/<W>/objects_annotations.parquet`; never rewrite `objects.parquet`. `pipeline_hash` leaves table steps out, so they can change without invalidating a resume; `analyze_run` applies them to a finished run (the run's own table steps first unless `include_run_steps=False`).
+- `stitch_well` is an image-scope step that `process_well` recognises; it adds `well_x_um`, `well_y_um`, `in_overlap_duplicate` to objects and `stitching` + `field_size_um` to `well_summary.json`. Duplicates are left out of counts, statistics, sampling and spatial analysis.
+- Classifiers are joblib dicts (`FORMAT = "hcs-studio-classifier/1"`); record the file's SHA-256 in the analysis summary.
+- `docs/processing.md` covers table steps too (regenerate after changing their parameters).
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).
@@ -112,5 +120,6 @@ Run from this folder (`hcs-studio/`).
 - Deconvolution timing: `hcs-studio benchmark --shape 30 2048 2048 --iterations 40 [--device gpu]`
 - Fine-tune Cellpose: `hcs-studio train-cellpose --data <folder>`; real-SAM 3 tests: `HCS_SAM3_PYTHON=.venv-sam3/bin/python HCS_SAM3_WEIGHTS=1 pytest -k real_sam3`
 - Regenerate a run's report: `hcs-studio report <run folder>`
+- Apply table steps to a finished run: `hcs-studio analyze <run folder> --pipeline steps.yaml [--only]`; train a classifier from a labels CSV: `hcs-studio train-classifier --run <folder> --labels labels.csv --output model.joblib`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)
 - Headless Linux needs `xvfb libegl1 libgl1-mesa-dri libxcb-cursor0`; `ci.sh` wraps pytest in `xvfb-run`. `QT_QPA_PLATFORM=offscreen` does not work (napari needs a real OpenGL context).

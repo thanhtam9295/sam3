@@ -62,9 +62,51 @@ Channel names are lower-cased, with other characters replaced by `_`
 | `n_pixels`, `warnings` | pixels used; saturation, chromatic shift, too few pixels |
 | `fraction_<A>_near_<B>`, `n_<A>` | object-based colocalization, when configured |
 
+## Whole-well position (`stitch_well`)
+
+| Column | Meaning |
+|---|---|
+| `well_y_um`, `well_x_um` | object centroid in the well (stitched field position + centroid in the field) |
+| `in_overlap_duplicate` | True for the copy of an object seen in a second field, where fields overlap; left out of counts and statistics |
+| `field_y_um`, `field_x_um` (`fields.csv`) | stitched top-left corner of the field in the well |
+
+## Table-step columns (`objects_annotations.parquet`, merged into `per_object_all.parquet`)
+
+Rows of other object types, and overlap duplicates, are empty.
+
+| Column | Step | Meaning |
+|---|---|---|
+| `gate_<name>` | gate | inside the gate |
+| `class_<name>` | classify | most likely class (`unassigned` below `min_probability`) |
+| `class_<name>_probability` | classify | probability of that class |
+| `class_<name>_p_<class>` | classify | probability of each class |
+| `cluster_<name>` | phenotypic clusters | cluster, 1 = largest, -1 = noise |
+| `spatial_colony`, `spatial_colony_size` | spatial | colony (1 = largest, -1 = none) and its number of objects |
+| `spatial_nn_um` | spatial | distance to the nearest object |
+| `spatial_voronoi_area_um2`, `spatial_local_density_per_mm2` | spatial | Voronoi cell area and its inverse; empty at the edge of the imaged area |
+| `spatial_delaunay_neighbours` | spatial | Delaunay neighbours; empty at the edge |
+
 ## Per-well summary (`tables/per_well_summary.csv`)
 
 For each well: fields used and excluded (out of focus, saturated, edge), imaged area,
 `<label set>_count` and `<label set>_per_mm2` (excluded fields left out), `low_count`, and
 for every numeric feature `<label set>_<feature>_mean / _median / _std`, plus the median
-of each colocalization statistic per channel pair.
+of each colocalization statistic per channel pair. In stitched wells, counts include each
+object once and the area is that of the fields together (overlaps once).
+
+Table steps add:
+
+| Column | Meaning |
+|---|---|
+| `gate_<name>_count`, `_fraction` | objects inside the gate, and their fraction |
+| `class_<name>_<class>_count`, `_fraction` | objects per class |
+| `cluster_<name>_<k>_count`, `_fraction` | objects per cluster (`noise` for -1) |
+| `spatial_objects`, `spatial_density_per_mm2` | objects analysed and their density in the imaged area |
+| `spatial_colonies`, `spatial_colony_size_mean / _median`, `spatial_colony_area_um2_mean`, `spatial_fraction_in_colonies` | colonies (area = convex hull) |
+| `spatial_nn_mean_um`, `spatial_nn_median_um` | nearest-neighbour distances |
+| `spatial_clark_evans_R` | Clark–Evans ratio with Donnelly's edge correction: 1 random, < 1 clustered, 2 square lattice, 2.15 hexagonal |
+| `spatial_H_<r>um` | Ripley's H(r) = L(r) − r with border correction; 0 for randomly placed objects |
+| `spatial_H_<r>um_csr_low / _high` | pointwise envelope of H from simulated random placement (39 simulations: 5 % two-sided) |
+| `spatial_g_<r>um` | pair correlation at r (1 = random, > 1 more neighbours at that distance) |
+| `spatial_pattern_<r>um` | +1 clustered, -1 regular, 0 within the envelope |
+| `spatial_groups` | with per-field scope or several timepoints: the number of patterns averaged |

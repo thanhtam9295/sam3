@@ -35,6 +35,37 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--learning-rate", type=float, default=1e-5)
     train.add_argument("--name", default="hcs_custom", help="name of the new model")
     train.add_argument("--device", choices=["auto", "cpu", "gpu"], default="auto")
+    analyze = sub.add_parser(
+        "analyze",
+        help="apply table steps (gates, classifiers, clustering, spatial) to a finished run",
+    )
+    analyze.add_argument("folder", type=Path, help="run folder")
+    analyze.add_argument(
+        "--pipeline", type=Path, required=True, help="pipeline file whose table steps to apply"
+    )
+    analyze.add_argument(
+        "--only",
+        action="store_true",
+        help="apply only these steps (default: the run's own table steps first)",
+    )
+    classify = sub.add_parser(
+        "train-classifier", help="train an object classifier from labelled objects of a run"
+    )
+    classify.add_argument("--run", type=Path, required=True, help="run folder")
+    classify.add_argument(
+        "--labels",
+        type=Path,
+        required=True,
+        help="CSV with well, field, object_id, label (and optionally timepoint)",
+    )
+    classify.add_argument("--object-type", default="nuclei")
+    classify.add_argument(
+        "--algorithm", choices=["random_forest", "hist_gradient_boosting"], default="random_forest"
+    )
+    classify.add_argument(
+        "--normalisation", choices=["plate_robust_z", "none"], default="plate_robust_z"
+    )
+    classify.add_argument("--output", type=Path, required=True, help="classifier file (.joblib)")
     bench = sub.add_parser("benchmark", help="time deconvolution of a synthetic stack")
     bench.add_argument(
         "--shape", type=int, nargs=3, default=[30, 2048, 2048], metavar=("Z", "Y", "X")
@@ -100,6 +131,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         print(f"Report: {path}")
         return 0
+    if args.command == "analyze":
+        return _analyze(args)
+    if args.command == "train-classifier":
+        return _train_classifier(args)
     if args.command == "train-cellpose":
         from hcs_studio.processing.base import ModuleError
         from hcs_studio.segmentation.cellpose_backend import fine_tune
@@ -247,3 +282,50 @@ def _run(args: argparse.Namespace) -> int:
         if result.failed_wells:
             code = max(code, 1)
     return code
+
+
+def _analyze(args: argparse.Namespace) -> int:
+    from hcs_studio.pipeline.executor import analyze_run
+    from hcs_studio.pipeline.schema import Pipeline
+    from hcs_studio.processing.base import ModuleError
+
+    try:
+        pipeline = Pipeline.load(args.pipeline)
+        if not pipeline.table_steps() and args.only:
+            print("Error: the pipeline has no table steps")
+            return 2
+        record = analyze_run(args.folder, pipeline, include_run_steps=not args.only)
+    except (OSError, ValueError, ModuleError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    print(f"Applied {len(record['steps'])} table step(s); tables and report updated")
+    return 0
+
+
+def _train_classifier(args: argparse.Namespace) -> int:
+    import pandas as pd
+
+    from hcs_studio.analysis.classifier import save_classifier, train_from_run
+    from hcs_studio.processing.base import ModuleError
+
+    try:
+        model = train_from_run(
+            args.run,
+            pd.read_csv(args.labels),
+            args.object_type,
+            algorithm=args.algorithm,
+            normalisation=args.normalisation,
+        )
+    except (OSError, ValueError, ModuleError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    save_classifier(model, args.output)
+    examples = ", ".join(f"{k}: {v}" for k, v in model.n_examples.items())
+    print(f"Trained on {examples} ({len(model.features)} features)")
+    if model.cv_accuracy is not None:
+        print(
+            f"{model.cv_folds}-fold cross-validated accuracy {model.cv_accuracy:.3f} "
+            f"(balanced {model.cv_balanced_accuracy:.3f})"
+        )
+    print(f"Classifier: {args.output}")
+    return 0

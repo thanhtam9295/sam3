@@ -123,6 +123,7 @@ class ResultsPanel(QWidget):
 
     open_field = Signal(object, str, int, str)
     compare_field = Signal(object, str, int)
+    open_mosaic = Signal(object, str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -195,6 +196,10 @@ class ResultsPanel(QWidget):
         self.compare.clicked.connect(self._compare)
         self.open_folder = QPushButton("Open well folder")
         self.open_folder.clicked.connect(self._open_folder)
+        self.mosaic = QPushButton("Whole-well mosaic")
+        self.mosaic.setToolTip("The stitched well (needs the 'Stitch well' step)")
+        self.mosaic.clicked.connect(self._open_mosaic)
+        self.mosaic.setEnabled(False)
 
         top = QHBoxLayout()
         top.addWidget(open_button)
@@ -241,7 +246,7 @@ class ResultsPanel(QWidget):
         right_layout.addWidget(self.fields, 1)
         right_layout.addWidget(self.large, 2)
         buttons = QHBoxLayout()
-        for button in (self.open_viewer, self.compare, self.open_folder):
+        for button in (self.open_viewer, self.compare, self.mosaic, self.open_folder):
             buttons.addWidget(button)
         right_layout.addLayout(buttons)
 
@@ -440,6 +445,9 @@ class ResultsPanel(QWidget):
         flags = self.results.well_flags(well)
         self.flags.setText("QC: " + "; ".join(flags) if flags else "")
         self._fields = self.results.well_fields(well)
+        self.mosaic.setEnabled(
+            (self.results.folder / "wells" / well / "previews" / "mosaic.png").exists()
+        )
         for check in self.overlay_checks.values():
             self.overlay_box.removeWidget(check)
             check.deleteLater()
@@ -534,6 +542,10 @@ class ResultsPanel(QWidget):
         field = self.selected_field()
         if self.results is not None and self.well and field:
             self.compare_field.emit(self.results.folder, self.well, field.index)
+
+    def _open_mosaic(self) -> None:
+        if self.results is not None and self.well:
+            self.open_mosaic.emit(self.results.folder, self.well)
 
     def _open_folder(self) -> None:
         if self.results is not None and self.well:

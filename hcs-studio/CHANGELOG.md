@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Phase 8 — classification, clustering, whole-well analysis
+- **Stitch well** step: field positions from stage coordinates, stage orientation found
+  from the overlaps, sub-pixel refinement by phase correlation and global least squares;
+  whole-well object coordinates, overlap duplicates counted once, well area from the union
+  of fields, `previews/mosaic.png` (Results → Whole-well mosaic).
+- Table steps, which run on the object tables after all wells: **Gate objects**,
+  **Classify objects**, **Phenotypic clusters**, **Spatial clusters**. Annotations go to
+  `objects_annotations.parquet` and the plate table; per-well values to the summary and
+  the results plate; `tables/analysis_summary.json` records parameters, classifier hash
+  and accuracy.
+- Object classifier: random forest or histogram gradient boosting, plate robust-Z
+  normalisation, stratified cross-validation with confusion matrix, active learning
+  (least certain objects), saved with its feature list.
+- Phenotypic clusters: k-means, HDBSCAN, Leiden (optional), with per-cluster feature
+  profiles.
+- Spatial statistics: DBSCAN/HDBSCAN colonies, Ripley K/L/H and pair correlation with
+  border correction and CSR envelopes, nearest neighbours, Clark–Evans, Voronoi and
+  Delaunay local density.
+- Classify dock: gates drawn on histograms and scatter plots, examples labelled by clicking
+  objects in the viewer, train / cross-validate / suggest, apply to a finished run, colour
+  objects by class, gate, cluster or colony.
+- CLI: `hcs-studio analyze <run> --pipeline steps.yaml`, `hcs-studio train-classifier`.
+- The report lists the analysis steps and links each well's mosaic.
+- scikit-learn is now a direct dependency.
+- Fixed: the main window could open taller than the screen (about 2000 px); it now opens
+  at 1500 × 950 or the screen size, whichever is smaller.
+
 ### Phase 7 — results plate and report
 - Results tab: plate coloured by any per-well readout or by % positive above a threshold;
   values or robust Z-scores (plate, or negative controls); colour bar; Z′ from the layout's

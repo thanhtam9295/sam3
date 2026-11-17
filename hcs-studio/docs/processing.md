@@ -67,6 +67,19 @@ Mild Gaussian denoise, then an unsharp mask that does not amplify detail at the 
 | `tile_um` | 60.0 | CLAHE tile size in µm. |
 | `clip_limit` | 0.005 | CLAHE contrast limit. |
 
+## Classify objects (`classify_objects`)
+
+Applies an object classifier trained in the Classify panel (or with `hcs-studio train-classifier`) on example objects: random forest or histogram gradient boosting on the measured features. With `plate_robust_z` normalisation each plate's features become robust Z-scores of that plate first, which removes plate-to-plate intensity offsets but assumes most objects on a plate are alike. Writes the class, its probability and every class probability per object, and class counts and fractions per well; the classifier file's SHA-256, classes and cross-validated accuracy go into `tables/analysis_summary.json`.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `name` | 'class' | Objects get class_<name>, class_<name>_probability, class_<name>_p_<class>. |
+| `model_path` | '' | Classifier file (.joblib) saved by HCS Studio. |
+| `min_probability` | 0.0 | Objects whose best class is less likely than this are 'unassigned'. |
+
 ## Measure: colocalization (`colocalization`)
 
 Pearson, Spearman, Li's ICQ, Manders M1/M2, thresholded tM1/tM2 with Costes automatic thresholds (or manual ones), overlap coefficients and, optionally, the Costes randomization p-value, per object or for the whole field, after background subtraction. Warns about saturated pixels and chromatic shift. Optional object-based colocalization: the fraction of objects in one label set near objects of another. Writes `coloc.csv` per well.
@@ -188,6 +201,19 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | `min_fields` | 8 | Fewer fields than this cannot separate shading from cells; the step fails. |
 | `smoothing_fraction` | 0.05 | Gaussian smoothing of the profile, as a fraction of the image width. |
 
+## Gate objects (`gate_objects`)
+
+Marks objects of one type whose features lie inside thresholds (min and/or max per feature, all or any rule), e.g. drawn on a histogram or scatter plot in the Classify panel. Writes `gate_<name>` per object and the count and fraction per well.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `name` | 'positive' | Gate name; objects get the column gate_<name>. |
+| `rules` | [] | Feature thresholds (min and/or max, inclusive). |
+| `combine` | 'all' | Inside the gate when all rules hold, or any. |
+
 ## Measure: objects (`measure_objects`)
 
 Measures every object of the chosen label sets on the linear image (never on contrast/CLAHE/clarity output): morphology in µm, intensity per channel, radial distribution, Haralick texture, granularity, optional Zernike moments, counts of child objects (e.g. spots per cell), nuclear/cytoplasmic ratios and neighbours. Writes `objects.parquet` per well. Column reference: [measurements.md](measurements.md).
@@ -206,6 +232,26 @@ Measures every object of the chosen label sets on the linear image (never on con
 | `neighbor_radius_um` | 20.0 | Radius for neighbour counts. |
 | `nucleus_labels` | 'nuclei' | Label set used for nuclear/cytoplasmic ratios of its children. |
 
+## Phenotypic clusters (`phenotypic_clusters`)
+
+Groups objects by their features without labels: k-means, HDBSCAN, or Leiden (needs the optional `leidenalg` and `igraph`). Features are robust Z-scores clipped to ±10, optionally reduced by PCA. Clusters are learned on objects sampled across the plate; each object is then assigned (k-means: nearest centre; HDBSCAN and Leiden: majority of the 5 nearest sampled objects, an approximation). Cluster 1 is the largest, -1 is noise. Writes `cluster_<name>` per object and fractions per well; the features that set each cluster apart are listed in the analysis summary.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `name` | 'pheno' | Objects get cluster_<name>. |
+| `features` | None | Features to cluster on; empty = all measured features. |
+| `method` | 'kmeans' | Leiden needs the optional leidenalg and igraph packages. |
+| `n_clusters` | 5 | k-means: number of clusters. |
+| `min_cluster_size` | 50 | HDBSCAN: smallest cluster. |
+| `resolution` | 1.0 | Leiden: higher = more clusters. |
+| `n_neighbors` | 15 | Leiden: k-NN graph size. |
+| `pca_components` | 0 | Reduce to this many principal components; 0 = off. |
+| `max_fit_objects` | 50000 | Objects sampled across the plate to learn from. |
+| `seed` | 0 | Random seed (sampling, k-means, Leiden). |
+
 ## Z projection (`projection`)
 
 Collapses Z. `edf` picks, per pixel, the plane with the highest local sharpness.
@@ -216,7 +262,7 @@ Collapses Z. `edf` picks, per pixel, the plane with the highest local sharpness.
 
 ## Measure: field QC and counts (`qc`)
 
-Per field: focus score (normalised variance of the Laplacian), fraction of saturated pixels, imaged area and object counts. After the run, fields are flagged as out of focus or saturated relative to the plate, wells with low counts are flagged, and counts and densities per well leave out the excluded fields. Writes `tables/qc_flags.csv`.
+Per field: focus score (edge sharpness relative to contrast, independent of the number of cells), fraction of saturated pixels, imaged area and object counts. After the run, fields are flagged as out of focus or saturated relative to the plate, wells with low counts are flagged, and counts and densities per well leave out the excluded fields. Writes `tables/qc_flags.csv`.
 
 | Parameter | Default | Meaning |
 |---|---|---|
@@ -305,6 +351,37 @@ Unsharp mask or difference-of-Gaussians band boost.
 | `sigma_px` | 2.0 | Blur sigma (unsharp) in pixels. |
 | `sigma_large_px` | 6.0 | Large sigma (dog) in pixels. |
 | `amount` | 1.0 | Strength of the added detail. |
+
+## Spatial clusters (`spatial_clusters`)
+
+Spatial organisation of objects in the whole well (needs `stitch_well`) or in each field: colonies by DBSCAN or HDBSCAN, nearest-neighbour distances, the Clark-Evans ratio (Donnelly edge correction), Voronoi cell area and Delaunay neighbours (NaN where the cell is not closed inside the imaged area), Ripley's K, L and H = L − r with border correction, and the pair correlation g(r), compared with envelopes from simulated complete spatial randomness in the same area. `spatial_pattern_<r>um` is +1 (clustered), -1 (regular) or 0 (consistent with randomness at the 5 % pointwise level with 39 simulations). Full curves per well are in `wells/<W>/analysis.json`.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `scope` | 'well' | Whole well (needs the Stitch well step) or each field separately. |
+| `method` | 'dbscan' | Colony detection method. |
+| `eps_um` | 20.0 | DBSCAN: objects closer than this join a colony. |
+| `min_samples` | 5 | DBSCAN: neighbours to start a colony. |
+| `min_cluster_size` | 10 | HDBSCAN: smallest colony. |
+| `radii_um` | [10.0, 25.0, 50.0, 100.0] | Radii for Ripley's H and g in the summary. |
+| `simulations` | 39 | CSR simulations for the envelopes; 0 = none. |
+| `seed` | 0 | Random seed for the simulations. |
+
+## Stitch well (`stitch_well`)
+
+Places the fields of each well in one coordinate system from their stage positions. When fields overlap, the way stage axes map to image axes is found from the overlaps (or set), and positions are refined by phase correlation of each overlap (sub-pixel, Hanning-windowed) and solved together by least squares; overlaps that correlate poorly or would move a field by more than `max_correction_fraction` are ignored. Objects get `well_x_um`, `well_y_um` and `in_overlap_duplicate` (the copy seen in a field whose centre is farther away), so each object is counted once; well counts and densities use the area the fields cover together. Writes `previews/mosaic.png` and the field positions to `well_summary.json`. Images are not resampled or fused.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel` | 1 | Channel used to register overlaps. |
+| `refine` | True | Refine stage positions by phase correlation of the overlaps. |
+| `stage_orientation` | 'auto' | How stage axes map to the image: auto (from the overlaps), or x right, y down, x right, y up, x left, y down, x left, y up |
+| `max_correction_fraction` | 0.1 | Largest accepted correction, × the field size. |
+| `min_correlation` | 0.3 | Overlaps that correlate less are not used. |
+| `image_max_size` | 1024 | Fields are downsampled to this for matching. |
 
 ## Linear spectral unmixing (`unmix`)
 

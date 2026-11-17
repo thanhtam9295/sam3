@@ -334,6 +334,95 @@ channel A and B and the mask), HCS Studio's results, and a macro `coloc2_compare
 Run the macro in Fiji and compare Coloc 2's values with `hcs_studio_results.json`. The
 mapping is in the macro's comments. Coloc 2 reports the Costes p-value as 1 − p.
 
+## Whole wells, classification and clustering
+
+### Stitching wells
+
+Add **Stitch well** to a pipeline to place each well's fields in one coordinate system.
+The stage positions come from the plate files. When fields overlap, HCS Studio works out
+which way the stage axes run (instruments differ) and refines the positions by matching
+the overlaps (phase correlation, sub-pixel), so each field lands within a pixel of where
+it really was. Fields that do not overlap keep their stage positions.
+
+Each object then has whole-well coordinates (`well_x_um`, `well_y_um`). An object imaged
+twice in an overlap is kept once: the copy in the field whose centre is nearer counts, and
+the other is marked `in_overlap_duplicate`. Well counts and densities count each object
+once and use the area the fields cover together. **Results → Whole-well mosaic** shows the
+well at preview resolution. Images are not fused: measurements stay on the original
+fields.
+
+### Table steps
+
+Gates, classifiers, phenotypic clusters and spatial statistics are *table steps*. They run
+once every well is done, on the object tables, so they can see the whole plate. Their
+results go into `objects_annotations.parquet` per well (the measurements are never
+rewritten), the merged `tables/per_object_all.parquet`, and new per-well columns in
+`tables/per_well_summary.csv`, so they appear as readouts on the results plate and in the
+report. What each step did is recorded in `tables/analysis_summary.json`.
+
+Table steps can also be applied to a finished run without reprocessing any image: from the
+**Classify** dock (**Apply to run**) or with
+
+```bash
+hcs-studio analyze <run folder> --pipeline steps.yaml
+```
+
+The run's own table steps run first; add `--only` to run just the file's steps.
+
+### The Classify dock
+
+The dock works on the run open in the Results tab. Choose the object type at the top.
+
+![Classify dock: labelled examples (blue positive, red negative) and the cross-validated result](images/phase8_classify.png)
+
+**Gate.** Pick a feature for a histogram, or two for a scatter plot, and drag the shaded
+region (or type the limits). The dock shows how many sampled objects fall inside. **Add
+gate to pipeline** or **Apply gate to run**; each object gets `gate_<name>` and each well
+the count and fraction inside.
+
+**Classifier.** Name your classes, choose a well and field and press **Show field**. Click
+objects in the viewer to label them with the selected class (click again to undo); labelled
+objects are coloured. Label examples in several wells, including controls, then **Train**.
+The dock reports the cross-validated accuracy and the confusion matrix (rows: the class
+you gave; columns: the class predicted). **Suggest uncertain objects** lists the objects the
+classifier is least sure about; double-click one to see it, label it, and train again. A
+few rounds of this usually beat labelling many easy objects. **Save classifier…** keeps it
+as a `.joblib` file with its feature list, normalisation and accuracy; **Add to pipeline**
+or **Apply to run** classifies every object (`class_<name>`, its probability, and every
+class probability) and adds class counts and fractions per well.
+
+With *plate robust Z* normalisation (the default) every plate's features are first turned
+into robust Z-scores of that plate, which removes plate-to-plate brightness differences.
+It assumes most objects on a plate are similar; on a plate where nearly all objects belong
+to one class, choose *none*. Classifiers are pickle files: only open ones you trust.
+
+From the command line, label objects in a CSV (`well, field, object_id, label`) and run
+
+```bash
+hcs-studio train-classifier --run <run folder> --labels labels.csv --output model.joblib
+```
+
+**Colour.** Colours the objects of the shown field by any class, gate, cluster or colony
+column, with a legend.
+
+### Phenotypic clusters
+
+**Phenotypic clusters** groups objects by their features without labels (k-means, HDBSCAN,
+or Leiden if `leidenalg` and `igraph` are installed). Clusters are learned on objects
+sampled across the plate, then every object is assigned. `cluster_<name>` holds the
+cluster (1 = largest, -1 = noise); wells get the fraction in each cluster; the analysis
+summary lists the features that set each cluster apart.
+
+### Spatial statistics
+
+**Spatial clusters** describes how objects are arranged, over the whole well (needs
+**Stitch well**) or per field: colonies (DBSCAN with a distance `eps_um`, or HDBSCAN),
+nearest-neighbour distances, Clark–Evans ratio, Voronoi area and Delaunay neighbours per
+object, and Ripley's H(r) and pair correlation g(r) compared with randomly placed objects
+in the same area. `spatial_pattern_<r>um` is +1 where objects are more clustered than
+random at that distance, -1 where more regular. Full curves are in
+`wells/<W>/analysis.json`. See [measurements.md](measurements.md) for every column.
+
 ## Limitations in this phase
 
 - Readers have been tested on synthetic plates only, not yet on real instrument exports.
@@ -343,8 +432,10 @@ mapping is in the macro's comments. Coloc 2 reports the Costes p-value as 1 − 
 - Operetta flat-field profiles are not read yet.
 - The correction, enhancement, segmentation and measurement modules are verified on synthetic images only;
   colocalization has not yet been compared with Fiji Coloc 2 on real fields.
-- SAM 3 is tested with random weights only (its gated weights were not available); the
-  real model's segmentation quality on your images is unverified.
+- SAM 3 was checked with its trained weights on one public image set only (see
+  validation.md); its quality on your images is unverified.
 - SAM 3 segments 2D planes; 3D SAM 3 segmentation is not available.
 - Noise2Void and BM3D denoising are not included yet.
 - Apart from deconvolution, every field is processed whole in memory.
+- Stitched mosaics are previews; fields are not blended into one full-resolution image.
+- Classification, clustering and spatial statistics are verified on synthetic data only.

@@ -241,7 +241,14 @@ MODULES: Registry[type[Module]] = Registry("module")
 
 
 def load_builtin_modules() -> None:
-    from hcs_studio.analysis import measure  # noqa: F401
+    from hcs_studio.analysis import (  # noqa: F401
+        classifier,
+        clustering,
+        measure,
+        spatial,
+        stitching,
+        table_steps,
+    )
     from hcs_studio.processing import (  # noqa: F401
         autofluorescence,
         deconvolution,

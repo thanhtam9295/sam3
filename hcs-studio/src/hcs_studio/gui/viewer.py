@@ -274,6 +274,90 @@ class ViewerPanel:
         self.viewer.canvas.overlays.scale_bar.visible = True
         self.viewer.reset_view()
 
+    # ------------------------------------------------- objects, categories, mosaics
+
+    def on_object_click(self, layer_name: str, callback: Any) -> None:
+        """Call ``callback(object_id)`` when the user clicks an object of a labels layer,
+        whichever layer is selected and even while that layer is hidden (napari passes clicks
+        only to the selected layer, so the handler sits on the viewer). Replaces any earlier
+        click handler (``callback=None`` removes it)."""
+        for owner, handler in getattr(self, "_click_handlers", []):
+            if handler in owner.mouse_drag_callbacks:
+                owner.mouse_drag_callbacks.remove(handler)
+        self._click_handlers: list[tuple[Any, Any]] = []
+        if callback is None or layer_name not in self.viewer.layers:
+            return
+
+        def on_click(viewer: Any, event: Any) -> None:
+            if layer_name not in viewer.layers:
+                return
+            layer = viewer.layers[layer_name]
+            data = np.asarray(layer.data)
+            index = np.round(np.asarray(layer.world_to_data(event.position))).astype(int)
+            index = index[-data.ndim :]
+            if np.all(index >= 0) and np.all(index < data.shape):
+                value = int(data[tuple(index)])
+                if value > 0:
+                    callback(value)
+
+        self.viewer.mouse_drag_callbacks.append(on_click)
+        self._click_handlers.append((self.viewer, on_click))
+
+    def highlight_object(self, layer_name: str, object_id: int) -> None:
+        """Show only one object of a labels layer (0 shows all again)."""
+        if layer_name not in self.viewer.layers:
+            return
+        layer = self.viewer.layers[layer_name]
+        layer.selected_label = max(1, object_id)
+        layer.show_selected_label = object_id > 0
+
+    def paint_categories(
+        self,
+        like: str,
+        categories: dict[int, int],
+        colours: Sequence[str],
+        name: str = "categories",
+    ) -> None:
+        """Colour the objects of labels layer ``like`` by category: ``categories`` maps object
+        ID → category index (into ``colours``); objects without a category are not drawn.
+        The layer ``like`` is hidden while the categories are shown."""
+        from napari.utils.colormaps import DirectLabelColormap
+
+        reference = self.viewer.layers[like]
+        labels = np.asarray(reference.data)
+        lut = np.zeros(int(labels.max()) + 1, dtype=np.int32)
+        for object_id, category in categories.items():
+            if 0 < object_id < len(lut):
+                lut[object_id] = category + 1
+        painted = lut[labels]
+        if name in self.viewer.layers:
+            self.viewer.layers.remove(name)
+        colour_map: dict[Any, Any] = {None: "transparent", 0: "transparent"}
+        colour_map.update({k + 1: c for k, c in enumerate(colours)})
+        layer = self.viewer.add_labels(
+            painted,
+            name=name,
+            scale=reference.scale,
+            units=reference.units,
+            colormap=DirectLabelColormap(color_dict=colour_map),
+            opacity=0.85,
+        )
+        layer.translate = reference.translate
+        # The plain masks (random colours) would hide the categories; they can be shown again
+        # from the layer list.
+        reference.visible = False
+        if layer not in self._label_layers:
+            self._label_layers.append(layer)
+
+    def show_rgb(self, name: str, rgb: NDArray[Any], um_per_px: float | None) -> None:
+        """Replace the view with one RGB image (e.g. a whole-well mosaic)."""
+        self.viewer.layers.clear()
+        self._before_layers, self._after_layers, self._label_layers = [], [], []
+        scale = [um_per_px, um_per_px] if um_per_px else [1.0, 1.0]
+        units = ["µm" if um_per_px else "pixel"] * 2
+        self.viewer.add_image(rgb, name=name, rgb=True, scale=scale, units=units)
+        self.viewer.reset_view()
+
     def layer_names(self) -> list[str]:
         return [layer.name for layer in self.viewer.layers]
 
