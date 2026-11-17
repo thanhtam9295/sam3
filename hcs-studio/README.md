@@ -47,6 +47,7 @@ python -m hcs_studio
 
 `hcs-studio info` prints the version and GPU status without opening a window;
 `hcs-studio selftest` checks the installation end to end.
+`hcs-studio acceptance …` runs the acceptance tests on real data (see `docs/acceptance.md`).
 `hcs-studio inspect <path>` describes how a plate folder is read.
 `hcs-studio run --pipeline pipe.yaml --input <plate> --workers auto` runs a pipeline unattended;
 `--resume <run folder>` continues an interrupted run.

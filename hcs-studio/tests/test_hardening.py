@@ -255,6 +255,7 @@ def test_user_guide_builds_as_html(tmp_path: Path) -> None:
         "index.html",
         "install.html",
         "troubleshooting.html",
+        "acceptance.html",
         "processing.html",
         "measurements.html",
         "validation.html",

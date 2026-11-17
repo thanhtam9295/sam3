@@ -7,7 +7,9 @@ then start **HCS Studio** from the Start menu, or `python -m hcs_studio`. The st
 shows the detected GPU, or "CPU only" with the reason. Help → Show test image displays a
 synthetic image to confirm that the viewer works; `hcs-studio selftest` checks the whole
 installation in about a minute. If something goes wrong, see
-[troubleshooting.md](troubleshooting.md).
+[troubleshooting.md](troubleshooting.md). To validate HCS Studio on your own instruments
+(counts, colocalization, deconvolution, unattended plates), follow
+[acceptance.md](acceptance.md).
 
 ## Open a plate
 

@@ -18,6 +18,7 @@ PAGES = [
     ("index.md", "User guide"),
     ("install.md", "Installing"),
     ("troubleshooting.md", "Troubleshooting"),
+    ("acceptance.md", "Acceptance tests"),
     ("processing.md", "Processing modules"),
     ("measurements.md", "Measurement columns"),
     ("validation.md", "Validation"),

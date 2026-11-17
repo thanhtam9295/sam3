@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Acceptance-test toolkit (PROMPT.md §10)
+- `hcs-studio acceptance counts | coloc | run | kill-resume | beads`: one command per §10
+  criterion, PASS/FAIL per item and a JSON report; protocol in `docs/acceptance.md`.
+- The Fiji export macro saves Coloc 2's results (`coloc2_log.txt`) for the comparison.
+- Bead check: FWHM per isolated bead at the same voxel before and after deconvolution,
+  without resampling (synthetic confocal beads: −47 % lateral, −59 % axial).
+
 ### Phase 10 — hardening and packaging
 - Performance record: time per step (summed over fields), reading, writing, fields per
   minute, peak memory per worker and output size in `run_manifest.json` → `performance`;

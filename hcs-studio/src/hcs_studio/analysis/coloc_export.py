@@ -20,12 +20,16 @@ MACRO = """// Compare HCS Studio with Fiji Coloc 2 on identical inputs.
 // Fiji versions; if this fails, run Coloc 2 once with the Macro Recorder on and copy the
 // recorded line over the run("Coloc 2", ...) call below.
 dir = getDirectory("file");
+print("\\Clear");
 open(dir + "channel_a.tif");
 open(dir + "channel_b.tif");
 open(dir + "mask.tif");
 run("Coloc 2", "channel_1=channel_a.tif channel_2=channel_b.tif roi_or_mask=mask.tif "
   + "threshold_regression=Costes li_icq spearman's_rank_correlation manders'_correlation "
   + "2d_instensity_histogram costes'_significance_test psf={psf} costes_randomisations={n}");
+// Coloc 2 writes its results to the Log; keep them for `hcs-studio acceptance coloc`.
+selectWindow("Log");
+saveAs("Text", dir + "coloc2_log.txt");
 // Compare with hcs_studio_results.json in the same folder:
 //   Pearson's R value (no threshold)  ~ pearson
 //   Manders' tM1 / tM2 (above autothreshold) ~ tm1 / tm2

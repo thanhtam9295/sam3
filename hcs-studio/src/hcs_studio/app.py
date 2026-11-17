@@ -58,6 +58,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     selftest.add_argument("--workers", type=int, default=2)
     selftest.add_argument("--keep", type=Path, help="keep the test plate and run in this folder")
+    acceptance = sub.add_parser(
+        "acceptance", help="acceptance tests on real data (PROMPT.md §10), PASS/FAIL report"
+    )
+    checks = acceptance.add_subparsers(dest="check", required=True)
+    counts = checks.add_parser("counts", help="counts per field against manual counts (±5 %%)")
+    counts.add_argument("--run", type=Path, required=True)
+    counts.add_argument("--manual", type=Path, required=True, help="CSV: well, field, count")
+    counts.add_argument("--object-type", default="nuclei")
+    counts.add_argument("--tolerance", type=float, default=0.05)
+    coloc = checks.add_parser("coloc", help="Pearson/Manders against Fiji Coloc 2 (±0.02)")
+    coloc.add_argument("folders", type=Path, nargs="+", help="folders from Export for Fiji")
+    coloc.add_argument("--tolerance", type=float, default=0.02)
+    run_check = checks.add_parser("run", help="a run folder is complete; report works offline")
+    run_check.add_argument("folder", type=Path)
+    kill = checks.add_parser("kill-resume", help="kill an unattended run part-way, then resume")
+    kill.add_argument("--pipeline", type=Path, required=True)
+    kill.add_argument("--input", type=Path, required=True)
+    kill.add_argument("--output", type=Path, required=True)
+    kill.add_argument("--layout", type=Path)
+    kill.add_argument("--kill-after", type=int, default=10, help="complete wells before the kill")
+    kill.add_argument("--workers", default="auto")
+    beads = checks.add_parser("beads", help="deconvolution narrows the FWHM of beads")
+    beads.add_argument("path", type=Path, help="bead Z stack (.nd2, OME-TIFF, …)")
+    beads.add_argument("--channel", type=int, default=1)
+    beads.add_argument("--psf", type=Path, help="measured PSF file (default: theoretical)")
+    beads.add_argument("--iterations", type=int, default=40)
+    acceptance.add_argument(
+        "--report", type=Path, help="write the report as JSON (default: acceptance_<check>.json)"
+    )
     profile = sub.add_parser(
         "profile",
         help="PCA/UMAP phenotypic profiles, distance to control and dose-response of runs",
@@ -188,6 +217,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             + (f"; failed: {', '.join(failed)}" if failed else "")
         )
         return 1 if failed else 0
+    if args.command == "acceptance":
+        return _acceptance(args)
     if args.command == "profile":
         return _profile(args)
     if args.command == "train-classifier":
@@ -463,3 +494,39 @@ def _profile(args: argparse.Namespace) -> int:
         write_report(args.runs[0])  # the report shows the profiles of the first run
     print(f"Profiles: {result.folder}")
     return 0
+
+
+def _acceptance(args: argparse.Namespace) -> int:
+    from hcs_studio import acceptance
+    from hcs_studio.processing.base import ModuleError
+
+    try:
+        if args.check == "counts":
+            report = acceptance.check_counts(
+                args.run, args.manual, args.object_type, args.tolerance
+            )
+        elif args.check == "coloc":
+            report = acceptance.check_coloc(args.folders, args.tolerance)
+        elif args.check == "run":
+            report = acceptance.check_run(args.folder)
+        elif args.check == "kill-resume":
+            report = acceptance.check_kill_resume(
+                args.pipeline,
+                args.input,
+                args.output,
+                kill_after_wells=args.kill_after,
+                workers=args.workers,
+                layout=args.layout,
+            )
+        else:
+            report = acceptance.check_beads(
+                args.path, args.channel, psf_file=args.psf, iterations=args.iterations
+            )
+    except (OSError, ValueError, KeyError, RuntimeError, ModuleError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    print(report.text())
+    target = args.report or Path(f"acceptance_{args.check.replace('-', '_')}.json")
+    report.save(target)
+    print(f"Report: {target}")
+    return 0 if report.passed else 1

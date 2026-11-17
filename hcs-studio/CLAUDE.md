@@ -139,6 +139,7 @@ Run from this folder (`hcs-studio/`).
 - Regenerate a run's report: `hcs-studio report <run folder>`
 - Profiles: `hcs-studio profile <run> [<run> ...] --object-type nuclei [--level well] [--no-umap]`
 - Apply table steps to a finished run: `hcs-studio analyze <run folder> --pipeline steps.yaml [--only]`; train a classifier from a labels CSV: `hcs-studio train-classifier --run <folder> --labels labels.csv --output model.joblib`
+- Acceptance tests on real data (docs/acceptance.md): `hcs-studio acceptance counts|coloc|run|kill-resume|beads …` (PASS/FAIL + JSON report)
 - Check an installation: `hcs-studio selftest`; GUI: `hcs-studio gui --smoke-test`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`
