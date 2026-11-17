@@ -90,6 +90,47 @@ def test_flatfield_recovers_a_known_vignette() -> None:
     assert module.describe_state(state)["profile_min"][0] < 0.85
 
 
+@pytest.mark.parametrize("fit", ["polynomial", "gaussian"])
+def test_flatfield_profile_is_accurate_up_to_the_border(fit: str) -> None:
+    """An off-centre, tilted vignette seen only through background: the polynomial surface
+    matches it everywhere (corners included); Gaussian smoothing flattens the corners."""
+    rng = np.random.default_rng(3)
+    shape = (256, 256)
+    yy, xx = (np.mgrid[0 : shape[0], 0 : shape[1]] + 0.5) / 256 - 0.5
+    vignette = 1 - 0.6 * ((yy - 0.1) ** 2 + (xx + 0.05) ** 2) + 0.05 * xx
+    fields = [image(100 + rng.poisson(400 * vignette)) for _ in range(30)]
+    module = create_module("flatfield", {"dark_offset": 100, "profile_fit": fit})
+    flat = module.fit(FakeContext(fields))["flat"][0]
+    truth = vignette / vignette.mean()
+    error = np.abs(flat - truth)
+    if fit == "polynomial":
+        assert error.max() < 0.005
+    else:
+        assert error.max() > 0.01  # the border effect the polynomial avoids
+        assert error[32:-32, 32:-32].max() < 0.01
+
+
+def test_flatfield_without_background_falls_back_to_smoothing() -> None:
+    """Nuclei on an almost black background (as in the batch tests): the polynomial would
+    dip below zero, so smoothing is used for that channel and recorded. With no background
+    at all there is nothing to estimate from, and the step refuses."""
+    from tests.test_batch import _image
+
+    fields = [
+        image(np.stack([_image(r, c, s, w) for w in range(2)]).astype(float))
+        for r in range(2)
+        for c in range(3)
+        for s in range(2)
+    ]
+    module = create_module("flatfield", {"min_fields": 8})
+    state = module.fit(FakeContext(fields))
+    assert state["flat"].min() > 0
+    assert module.describe_state(state)["gaussian_fallback_channels"]
+    black = [image(blobs(np.random.default_rng(i), (64, 64), 3, 2000)) for i in range(10)]
+    with pytest.raises(ModuleError, match="non-positive"):
+        module.fit(FakeContext(black))
+
+
 def test_flatfield_needs_enough_fields_and_a_fit() -> None:
     module = create_module("flatfield")
     with pytest.raises(ModuleError, match="at least 8"):

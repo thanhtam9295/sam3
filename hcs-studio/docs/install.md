@@ -60,7 +60,7 @@ installer and keeps it as a downloadable artifact.
 
 | | Minimum | Recommended for 384-well screens |
 |---|---|---|
-| Memory | 8 GB | 32 GB or more (about 1–2 GB per worker for 2-channel 1080 × 1080 fields; deconvolution needs more) |
+| Memory | 8 GB | 16–32 GB (measured: 0.5 GB per worker for 2-channel 1080 × 1080 fields with all features; Cellpose and deconvolution need several GB) |
 | Processor | 4 cores | 8–16 cores (one worker per core, minus one) |
-| Disk | | an SSD for run folders; plan about 2–3 × the raw data size with corrected images, about 0.5 × without (`--no-images`) |
+| Disk | | an SSD for run folders; plan about 2–3 × the raw data size with corrected images (measured 2.2 × for 2-channel fields), much less without (`--no-images`) |
 | GPU | none | NVIDIA with 8 GB or more, for Cellpose and deconvolution |

@@ -12,8 +12,14 @@ from hcs_studio.processing.base import MODULES, load_builtin_modules
 
 NOTES = {
     "flatfield": "Estimates the illumination profile from many fields of the plate: each field "
-    "is divided by its mean, the per-pixel median across fields removes the cells, and a wide "
-    "Gaussian keeps the smooth shading. The profile is normalised to mean 1, so the mean "
+    "is divided by its mean, the per-pixel median across fields removes the cells, and a "
+    "smooth surface is fitted: a 2D polynomial (default, degree 4; accurate up to the image "
+    "border) or a wide Gaussian (for illumination a polynomial cannot follow; it flattens the "
+    "corners by a few percent). The median assumes most pixels are background: stains that "
+    "cover much of each field (e.g. dense cytoplasm) bias the profile; where almost no "
+    "background is left, the polynomial is not used and the channel falls back to smoothing "
+    "(recorded as gaussian_fallback_channels in the manifest). The profile is "
+    "normalised to mean 1, so the mean "
     "intensity of a field is preserved. This is a median-based estimate, not the BaSiC "
     "algorithm. It needs enough fields with varied content; it fails rather than guess when "
     "fewer than `min_fields` are available.",

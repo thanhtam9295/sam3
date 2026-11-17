@@ -238,3 +238,29 @@ def test_gui_error_handler_logs_and_keeps_running(
     for handler in logging.getLogger("hcs_studio").handlers:
         handler.flush()
     assert "boom in a slot" in app_log_path().read_text(encoding="utf-8")
+
+
+def test_user_guide_builds_as_html(tmp_path: Path) -> None:
+    import importlib.util
+    import re
+
+    spec = importlib.util.spec_from_file_location(
+        "build_docs", Path(__file__).resolve().parent.parent / "scripts" / "build_docs.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    pages = module.build(tmp_path / "docs")
+    assert {p.name for p in pages} == {
+        "index.html",
+        "install.html",
+        "troubleshooting.html",
+        "processing.html",
+        "measurements.html",
+        "validation.html",
+    }
+    for page in pages:
+        text = page.read_text(encoding="utf-8")
+        assert '.md"' not in text and ".md#" not in text  # links point at the HTML pages
+        for target in re.findall(r'(?:href|src)="(?!https?:|mailto:)([^"#]+)', text):
+            assert (page.parent / target).exists(), f"{page.name}: broken link {target}"

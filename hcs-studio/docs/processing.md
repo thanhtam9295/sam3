@@ -190,7 +190,7 @@ Removes objects touching the border, outside a size range, below a solidity, or 
 
 ## Flat-field correction (`flatfield`)
 
-Estimates the illumination profile from many fields of the plate: each field is divided by its mean, the per-pixel median across fields removes the cells, and a wide Gaussian keeps the smooth shading. The profile is normalised to mean 1, so the mean intensity of a field is preserved. This is a median-based estimate, not the BaSiC algorithm. It needs enough fields with varied content; it fails rather than guess when fewer than `min_fields` are available.
+Estimates the illumination profile from many fields of the plate: each field is divided by its mean, the per-pixel median across fields removes the cells, and a smooth surface is fitted: a 2D polynomial (default, degree 4; accurate up to the image border) or a wide Gaussian (for illumination a polynomial cannot follow; it flattens the corners by a few percent). The median assumes most pixels are background: stains that cover much of each field (e.g. dense cytoplasm) bias the profile; where almost no background is left, the polynomial is not used and the channel falls back to smoothing (recorded as gaussian_fallback_channels in the manifest). The profile is normalised to mean 1, so the mean intensity of a field is preserved. This is a median-based estimate, not the BaSiC algorithm. It needs enough fields with varied content; it fails rather than guess when fewer than `min_fields` are available.
 
 Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
 
@@ -199,6 +199,8 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | `dark_offset` | 0.0 | Camera offset (counts) subtracted before correction. |
 | `max_fields` | 200 | Maximum number of fields sampled across the plate. |
 | `min_fields` | 8 | Fewer fields than this cannot separate shading from cells; the step fails. |
+| `profile_fit` | 'polynomial' | Smooth surface fitted to the median: 2D polynomial, or Gaussian blur. |
+| `polynomial_degree` | 4 | Degree of the 2D polynomial surface. |
 | `smoothing_fraction` | 0.05 | Gaussian smoothing of the profile, as a fraction of the image width. |
 
 ## Gate objects (`gate_objects`)

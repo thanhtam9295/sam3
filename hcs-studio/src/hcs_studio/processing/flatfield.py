@@ -2,13 +2,15 @@
 
 The illumination profile is estimated from many fields of the plate: each field is
 divided by its own mean, the per-pixel median across fields removes the cells, and a
-wide Gaussian keeps only the smooth shading. This is a median-based estimate in the
-spirit of BaSiC, not the BaSiC low-rank algorithm itself.
+smooth surface is fitted: a 2D polynomial (default; exact at the image border) or a wide
+Gaussian (for illumination too irregular for a polynomial). This is a median-based
+estimate in the spirit of BaSiC, not the BaSiC low-rank algorithm itself; it needs
+fields where most pixels are background.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import Field
@@ -40,12 +42,33 @@ class FlatFieldParams(ModuleParams):
         ge=2,
         description="Fewer fields than this cannot separate shading from cells; the step fails.",
     )
+    profile_fit: Literal["polynomial", "gaussian"] = Field(
+        default="polynomial",
+        description="Smooth surface fitted to the median: 2D polynomial, or Gaussian blur.",
+    )
+    polynomial_degree: int = Field(
+        default=4, ge=1, le=8, description="Degree of the 2D polynomial surface."
+    )
     smoothing_fraction: float = Field(
         default=0.05,
         gt=0,
         le=0.5,
         description="Gaussian smoothing of the profile, as a fraction of the image width.",
     )
+
+
+def polynomial_surface(image: np.ndarray[Any, Any], degree: int) -> np.ndarray[Any, Any]:
+    """Least-squares 2D polynomial surface of total degree ``degree`` through an image."""
+    rows, cols = image.shape
+    y, x = np.mgrid[:rows, :cols].astype(np.float64)
+    y = (y + 0.5) / rows * 2 - 1
+    x = (x + 0.5) / cols * 2 - 1
+    terms = [x**i * y**j for i in range(degree + 1) for j in range(degree + 1 - i)]
+    design = np.stack([t.ravel() for t in terms], axis=1)
+    values = image.ravel().astype(np.float64)
+    good = np.isfinite(values)
+    coefficients, *_ = np.linalg.lstsq(design[good], values[good], rcond=None)
+    return np.asarray((design @ coefficients).reshape(rows, cols), dtype=np.float64)
 
 
 @MODULES.register("flatfield")
@@ -71,11 +94,28 @@ class FlatField(Module):
             )
         median = np.median(np.stack(stack), axis=0)
         sigma = params.smoothing_fraction * max(median.shape[1:])
-        flat = np.stack([ndimage.gaussian_filter(m, sigma, mode="nearest") for m in median])
+        surfaces, fallback = [], []
+        for c, m in enumerate(median):
+            surface = None
+            if params.profile_fit == "polynomial":
+                surface = polynomial_surface(m, params.polynomial_degree)
+                # Little background (the median is mostly near zero) makes the polynomial
+                # unreliable; fall back to smoothing for that channel and say so.
+                if not surface.min() > 0.05 * abs(surface.mean()):
+                    surface = None
+                    fallback.append(c + 1)
+            if surface is None:
+                surface = ndimage.gaussian_filter(m, sigma, mode="nearest")
+            surfaces.append(surface)
+        flat = np.stack(surfaces)
         flat /= flat.mean(axis=(1, 2), keepdims=True)
         if not np.all(np.isfinite(flat)) or flat.min() <= 0:
             raise ModuleError("Flat-field estimation produced a non-positive profile")
-        return {"flat": flat.astype(np.float32), "n_fields": len(stack)}
+        return {
+            "flat": flat.astype(np.float32),
+            "n_fields": len(stack),
+            "gaussian_fallback_channels": fallback,
+        }
 
     def apply(self, image: ImageData, state: Any) -> ImageData:
         if state is None:
@@ -94,4 +134,5 @@ class FlatField(Module):
             "n_fields": state["n_fields"],
             "profile_min": [float(f.min()) for f in flat],
             "profile_max": [float(f.max()) for f in flat],
+            "gaussian_fallback_channels": state.get("gaussian_fallback_channels", []),
         }

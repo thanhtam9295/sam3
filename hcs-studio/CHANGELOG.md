@@ -26,8 +26,13 @@
   `hcs-studio-windows` GitHub workflow, which also runs the test suite on Windows.
 - User guide shipped as HTML (`scripts/build_docs.py`); new `docs/install.md` and
   `docs/troubleshooting.md`.
-- Fixed: profiling failed on integer features (counts); flat-field test data now shades
-  the background like real optics.
+- Flat-field: the profile is now a fitted 2D polynomial by default (accurate up to the
+  border: corner error 3.8 % → 0.2 %); Gaussian smoothing remains an option. Changes the
+  pipeline hash of runs with flat-field (they cannot be resumed with this version).
+- Plate summary of a 384-well plate: 132 → 46 s, 1.4 → 0.36 GB peak, identical results.
+- Fixed: profiling failed on integer features (counts); synthetic test plates now shade
+  the background like real optics; the frozen bundle misses no matplotlib backend or
+  napari resources (found by the self-test).
 
 ### Phase 9 — phenotypic profiles
 - Profiling of one or more runs: feature selection (missing, near-constant, |r| > 0.95),

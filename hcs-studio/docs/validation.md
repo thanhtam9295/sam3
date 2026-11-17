@@ -200,6 +200,74 @@ Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
 
 Still to do: time a real 384-well plate on the analysis workstation (Phase 10).
 
+## Performance and robustness (Phase 10)
+
+### Full 384-well plate
+
+Synthetic ImageXpress plate written by `scripts/make_test_plate.py`: 384 wells × 2 sites,
+2 channels, 1080 × 1080 px (3.4 GB raw), 30–400 cells per field (149,187 nuclei).
+Pipeline `scripts/pipelines/perf_384.yaml`: flat-field, threshold + watershed nuclei,
+cells grown by 6 µm, all object features (morphology, intensity, radial, Haralick
+texture, granularity), per-cell colocalization, QC. Cloud machine with 4 CPU cores and
+15 GB RAM, `--workers auto` (3 workers); other jobs ran on the machine during part of the
+run, so the times are upper bounds.
+
+| Measure | Result |
+|---|---|
+| Wall time | 22 min (fit 7 s, wells 21 min, tables and report 40 s); 36 fields per minute |
+| CPU time per field, summed over steps | 4.9 s: object features 3.1 s (61 %), colocalization 0.7 s, writing 0.5 s, segmentation 0.3 s, QC 0.2 s, cells 0.1 s, reading 0.01 s |
+| Peak memory | 463 MB per worker; 2.7 GB for the whole machine |
+| Output | 7.5 GB (2.2 × the raw data; float32 corrected images dominate). Without corrected images (`--no-images`) a run folder is about a quarter of that |
+| Failures | none; all 768 fields, 384 well summaries, report |
+
+Optimisations made from this profile:
+
+| Change | Effect |
+|---|---|
+| Granularity by OpenCV morphology with cached disk footprints (was SciPy, footprint rebuilt per call) | object features of a dense field 6.6 → 4.0 s (profiled); openings identical to SciPy's (max difference 0) |
+| Plate summary computed well by well (was: whole plate object table in memory) | on this plate 132 → 46 s and 1,403 → 357 MB peak; identical per-well summary (384 wells × 672 columns); memory no longer grows with plate size |
+| Classifier training from the CLI reads the labelled wells and a sample (was: whole plate table) | bounded memory |
+
+Haralick texture (mahotas, about 2,000 calls per field) is now the largest single cost;
+switch texture off in *Measure: objects* when it is not needed.
+
+### Flat-field accuracy (found while profiling)
+
+The first synthetic plate shaded only the cells, not the background; its flat-field
+estimate was correctly flat, but it showed that the test data were unrealistic. With
+background shaded as in real optics (vignette 0.74–1.13 of the mean):
+
+| Data | Gaussian smoothing (before) | 2D polynomial (now the default) |
+|---|---|---|
+| Background only (30–50 fields) | max error 3.8 % (corners flattened), RMS 0.4 % | max error 0.2 %, RMS 0.06 % |
+| Nuclei, 30–400 per field | RMS 1.8 % | RMS 1.1–1.5 % |
+| Dense cytoplasm stain | RMS 5.3 % | RMS 4–5 % (the median assumes mostly background) |
+
+Tests: `test_flatfield_profile_is_accurate_up_to_the_border` (off-centre, tilted vignette:
+polynomial within 0.5 % everywhere); `test_flatfield_without_background_falls_back_to_smoothing`
+(almost no background: the polynomial is not trusted, Gaussian smoothing is used for that
+channel and listed as `gaussian_fallback_channels` in the manifest; no background at all:
+the step refuses).
+
+### Robustness
+
+| Check | Result | Test |
+|---|---|---|
+| Disk-space check refuses a run that cannot fit, before creating the run folder | yes | `test_refuses_to_start_without_disk_space` |
+| Disk full during a run: the run stops after the failing well (not every well failing), the folder resumes once space is freed | yes | `test_disk_full_stops_the_run_and_it_resumes` |
+| Ctrl+C: stops after the current field, exit code 130, prints the resume command; resume completes | yes | `test_ctrl_c_stops_cleanly_and_resumes` |
+| Runs without corrected images give identical tables | yes | `test_runs_without_saving_images` |
+| Memory limit caps the worker count and the deconvolution budget | yes | `test_memory_limit_caps_workers`, `test_memory_limit_reaches_deconvolution` |
+| Timings per well and per run recorded | yes | `test_run_records_timing_and_performance` |
+| Unexpected GUI errors are logged and shown; the app keeps running | yes | `test_gui_error_handler_logs_and_keeps_running` |
+| `hcs-studio selftest` in the development environment | 9 of 9 checks | `test_selftest_passes` |
+| **Frozen bundle (PyInstaller, Linux, without PyTorch)**: `info`, `selftest` (worker processes, numba, figures inside the bundle), GUI smoke test | all pass, after fixing two bundling gaps the self-test found (matplotlib backends loaded by name; napari's resources package) | manual, `packaging/hcs_studio.spec` |
+
+Not yet done: the Windows installer itself (built and self-tested by the
+`hcs-studio-windows` workflow on a Windows runner; it cannot be built in the Linux
+container), the CUDA variant, and timing a real 384-well plate on the analysis
+workstation.
+
 ## Profiles, PCA/UMAP and dose-response (Phase 9)
 
 Synthetic screen: two plates of 22 wells (4 negative controls, 4 positive controls, Drug X

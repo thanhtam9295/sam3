@@ -24,7 +24,7 @@ from tests.builders import make_imagexpress
 def field_image(row: int, col: int, site: int, wave: int, size: int) -> np.ndarray:
     rng = np.random.default_rng(((row * 100 + col) * 10 + site) * 7)  # same cells for both waves
     n = int(30 + (370 * ((row * 24 + col) % 37) / 36))
-    centres = rng.uniform(12, size - 12, (n, 2))
+    centres = rng.uniform(0, size, (n, 2))  # uniform, cells cut at the border like real fields
     radii = rng.uniform(6, 10, n)
     image = np.zeros((size, size), dtype=np.float32)
     marker = 3.0 if col >= 22 else 1.0
