@@ -33,15 +33,26 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | `max_fields` | 50 | Maximum reference fields sampled. |
 | `smoothing_fraction` | 0.02 | Smoothing of the AF image (fraction of width). |
 
-## Background subtraction (`background`)
+## Background removal (`background`)
 
 Removes smooth background per plane. The radius must be larger than the largest object, or object intensity is removed too.
+
+Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
 
 | Parameter | Default | Meaning |
 |---|---|---|
 | `channels` | None | Channel numbers to process, starting at 1. Empty = all channels. |
-| `method` | 'tophat' | tophat: fast morphological opening; rolling_ball: slower, smoother. |
-| `radius_um` | 25.0 | Radius in µm; choose larger than the largest object. |
+| `method` | 'tophat' | tophat: fast opening; rolling_ball / paraboloid: ImageJ-style; gaussian / median: large blur; polynomial / spline: surface fitted to background pixels; constant: percentile or blank wells; basic: flat- and dark-field from the plate. |
+| `radius_um` | 25.0 | tophat, rolling_ball, paraboloid: radius; gaussian: sigma; median: window radius. Choose larger than the largest object (at least 2× its diameter). |
+| `operation` | 'subtract' | gaussian, median, polynomial, spline: subtract the background, or divide by it (rescaled to its mean; corrects multiplicative shading). |
+| `degree` | 2 | polynomial: degree of the surface. |
+| `grid` | 8 | spline: number of control points along each side. |
+| `constant_source` | 'percentile' | constant: a percentile of each field, or the mean of blank wells. |
+| `percentile` | 5.0 | constant: percentile of each field. |
+| `blank_wells` | [] | constant (blank_wells): wells without cells, e.g. [A01, P24]. Empty = wells marked 'blank' in the plate layout. |
+| `darkfield` | True | basic: also estimate a dark-field. |
+| `max_fields` | 100 | blank_wells, basic: fields sampled across the plate. |
+| `object_diameter_um` | None | Typical object diameter for the radius check; empty = estimated from each field. |
 
 ## CLAHE (local contrast) (`clahe`) — **display only**
 
@@ -260,7 +271,14 @@ Collapses Z. `edf` picks, per pixel, the plane with the highest local sharpness.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `method` | 'max' | edf = extended depth of field (sharpest plane per pixel). |
+| `method` | 'max' | max (default), mean, sum, min, std (standard deviation), or edf = extended depth of field (in-focus detail of every plane). |
+| `edf_method` | 'variance' | edf: variance = sharpest plane per pixel (local variance); pyramid = multi-scale (Laplacian pyramid, wavelet-like) fusion, smoother at plane boundaries. |
+| `planes` | 'all' | all planes; a range (first/last plane); or auto = the planes around the best focus. |
+| `first_plane` | 1 | range: first plane (from 1). |
+| `last_plane` | None | range: last plane (empty = the last one). |
+| `focus_metric` | 'normalized_variance' | auto: focus score of each plane (normalized variance or Brenner gradient). |
+| `n_planes` | 5 | auto: number of planes kept around the best focus. |
+| `focus_channel` | None | auto: channel whose focus chooses the planes for all channels; empty = each channel chooses its own planes. |
 
 ## Measure: field QC and counts (`qc`)
 
@@ -384,6 +402,8 @@ Places the fields of each well in one coordinate system from their stage positio
 | `max_correction_fraction` | 0.1 | Largest accepted correction, × the field size. |
 | `min_correlation` | 0.3 | Overlaps that correlate less are not used. |
 | `image_max_size` | 1024 | Fields are downsampled to this for matching. |
+| `save_mosaic` | False | Also write the well as one linear image (mosaic.ome.tif, all channels; overlaps averaged), e.g. of projected and background-corrected fields. |
+| `mosaic_downsample` | 2 | Mosaic image: block-average by this factor (1 = full resolution; needs all fields of a well in memory). |
 
 ## Linear spectral unmixing (`unmix`)
 

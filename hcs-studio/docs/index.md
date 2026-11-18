@@ -170,6 +170,57 @@ histograms compare one channel before and after. Tick **Live** to re-run the pre
 whenever a parameter changes. Previews estimate plate-level corrections from at most
 24 fields and show the first timepoint only.
 
+### Z projection and background removal
+
+`scripts/pipelines/projection_background.yaml` is the recommended order: flat-field →
+(autofluorescence) → (deconvolution) → **projection** → **background removal**. Load it
+in the Pipeline dock (Load…) and untick what you do not need; steps can be reordered.
+
+**Projection** (`projection`) works on every field, channel and well of a run:
+
+| Option | Choices |
+|---|---|
+| method | **max** (default), mean, sum, min, std, edf (extended depth of field: `variance` = sharpest plane per pixel, `pyramid` = multi-scale fusion, smoother at boundaries) |
+| planes | **all**; range (first/last plane, counted from 1); auto (the `n_planes` planes around the best focus by normalized variance or Brenner; per channel, or chosen by one `focus_channel` for all) |
+
+The planes used for each field and channel (and the focus score of every plane, for
+auto) are stored in `well_summary.json` → `fields[].reports`.
+
+**Background removal** (`background`), one method per step (add several steps with
+different `channels` to use different methods per channel):
+
+| Method | What it removes | Use |
+|---|---|---|
+| tophat | morphological opening with a disk of `radius_um` | fast default |
+| rolling_ball / paraboloid | a ball / paraboloid rolled under the image (ImageJ-style, shrunk for large radii) | smooth backgrounds |
+| gaussian / median | a large blur (bright objects ignored), subtracted or divided | uneven, slowly varying background |
+| polynomial / spline | a smooth surface fitted to background pixels only (objects left out iteratively), subtracted or divided | illumination gradients; divide for multiplicative shading |
+| constant | a percentile of each field, or the mean of blank (no-cell) wells of the plate layout | camera offset, medium autofluorescence |
+| basic | flat-field and dark-field estimated from many (projected) fields across the plate (BaSiC-style: I = S·B + D) | shading not corrected before projection |
+
+Morphological methods (tophat, rolling ball, paraboloid) are estimated on a 3 × 3 mean of
+the image so that noise does not leave a positive floor. Negative values are clipped to
+0; the output stays float and linear, so intensities are measured on background-removed
+data, never on contrast-stretched images.
+
+For every field and channel, the report records the change of the mean intensity inside
+objects and in the background, and the typical object diameter. If the radius is less
+than 2× the typical object diameter (estimated from the image, or `object_diameter_um`),
+a warning appears in the preview, the log and `well_summary.json` → `warnings`: such a
+radius removes signal.
+
+**Checking the result.** Preview the step, choose **Side by side**, then click **Line
+profile…** and draw a line in the viewer: the Pipeline dock plots the intensity along it
+before and after (raw data as maximum over Z), for the channel chosen for the histograms.
+
+**Outputs.** Projected fields are written as 2D OME-TIFFs (`*_corrected.ome.tif`) with
+8-bit preview PNGs. In the run dialog (or `--image-dtype original`), *Saved images* can
+be the camera's bit depth instead of 32-bit float: values are rounded and clipped (the
+number of clipped pixels is recorded and logged); measurements always use the float
+values. `stitch_well` with `save_mosaic: true` also writes each well as one linear
+image (`wells/<W>/mosaic.ome.tif`, all channels, overlaps averaged, downsampled by
+`mosaic_downsample`).
+
 ### Display-only results
 
 Steps marked **◐ display only** (contrast, CLAHE, sharpen, clarity) change intensities
@@ -232,6 +283,7 @@ hcs-studio run --pipeline pipe.yaml --input <plate folder> --wells A01-H12 --wor
 | `--layout` | plate layout (CSV, XLSX, plate-map XLSX or JSON) |
 | `--no-checksums` | record input file size and time instead of SHA-256 |
 | `--no-images` | do not save corrected images; masks, previews and all tables are still written (run folders shrink to about a quarter) |
+| `--image-dtype` | `float32` (default) or `original`: save corrected images in the camera's bit depth (rounded, clipped; half the size) |
 | `--max-memory-gb` | RAM the whole run may use; limits the number of workers and the deconvolution tile size |
 | `--resume <run folder>` | continue an interrupted run (plate and pipeline are read from the folder) |
 | `--retry-failed <run folder>` | rerun only the wells that failed |

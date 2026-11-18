@@ -126,7 +126,7 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - `multiprocessing.freeze_support()` must run first in the frozen entry (`packaging/entry.py`); worker processes of the bundle restart the executable.
 - `scripts/make_test_plate.py` writes realistic synthetic plates (384 wells); `scripts/pipelines/perf_384.yaml` is the reference pipeline for performance numbers in docs/validation.md.
 
-## Add-on phases 11–15 (PROMPT_ADDON.md) — approved; Phase 11 built
+## Add-on phases 11–15 (PROMPT_ADDON.md) — approved; Phases 11–12 built
 
 Order: 11 annotation → 12 projection + background → 13 pharmacology → 14 comparison/export → 15 integration (all prerequisites, Phases 1–10, are built). Stop for review after each phase.
 
@@ -168,6 +168,19 @@ PlateLayout (model/annotation.py)
   keeps `layout_document` (shown), `_run_layout` + `layout_path` (what runs use);
   `layout_for_run()` saves unsaved edits as a new version first.
 - Echo/D300 dispense-file import is deferred until a sample file is provided.
+
+### Projection and background conventions (Phase 12, built)
+
+- `processing/projection.py` (`projection`) and `processing/background.py` (`background`)
+  report per field through `ImageData.reports` (`{"module": …}`): planes used (from 1),
+  focus scores, per-channel object/background mean changes, `warnings`. `process_well`
+  collects report `warnings` into `well_summary.json` → `warnings` and log events.
+- `Background.needs_fit` is a property (only `basic` and `constant` + blank wells fit).
+- Measurements never use saved files: `image_dtype="original"` only changes what is
+  written (`to_storage_dtype`).
+- `stitch_well.save_mosaic` writes `mosaic.ome.tif` with `float_mosaic` (overlaps averaged).
+- Large synthetic Z-stack plates: `utils/synthetic.write_ome_zarr_plate` (compact; a
+  384 × 3 × 20-plane plate writes in ~10 s).
 
 ### New dependencies (approved list for 11–15)
 

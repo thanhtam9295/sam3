@@ -1,0 +1,9 @@
+# Phase 12 default order: flat-field → (AF subtraction) → (deconvolution) → projection →
+# background removal. Untick or delete the optional steps you do not need.
+name: projection-and-background
+steps:
+  - {module: flatfield}
+  - {module: af_reference, enabled: false}
+  - {module: deconvolution, enabled: false}
+  - {module: projection, params: {method: max, planes: all}}
+  - {module: background, params: {method: rolling_ball, radius_um: 25}}

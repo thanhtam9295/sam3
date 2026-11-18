@@ -46,7 +46,7 @@ def test_projections_equal_known_values() -> None:
     out = create_module("projection").apply(data, None)  # default: maximum
     assert out.data.shape == (2, 1, 32, 32) and out.linear
     assert np.array_equal(out.data[:, 0], np.full((2, 32, 32), 5000, np.float32))
-    expected = {
+    expected: dict[str, np.ndarray] = {
         "mean": stack.mean(axis=1),
         "sum": stack.sum(axis=1, dtype=np.float64),
         "min": stack.min(axis=1),
@@ -131,7 +131,7 @@ def _gradient_with_spots(
         300 + 0.25 * xx + 0.1 * yy + 150 * np.exp(-((yy - 200) ** 2 + (xx - 350) ** 2) / 64800)
     )
     spots = np.zeros((n, n))
-    centres = []
+    centres: list[tuple[float, float]] = []
     while len(centres) < 40:
         y, x = rng.uniform(20, n - 20, 2)
         if all((y - a) ** 2 + (x - b) ** 2 > 30**2 for a, b in centres):

@@ -66,6 +66,7 @@ def test_run_records_timing_and_performance(plate_dir: Path, tmp_path: Path) -> 
     assert performance["output_gb"] > 0
     assert manifest["options"] == {
         "save_images": True,
+        "image_dtype": "float32",
         "max_memory_gb": None,
         "workers_requested": 1,
     }

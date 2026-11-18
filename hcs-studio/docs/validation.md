@@ -200,6 +200,51 @@ Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
 
 Still to do: time a real 384-well plate on the analysis workstation (Phase 10).
 
+## Projection and background removal (Phase 12)
+
+### Verified on synthetic data
+
+| Check | Result |
+|---|---|
+| Max projection of 20-plane stacks with a known maximum per pixel | exact |
+| mean, sum, min, std projections | equal to NumPy (rtol 1e-5) |
+| EDF (variance and pyramid) of a stack with different in-focus halves | correlation with the sharp texture > 0.97 (higher than the MIP) |
+| Auto plane selection (normalized variance, Brenner) on stacks with known best focus | best plane found; planes reported per channel |
+| Background removal on a 512 × 512 gradient (≈ 50 % across the field + a broad bump) with 40 Gaussian spots and noise (SD 5): integrated spot intensity (radius 6.5 px) | within ± 5 % for every spot and every method: tophat, rolling ball, paraboloid, gaussian, median, polynomial, spline (worst: rolling ball / paraboloid ≈ 4–5 %, from the noise floor left by the opening) |
+| Divide by a polynomial surface under 40 % multiplicative shading | background CV < 1 %, spots equal within 2 % |
+| BaSiC-style flat- and dark-field from 40 fields with different backgrounds | flat-field within 3 %, dark-field within 15 counts (of 60–110); corrected background CV < 3 % |
+| Radius check | warns for radius < 2× object diameter; objects of 8 µm lose > 80 % (tophat) or > 20 % (rolling ball) with a 3 µm radius, < 30 % with 20 µm |
+| 384 wells × 3 channels × 20 planes (32 × 32 px fields, OME-Zarr) in the batch queue | cancelled after 100 wells and resumed: no well redone, all 384 equal to projection + background applied directly |
+
+### Choices to know
+
+- Morphological backgrounds (tophat, rolling ball, paraboloid) are estimated on a 3 × 3
+  mean, as ImageJ does by default. Without it, an opening of a noisy image follows the
+  noise minima and leaves a floor of about 2–3 noise SDs, which added +5–15 % to spot
+  sums in the test above.
+- Rolling ball and paraboloid use the intensity scale for the ball's height, as ImageJ
+  does. On steep slopes (g counts per pixel) the ball stays R·(√(1 + g²) − 1) below the
+  surface: negligible for real shading (g ≪ 1), noticeable on very steep synthetic
+  ramps. Large radii are computed on a shrunk image (block mean, not ImageJ's block
+  minimum, which added another noise-minimum bias).
+- The Gaussian background ignores bright objects (pixels > 2.5 robust SDs above the blur
+  are replaced and the image re-blurred); a plain blur raised each spot's own background
+  and lost 8 % of its intensity.
+- BaSiC-style dark-field: D is only defined up to a multiple of the flat-field (a
+  constant added to every field's baseline moves into D). The multiple that leaves D
+  uncorrelated with S is used, which is exact for uniform (camera offset) and linear
+  dark-fields; a dark-field shaped like the vignetting cannot be separated. With field
+  backgrounds that vary by < 5 %, no dark-field is estimated (a note says so).
+- This BaSiC-style estimate is a per-pixel regression with Gaussian smoothing, not the
+  published L1 / low-rank optimisation of Peng et al. (2017).
+
+### Still to do on real data
+
+- Compare projection + background with Fiji (Z Project; Subtract Background with rolling
+  ball and sliding paraboloid) on the same fields.
+- BaSiC on a real plate against the BaSiC Fiji plugin or `basicpy`.
+- Typical radius and runtime on full-size (2048 × 2048) fields.
+
 ## Performance and robustness (Phase 10)
 
 ### Full 384-well plate

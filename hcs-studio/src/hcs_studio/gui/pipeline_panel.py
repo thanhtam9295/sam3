@@ -38,6 +38,7 @@ COMPARE_MODES = ("After", "Before", "Side by side")
 class PipelinePanel(QWidget):
     """Edits a pipeline; ``preview_requested`` carries the steps up to the selected one."""
 
+    profile_requested = Signal()
     preview_requested = Signal(object)
     compare_mode_changed = Signal(str)
     #: The user wants to run the whole pipeline on a plate (opens the run dialog).
@@ -110,6 +111,19 @@ class PipelinePanel(QWidget):
         self._before: ImageData | None = None
         self._after: ImageData | None = None
 
+        self.profile_button = QPushButton("Line profile…")
+        self.profile_button.setToolTip(
+            "Draw a line in the viewer to plot the intensity along it, before and after "
+            "the previewed steps (channel of the histogram)."
+        )
+        self.profile_button.clicked.connect(self.profile_requested)
+        self.profile_plot = pg.PlotWidget()
+        self.profile_plot.setMinimumHeight(140)
+        self.profile_plot.addLegend(offset=(5, 5))
+        self.profile_plot.setLabel("left", "intensity")
+        self.profile_plot.setLabel("bottom", "distance")
+        self._profile_line: tuple[tuple[float, float], tuple[float, float]] | None = None
+
         self.load_button = QPushButton("Load…")
         self.load_button.clicked.connect(self._choose_load)
         self.save_button = QPushButton("Save…")
@@ -133,8 +147,9 @@ class PipelinePanel(QWidget):
         layout.addLayout(row(self.preview_button, self.preview_all_button, self.live))
         layout.addLayout(row(QLabel("Show"), self.compare, self.run_button))
         layout.addWidget(self.status)
-        layout.addLayout(row(QLabel("Histogram of"), self.histogram_channel))
+        layout.addLayout(row(QLabel("Histogram of"), self.histogram_channel, self.profile_button))
         layout.addWidget(self.histograms, 2)
+        layout.addWidget(self.profile_plot, 1)
 
     # ------------------------------------------------------------------ steps
 
@@ -338,7 +353,41 @@ class PipelinePanel(QWidget):
         self.histogram_channel.blockSignals(False)
         self._draw_histograms()
 
+    def set_profile_line(self, start: tuple[float, float], end: tuple[float, float]) -> None:
+        """Plot the intensity along ``start`` → ``end`` ((y, x) pixels of the field)."""
+        self._profile_line = (start, end)
+        self._draw_profile()
+
+    def profile_curves(self) -> dict[str, tuple[Any, Any]]:
+        """Distance and values along the drawn line, before and after the preview."""
+        from hcs_studio.analysis.line_profile import line_profile
+
+        channel = self.histogram_channel.currentIndex()
+        if self._profile_line is None:
+            return {}
+        curves: dict[str, tuple[Any, Any]] = {}
+        for label, image in (("before", self._before), ("after", self._after)):
+            if image is None or not 0 <= channel < image.data.shape[0]:
+                continue
+            stack = image.data[channel]
+            name = f"{label} (max over Z)" if stack.shape[0] > 1 else label
+            curves[name] = line_profile(
+                stack.max(axis=0), *self._profile_line, image.metadata.pixel_size_um
+            )
+        return curves
+
+    def _draw_profile(self) -> None:
+        self.profile_plot.clear()
+        unit = "µm" if self._after is not None and self._after.metadata.pixel_size_um else "px"
+        self.profile_plot.setLabel("bottom", f"distance ({unit})")
+        for (name, (distance, values)), colour in zip(
+            self.profile_curves().items(), ((150, 150, 150), (230, 120, 20)), strict=False
+        ):
+            self.profile_plot.plot(distance, values, pen=pg.mkPen(colour, width=2), name=name)
+
     def _draw_histograms(self) -> None:
+        if self._profile_line is not None:
+            self._draw_profile()
         channel = self.histogram_channel.currentIndex()
         for plot, image in zip(self._plots, (self._before, self._after), strict=True):
             plot.clear()

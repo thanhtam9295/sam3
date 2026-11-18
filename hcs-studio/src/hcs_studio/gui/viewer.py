@@ -8,7 +8,7 @@ which keeps its layer list and layer controls working.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import napari
@@ -153,6 +153,47 @@ class ViewerPanel:
             units=units,
         )
         return list(layers) if isinstance(layers, list) else [layers]
+
+    PROFILE_LAYER = "line profile"
+
+    def start_line_profile(
+        self,
+        callback: Callable[[tuple[float, float], tuple[float, float]], None],
+        pixel_um: float | None,
+    ) -> Any:
+        """Let the user draw a line; ``callback(start, end)`` gets its ends as (y, x) pixels
+        of the field (the right-hand copy of side-by-side is mapped back)."""
+        pixel = pixel_um or 1.0
+        if self.PROFILE_LAYER in self.layer_names():
+            layer = self.viewer.layers[self.PROFILE_LAYER]
+        else:
+            layer = self.viewer.add_shapes(
+                name=self.PROFILE_LAYER,
+                ndim=2,
+                scale=[pixel, pixel],
+                edge_color="yellow",
+                edge_width=max(1.0, 2 * pixel) / pixel,
+            )
+        offset = self._after_width * 1.05 / pixel if self._after_width else 0.0
+
+        def changed(event: Any = None) -> None:
+            lines = [
+                d for d, kind in zip(layer.data, layer.shape_type, strict=True) if kind == "line"
+            ]
+            if not lines:
+                return
+            (y0, x0), (y1, x1) = (tuple(float(v) for v in p[-2:]) for p in lines[-1][:2])
+            if offset and min(x0, x1) >= offset:  # drawn on the "after" copy
+                x0, x1 = x0 - offset, x1 - offset
+            callback((y0, x0), (y1, x1))
+
+        if not getattr(layer, "_hcs_profile_connected", False):
+            layer.events.data.connect(changed)
+            layer._hcs_profile_connected = True
+        layer._hcs_profile_callback = changed
+        self.viewer.layers.selection.active = layer
+        layer.mode = "add_line"
+        return layer
 
     def set_compare_mode(self, mode: str) -> None:
         """'After', 'Before' or 'Side by side' for the layers of ``show_comparison``."""

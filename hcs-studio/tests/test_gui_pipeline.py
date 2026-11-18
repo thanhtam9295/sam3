@@ -57,7 +57,13 @@ def test_param_form_builds_editors_and_validates(qtbot: QtBot) -> None:
     assert isinstance(form.editor("method"), QComboBox)
     radius = form.editor("radius_um")
     assert isinstance(radius, QLineEdit) and radius.text() == "12"
-    assert form.values() == {"channels": None, "method": "tophat", "radius_um": 12.0}
+    values = form.values()
+    assert {k: values[k] for k in ("channels", "method", "radius_um", "operation")} == {
+        "channels": None,
+        "method": "tophat",
+        "radius_um": 12.0,
+        "operation": "subtract",
+    }
 
     channels = form.editor("channels")
     assert isinstance(channels, QLineEdit)
@@ -86,7 +92,7 @@ def test_panel_edits_saves_and_loads_a_pipeline(qtbot: QtBot, tmp_path: Path) ->
     panel.add_step("clahe")
     panel.add_step("denoise")
     assert [panel.steps.item(i).text() for i in range(3)] == [
-        "1. Background subtraction",
+        "1. Background removal",
         "2. CLAHE (local contrast)  ◐ display only",
         "3. Denoise",
     ]
@@ -152,6 +158,19 @@ def test_preview_shows_before_and_after(window: MainWindow, qtbot: QtBot) -> Non
     assert all(layer.visible for layer in viewer.layers)
     assert viewer.layers[2].translate[-1] == pytest.approx(80 * 0.65 * 1.05)
     assert viewer.layers[0].translate[-1] == 0
+    # line profile, drawn on the "after" copy of side by side: mapped back to the field
+    window.start_line_profile()
+    lines = viewer.layers["line profile"]
+    lines.add_lines(np.array([[40.0, 84.0], [40.0, 163.0]]))
+    assert panel._profile_line == ((40.0, 0.0), (40.0, 79.0))
+    curves = panel.profile_curves()
+    assert set(curves) == {"before", "after"}
+    distance, values = curves["before"]
+    assert distance[-1] == pytest.approx(79 * 0.65)
+    assert np.median(values) > 300 and np.median(curves["after"][1]) < 10
+    assert len(panel.profile_plot.listDataItems()) == 2
+    viewer.layers.remove(lines)
+
     panel.compare.setCurrentText("Before")
     assert [layer.visible for layer in viewer.layers] == [True, True, False, False]
 

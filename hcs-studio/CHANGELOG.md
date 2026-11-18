@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Phase 12 — Z projection and background removal after projection
+- Projection: max (default), mean, sum, min, standard deviation, extended depth of field
+  (variance or multi-scale pyramid); all planes, a plane range, or automatically chosen
+  in-focus planes (normalized variance or Brenner; per channel or from one channel). The
+  planes used per field and channel are stored in `well_summary.json`.
+- Background removal: top-hat, rolling ball, sliding paraboloid, Gaussian or median
+  background (subtract or divide), polynomial or spline surface fitted to background
+  pixels, constant (percentile or blank wells of the plate layout), and BaSiC-style flat-
+  and dark-field estimated across the plate. Negatives clipped, float and linear output.
+- Guard rails: warning when the radius is under 2× the typical object diameter; change
+  of the mean inside objects and in the background reported per field and channel;
+  warnings appear in the preview, the log and `well_summary.json`.
+- Line-profile tool: draw a line in the viewer to plot intensity before and after.
+- Saved corrected images in float32 or the camera's bit depth (`--image-dtype`, run dialog).
+- `stitch_well` can write each well as one linear image (`mosaic.ome.tif`).
+- Recommended pipeline `scripts/pipelines/projection_background.yaml`.
+- OME-Zarr synthetic plate writer (`write_ome_zarr_plate`) for tests.
+- Changed: the morphological background step now estimates on a 3 × 3 mean (less noise
+  bias) and its title is "Background removal". Runs with a `background` or `projection`
+  step from earlier versions get a new pipeline hash and cannot be resumed.
+
 ### Phase 11 — plate annotation (PROMPT_ADDON.md)
 - New **Layout** tab: annotate cell line, treatments (single agents and combinations, each
   with concentration, unit and vehicle), role, passage, cells per well, time point, notes

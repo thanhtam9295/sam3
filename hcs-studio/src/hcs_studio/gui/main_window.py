@@ -169,6 +169,7 @@ class MainWindow(QMainWindow):
         self.preview.failed.connect(self._on_preview_failed)
         self.pipeline_panel.preview_requested.connect(self.preview_pipeline)
         self.pipeline_panel.compare_mode_changed.connect(self.viewer_panel.set_compare_mode)
+        self.pipeline_panel.profile_requested.connect(self.start_line_profile)
         self.segmentation_panel.model_trained.connect(self._on_model_trained)
         self.pipeline_panel.run_requested.connect(self.open_run_dialog)
         self.results_panel.open_field.connect(self.open_result_field)
@@ -634,21 +635,43 @@ class MainWindow(QMainWindow):
         else:
             note = "DISPLAY ONLY: not for intensity measurement"
         details = [
-            f"{c['channel']}: {c['mode']}, {c['iterations']} iterations, residual "
+            f"Deconvolution {c['channel']}: {c['mode']}, {c['iterations']} iterations, residual "
             f"{c['residual']:.3f}, {c['seconds']:.1f} s, {c['tiles']} tile(s) on {r['backend']}"
             for r in result.final.reports
             if r.get("module") == "deconvolution"
             for c in r["channels"]
         ]
+        for report in result.final.reports:
+            if report.get("module") == "projection":
+                details.append(f"projection {report['method']}: planes {report['planes']}")
+            if report.get("module") == "background":
+                for c in report["channels"]:
+                    if "object_mean_change_pct" in c:
+                        details.append(
+                            f"background ({report['method']}) channel {c['channel']}: mean "
+                            f"inside objects {c['object_mean_change_pct']:+.1f} %, background "
+                            f"{c['background_mean_change_pct']:+.1f} %"
+                        )
+                details.extend(f"WARNING {w}" for w in report.get("warnings", []))
         panel.status.setText(
             f"Preview: {steps}. {note}. Plate-level estimates use up to "
             f"{self.PREVIEW_FIT_FIELDS} fields in previews; first timepoint shown."
-            + "".join(f"\nDeconvolution {d}" for d in details)
+            + "".join(f"\n{d}" for d in details)
         )
         for line in details:
-            self.log(f"Deconvolution {line}")
+            self.log(line)
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Preview: {steps} ({note})")
+
+    def start_line_profile(self) -> None:
+        """Draw a line in the viewer; the Pipeline dock plots before/after along it."""
+        if self._preview is None:
+            self.pipeline_panel.status.setText("Preview a step first, then draw the line.")
+            return
+        pixel = self._preview.final.metadata.pixel_size_um
+        self.viewer_panel.start_line_profile(self.pipeline_panel.set_profile_line, pixel)
+        self.tabs.setCurrentWidget(self.viewer_panel.widget)
+        self.log("Line profile: draw a line in the viewer (click the start, double-click the end).")
 
     def _on_preview_failed(self, message: str) -> None:
         self.pipeline_panel.status.setText(f"Preview failed: {message}")
