@@ -18,7 +18,7 @@ export can be regenerated exactly from the small JSON written next to it.
 |---|---|
 | grid | the wells in order; rows × columns (automatic or given) |
 | by concentration × cell line | columns ascending by total drug concentration, rows by cell line, headers from the annotation (one well per cell) |
-| combination matrix | a drug pair as an image grid: drug A down (highest at the top, as in the heat maps), drug B across; the 0 row/column are the single agents and the corner the matrix's own vehicle well |
+| combination matrix | a drug pair as an image grid: drug A down (highest at the top, as in the heat maps), drug B across; the 0 row/column are the single agents and the corner the matrix's own vehicle well; with several drug pairs on the plate, the panel asks which pair |
 | one compound | that compound's single-agent wells and each cell line's vehicle wells |
 
 ## Showing panels
@@ -57,6 +57,11 @@ text (editable; TrueType in PDF) and scale bars are vector shapes.
 | font size, background, spacing | as in the export settings |
 | stamp | Z plane (or "max Z") in each panel |
 
+PNG and TIFF exports are limited to 250 megapixels (a 180 mm figure at 600 dpi is
+about 18 MP per 100 mm of height); a larger figure is refused with a message: lower the
+dpi, use fewer panels, or export SVG/PDF (vector; images embedded at native size).
+Loaded panels are cached up to 2 GB (least recently used first out).
+
 **Presets** save and reuse export settings (`~/.hcs_studio/export_presets/`).
 **Batch: a figure per compound** writes one figure per compound of the layout
 (concentrations as columns, cell lines as rows).
@@ -65,8 +70,10 @@ text (editable; TrueType in PDF) and scale bars are vector shapes.
 
 - **Export data**: one OME-TIFF per panel (the shown plane, cropped; float32 or uint16)
   and `panels_readouts.csv` with the shown wells' per-well readouts.
-- **Export movie (Z)**: GIF or MP4 scrolling through Z with all panels in step (the
-  sources must have several planes; run outputs keep the first timepoint only).
+- **Export movie (Z or time)**: GIF or MP4 with all panels in step, scrolling through Z
+  or through timepoints. Run outputs keep the first timepoint only, so a time-lapse movie
+  needs `raw` or `step:<n>` sources (recomputed per timepoint); each frame is stamped
+  `t N` (export setting **stamp time**).
 
 ## The sidecar
 

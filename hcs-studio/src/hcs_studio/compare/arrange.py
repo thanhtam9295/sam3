@@ -66,12 +66,15 @@ def by_annotation(
     def key(a: WellAnnotation, by: str) -> tuple[Any, str]:
         drugs = _drugs(a)
         if by == "concentration":
-            value = sum(t.concentration for t in drugs)
+            # sort within a unit kind (molar, mass…): base units of different kinds differ
+            # by orders of magnitude and must not be compared
+            kinds = " + ".join(sorted({t.kind for t in drugs}))
+            order = (kinds, sum(t.concentration for t in drugs))
             text = " + ".join(
                 f"{t.compound} {units.format_concentration(t.concentration, t.unit)}" for t in drugs
             )
             return (
-                value,
+                order,
                 text or (a.role.replace("_", " ") if a.role != "sample" else "untreated"),
             )
         if by == "compound":

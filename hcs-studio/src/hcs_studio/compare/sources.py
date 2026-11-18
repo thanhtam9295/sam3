@@ -129,6 +129,7 @@ def load_panel(panel: PanelSpec, representative_readout: str | None = None) -> P
 def clear_cache() -> None:
     with _LOCK:
         _CACHE.clear()
+        _CONTEXTS.clear()
 
 
 def _load(run: Path, well: str, field: int, source: str, timepoint: int) -> PanelImage:
@@ -155,14 +156,34 @@ def _load(run: Path, well: str, field: int, source: str, timepoint: int) -> Pane
     raise ValueError(f"Unknown image source {source!r} (raw, corrected, enhanced or step:<n>)")
 
 
-def _recompute(run: Path, well: str, field: int, source: str, timepoint: int) -> PanelImage:
+@dataclass
+class _RunContext:
+    plate: Any
+    runner: Any
+    lock: threading.Lock
+
+
+_CONTEXTS: OrderedDict[tuple[str, int], _RunContext] = OrderedDict()
+
+
+def _context(run: Path) -> _RunContext:
+    """The reopened raw plate and a pipeline runner of a run, reused across panels and
+    timepoints (reopening a plate parses its whole index); a few runs are kept."""
+    from dataclasses import replace
+
     from hcs_studio.io.base import reopen_plate
     from hcs_studio.model.layout import load_plate_layout, run_layout_file
     from hcs_studio.output.load import run_metadata
     from hcs_studio.pipeline.executor import PipelineRunner
     from hcs_studio.pipeline.schema import Pipeline
 
-    manifest = json.loads((run / "run_manifest.json").read_text(encoding="utf-8"))
+    manifest_file = run / "run_manifest.json"
+    key = (str(run), manifest_file.stat().st_mtime_ns)
+    with _LOCK:
+        if key in _CONTEXTS:
+            _CONTEXTS.move_to_end(key)
+            return _CONTEXTS[key]
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     source_info = manifest["plate"].get("source")
     if not source_info:
         raise ValueError("this run does not record how to reopen its raw data")
@@ -170,20 +191,34 @@ def _recompute(run: Path, well: str, field: int, source: str, timepoint: int) ->
         plate = reopen_plate(source_info)
     except Exception as exc:
         raise ValueError(f"the raw data of {run.name} could not be opened: {exc}") from None
-    from dataclasses import replace
-
     plate = replace(plate, metadata=run_metadata(run))
+    layout_file = run_layout_file(run)
+    layout = dict(load_plate_layout(layout_file).wells) if layout_file else {}
+    runner = PipelineRunner(plate, Pipeline.load(run / "pipeline.yaml"), layout)
+    state_file = run / "state" / "fitted.pkl"
+    if state_file.exists():
+        runner.set_states(pickle.loads(state_file.read_bytes())["states"])
+    else:
+        runner.set_states([None] * len(runner.modules))
+    context = _RunContext(plate, runner, threading.Lock())
+    with _LOCK:
+        _CONTEXTS[key] = context
+        while len(_CONTEXTS) > 4:
+            _CONTEXTS.popitem(last=False)
+    return context
+
+
+def _recompute(run: Path, well: str, field: int, source: str, timepoint: int) -> PanelImage:
+    context = _context(run)
+    plate, runner = context.plate, context.runner
     key = parse_well_name(well)
     if key not in plate.wells:
         raise ValueError(f"{well} is not in the raw data")
     item = next((f for f in plate.wells[key].fields if f.index == field), None)
     if item is None:
         raise ValueError(f"{well} has no field {field} in the raw data")
-    layout_file = run_layout_file(run)
-    layout = dict(load_plate_layout(layout_file).wells) if layout_file else {}
-    pipeline = Pipeline.load(run / "pipeline.yaml")
-    runner = PipelineRunner(plate, pipeline, layout)
-    raw = runner.load(item, timepoint)
+    with context.lock:  # one runner per run: processing is not shared across threads
+        raw = runner.load(item, timepoint)
     files = tuple(str(p) for p in item.sources) or (str(plate.path),)
     if source == "raw":
         return PanelImage(raw, field, source, files, ())
@@ -195,14 +230,13 @@ def _recompute(run: Path, well: str, field: int, source: str, timepoint: int) ->
         raise ValueError(
             f"The pipeline has {len(runner.modules)} image steps; step {upto} does not exist"
         )
-    state_file = run / "state" / "fitted.pkl"
-    if any(m.needs_fit for m in runner.modules[:upto]):
-        if not state_file.exists():
-            raise ValueError("this run has no saved plate-level estimates (state/fitted.pkl)")
-        runner.set_states(pickle.loads(state_file.read_bytes())["states"])
-    else:
-        runner.set_states([None] * len(runner.modules))
-    result = runner.process(raw, upto=upto, _fit=False)
+    if (
+        any(m.needs_fit for m in runner.modules[:upto])
+        and not (run / "state" / "fitted.pkl").exists()
+    ):
+        raise ValueError("this run has no saved plate-level estimates (state/fitted.pkl)")
+    with context.lock:
+        result = runner.process(raw, upto=upto, _fit=False)
     return PanelImage(result.final, field, source, files, tuple(result.final.history))
 
 

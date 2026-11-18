@@ -214,8 +214,6 @@ def surface_background(
 ) -> FloatImage:
     """A smooth surface through the background pixels: pixels more than 2.5 robust SDs
     above the current surface are left out and the surface is refitted."""
-    import cv2
-
     small = block_reduce_mean(plane, 256).astype(np.float64)
     work = small.copy()
     surface = np.full_like(small, np.median(small))
@@ -231,7 +229,6 @@ def surface_background(
         if np.array_equal(np.isnan(new), np.isnan(work)):
             break
         work = new
-    del cv2
     return resize_to(surface.astype(np.float32), plane.shape)
 
 

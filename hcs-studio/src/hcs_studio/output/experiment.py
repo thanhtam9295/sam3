@@ -54,14 +54,35 @@ def _table(frame: pd.DataFrame, columns: list[str] | None = None) -> str:
     return f"<table><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table>"
 
 
-def _layout_has_drugs(folder: Path) -> bool:
-    from hcs_studio.model.layout import load_plate_layout, run_layout_file
-
-    path = run_layout_file(folder)
-    if path is None:
+def _has_drugs(layout: Any) -> bool:
+    if layout is None:
         return False
-    layout = load_plate_layout(path)
-    return any(t.kind != "percent" for a in layout.wells.values() for t in a.active_treatments)
+    return any(
+        t.kind != "percent"
+        for a in layout.wells.values()
+        if a.role not in ("negative_control", "positive_control", "untreated")
+        for t in a.active_treatments
+    )
+
+
+#: Boolean columns of ``tables/qc_flags.csv`` and how the report names them.
+QC_FLAGS = {
+    "out_of_focus": "out of focus",
+    "saturated": "saturated",
+    "edge_field": "edge field",
+    "excluded": "excluded from statistics",
+    "low_count_well": "in a low-count well",
+}
+
+
+def qc_flag_summary(flags: pd.DataFrame) -> pd.DataFrame:
+    """Fields per QC flag (of all fields)."""
+    rows = [
+        {"flag": label, "fields": int(flags[col].astype(bool).sum()), "of": len(flags)}
+        for col, label in QC_FLAGS.items()
+        if col in flags
+    ]
+    return pd.DataFrame(rows)
 
 
 def write_experiment_report(
@@ -90,7 +111,9 @@ def write_experiment_report(
 
     # pharmacology (reuse, or run now)
     pharm_dir = folder / "pharmacology"
-    if not (pharm_dir / "pharmacology.json").exists() and _layout_has_drugs(folder):
+    layout_file = run_layout_file(folder)
+    layout = load_plate_layout(layout_file) if layout_file is not None else None
+    if not (pharm_dir / "pharmacology.json").exists() and _has_drugs(layout):
         from hcs_studio.analysis.run_steps import default_readouts
         from hcs_studio.pharmacology.analysis import PharmOptions, run_pharmacology
 
@@ -106,9 +129,7 @@ def write_experiment_report(
 
     # plate layout figures
     layout_figures: list[tuple[Path, str]] = []
-    layout_file = run_layout_file(folder)
-    if layout_file is not None:
-        layout = load_plate_layout(layout_file)
+    if layout is not None:
         for layer in ("compound", "concentration", "cell_line", "role"):
             path = out / f"layout_{layer}.png"
             write_layout_figure(layout, path, layer)
@@ -120,9 +141,7 @@ def write_experiment_report(
     # QC
     flags_file = folder / "tables" / "qc_flags.csv"
     flags = pd.read_csv(flags_file) if flags_file.exists() else pd.DataFrame()
-    flag_summary = pd.DataFrame()
-    if not flags.empty and "flag" in flags:
-        flag_summary = flags.groupby("flag").size().rename("fields").reset_index()
+    flag_summary = qc_flag_summary(flags) if not flags.empty else pd.DataFrame()
     plate_qc = (
         pd.read_csv(pharm_dir / "plate_qc.csv")
         if (pharm_dir / "plate_qc.csv").exists()
@@ -145,7 +164,7 @@ def write_experiment_report(
 
     # representative montages
     montage_files: list[Path] = []
-    if montages and _layout_has_drugs(folder) and (folder / "wells").exists():
+    if montages and _has_drugs(layout) and (folder / "wells").exists():
         from hcs_studio.compare.export import batch_compound_figures
         from hcs_studio.compare.spec import Comparison, ExportSettings, PanelSpec
 

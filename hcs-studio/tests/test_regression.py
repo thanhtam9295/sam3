@@ -100,6 +100,8 @@ def test_run_steps_and_outputs(run: Path) -> None:
         "Dose–response",
         "Combinations",
         "Representative images",
+        "Field QC flags",
+        "out of focus",
         "Methods",
         "Segmentation: threshold + watershed",
         "percent inhibition",

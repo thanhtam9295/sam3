@@ -32,6 +32,20 @@ SIDECAR_FORMAT = "hcs-studio-figure/1"
 MAX_MEGAPIXELS = 250.0
 
 
+def fingerprint(path: Path) -> str:
+    """SHA-256 of a file; for a folder (OME-Zarr, vendor exports) a ``tree:`` digest of
+    every file's relative path, size and modification time (contents are not read)."""
+    if path.is_file():
+        return file_sha256(path)
+    import hashlib
+
+    digest = hashlib.sha256()
+    for item in sorted(p for p in path.rglob("*") if p.is_file()):
+        stat = item.stat()
+        digest.update(f"{item.relative_to(path)}|{stat.st_size}|{stat.st_mtime_ns}\n".encode())
+    return "tree:" + digest.hexdigest()
+
+
 def _sidecar(path: Path, comparison: Comparison, kind: str, extra: dict[str, Any]) -> Path:
     from hcs_studio import __version__
 
@@ -39,8 +53,8 @@ def _sidecar(path: Path, comparison: Comparison, kind: str, extra: dict[str, Any
     seen: dict[str, str] = {}
     for source in sources:
         for f in source.get("files", []):
-            if f not in seen and Path(f).is_file():
-                seen[f] = file_sha256(Path(f))
+            if f not in seen and Path(f).exists():
+                seen[f] = fingerprint(Path(f))
     data = {
         "format": SIDECAR_FORMAT,
         "kind": kind,
@@ -134,7 +148,7 @@ def regenerate(sidecar: Path, output: Path | None = None) -> Path:
     changed = [
         f
         for f, digest in data.get("checksums", {}).items()
-        if Path(f).exists() and file_sha256(Path(f)) != digest
+        if Path(f).exists() and fingerprint(Path(f)) != digest
     ]
     if changed:
         raise ValueError(f"source files changed since the export: {', '.join(changed[:3])}")

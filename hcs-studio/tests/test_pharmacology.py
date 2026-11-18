@@ -446,3 +446,18 @@ def test_analyse_without_files() -> None:
     assert set(rr.combinations[0].models) == {"bliss"}
     with pytest.raises(ValueError, match="Unknown synergy"):
         analyse(_wells(), PharmOptions(readouts=["nuclei_count"], models=("musyc",)))
+
+
+def test_percent_of_control_needs_a_positive_vehicle_level() -> None:
+    wells = _wells(noise=0)
+    zero = wells.copy()
+    zero.loc[zero["role"] == "negative_control", "nuclei_count"] = 0.0
+    with pytest.raises(ValueError, match="vehicle median"):
+        normalize(zero, "nuclei_count", Normalization("percent_of_control"))
+
+
+def test_trapezoid_fallback_matches_numpy() -> None:
+    from hcs_studio.pharmacology import curves
+
+    x = np.linspace(0, 1, 11)
+    assert float(curves._trapezoid(x**2, x)) == pytest.approx(0.335)

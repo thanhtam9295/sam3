@@ -313,6 +313,7 @@ def run_pharmacology(
     options: PharmOptions,
     output: Path | None = None,
     write: bool = True,
+    refresh_reports: bool = True,
 ) -> PharmResult:
     """Analyse finished runs and write ``pharmacology/`` (in the first run folder, or in
     ``output``)."""
@@ -331,7 +332,7 @@ def run_pharmacology(
 
         target = Path(output) if output is not None else folders[0] / "pharmacology"
         write_outputs(result, target)
-        if output is None:  # the runs' index.html shows the new results
+        if output is None and refresh_reports:  # the runs' index.html shows the results
             from hcs_studio.output.report import write_report
 
             for folder in folders:

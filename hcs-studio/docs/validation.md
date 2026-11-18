@@ -234,10 +234,16 @@ moves any of them by more than 2 % (regenerate deliberately with
 | Linked contrast | every panel drawn with the same channel display; an unlinked panel is labelled in the figure |
 | Sources | `raw` equals the raw field; `step:1` recomputes the first step with its labels |
 | Crop (µm) | output panel size equals the crop at the pixel size |
-| Movies | GIF and MP4 with one frame per Z plane |
+| Movies | GIF and MP4 with one frame per Z plane; time-lapse: one frame per timepoint from an OME-Zarr plate with 3 timepoints |
+| Memory | the panel cache stays under its byte limit; a figure over 250 MP at the chosen dpi is refused before drawing |
+| Regeneration from a folder source (OME-Zarr) | the store is fingerprinted (paths, sizes, times); a changed chunk blocks regeneration |
 
-Not yet checked: figures from real plates in journal templates; 600 dpi exports of large
-grids (memory); colour-blind-safe channel colours are the user's choice.
+Hardening review (after Phase 15) also fixed: annotation labels followed a stale layout
+cache after the layout file changed; concentrations of different unit kinds (µM and
+µg/mL) were ordered as one numeric series; each `raw`/`step:` panel reopened the plate.
+
+Not yet checked: figures from real plates in journal templates; colour-blind-safe channel
+colours are the user's choice.
 
 ## Pharmacology (Phase 13)
 

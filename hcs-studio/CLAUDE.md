@@ -213,6 +213,11 @@ PlateLayout (model/annotation.py)
   Profiles. Do not name widgets `width`/`layout` (they shadow QWidget methods).
 - Test plate with images: `tests/compare_builders.make_run` (2 × 6 wells, 2 channels,
   5 planes, 2 fields, layout).
+- Memory: `sources` caches panels up to `CACHE_LIMIT_BYTES` (LRU) and reuses one reopened
+  plate per run (`_context`, with a lock); `export.MAX_MEGAPIXELS` guards PNG/TIFF.
+  Sidecar checksums use `fingerprint()` (files: SHA-256; folders: a tree digest).
+- Time-lapse movies need `raw`/`step:<n>` sources (run outputs keep timepoint 1 only).
+- Tests: pytest's `faulthandler_timeout = 180` dumps stacks of a hung test; keep it.
 
 ### Integration conventions (Phase 15, built)
 

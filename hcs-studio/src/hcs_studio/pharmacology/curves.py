@@ -24,6 +24,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 Array = NDArray[np.float64]
+# np.trapezoid is NumPy ≥ 2.0; np.trapz (same integral) is what NumPy 1.26 has
+_trapezoid: Any = getattr(np, "trapezoid", None) or np.trapz  # type: ignore[attr-defined]
 
 
 def logistic(
@@ -395,7 +397,7 @@ def auc_normalized(levels: Array, means: Array) -> float:
     tested log range: the average response over the range (same unit as the response)."""
     if levels.size < 2:
         return math.nan
-    return float(np.trapezoid(means, levels) / (levels[-1] - levels[0]))
+    return float(_trapezoid(means, levels) / (levels[-1] - levels[0]))
 
 
 def activity_area(
@@ -411,7 +413,7 @@ def activity_area(
     xs = np.linspace(lo, hi, points)
     values = fit.predict(xs)
     effect = (reference - values) if decreasing else (values - reference)
-    return float(np.trapezoid(np.clip(effect, 0, None) / full, xs))
+    return float(_trapezoid(np.clip(effect, 0, None) / full, xs))
 
 
 # --------------------------------------------------------------- comparisons
@@ -476,7 +478,7 @@ def gr_metrics(conc: Any, gr: Any) -> dict[str, float]:
     fit = fit_curve(conc, gr, fix_top=1.0, half=0.5)
     levels, means, _, _ = concentration_means(conc, gr)
     aoc = (
-        float(np.trapezoid(1 - means, levels) / (levels[-1] - levels[0]))
+        float(_trapezoid(1 - means, levels) / (levels[-1] - levels[0]))
         if levels.size >= 2
         else math.nan
     )

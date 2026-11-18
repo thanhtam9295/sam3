@@ -214,6 +214,12 @@ def normalize(wells: pd.DataFrame, readout: str, options: Normalization) -> Norm
             x = group["value"].to_numpy(float)
             x0 = math.nan
             if options.method == "percent_of_control":
+                if not v_med > 0:
+                    raise ValueError(
+                        f"Plate {plate}, {line or 'no cell line'}: the vehicle median of "
+                        f"{readout} is {v_med:g}; % of control needs a positive vehicle level "
+                        "(use % inhibition for readouts that are ~0 in vehicle wells)"
+                    )
                 values = 100 * x / v_med
             elif options.method == "percent_inhibition":
                 if pos.empty:

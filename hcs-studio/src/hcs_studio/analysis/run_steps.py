@@ -153,7 +153,8 @@ class PharmacologyStep(RunStep):
     def run(self, folder: Path, log: logging.Logger) -> dict[str, Any]:
         from hcs_studio.pharmacology.analysis import run_pharmacology
 
-        result = run_pharmacology([folder], self.options(folder))
+        # finish_run_steps rewrites index.html once after all run steps
+        result = run_pharmacology([folder], self.options(folder), refresh_reports=False)
         summary = {
             readout: {
                 "curves": len(rr.curves),

@@ -619,3 +619,18 @@ def test_coloc_inputs_and_fiji_export(tmp_path: Path) -> None:
     assert 'run("Coloc 2"' in macro and "psf=4 costes_randomisations=20" in macro
     with pytest.raises(ValueError, match="same shape"):
         export_for_fiji(tmp_path / "bad", a, b[:10], mask)
+
+
+def test_qc_flag_summary_counts_fields_per_flag() -> None:
+    import pandas as pd
+
+    from hcs_studio.output.experiment import qc_flag_summary
+
+    flags = pd.DataFrame(
+        {"out_of_focus": [True, False, True], "saturated": [0, 0, 1], "well": ["A01"] * 3}
+    )
+    table = qc_flag_summary(flags)
+    assert table.to_dict("records") == [
+        {"flag": "out of focus", "fields": 2, "of": 3},
+        {"flag": "saturated", "fields": 1, "of": 3},
+    ]

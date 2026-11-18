@@ -241,11 +241,16 @@ _LAYOUTS: dict[str, Any] = {}
 
 
 def _layout(path: str) -> Any:
+    from pathlib import Path
+
     from hcs_studio.model.layout import load_plate_layout
 
-    if path not in _LAYOUTS:
-        _LAYOUTS[path] = load_plate_layout(__import__("pathlib").Path(path))
-    return _LAYOUTS[path]
+    stat = Path(path).stat()
+    key = f"{path}|{stat.st_mtime_ns}|{stat.st_size}"  # a rewritten layout is read again
+    if key not in _LAYOUTS:
+        _LAYOUTS.clear()
+        _LAYOUTS[key] = load_plate_layout(Path(path))
+    return _LAYOUTS[key]
 
 
 def render(

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Hardening pass (after Phase 15)
+- Compare: time-lapse movies (GIF/MP4 over timepoints from raw or recomputed sources,
+  with a time stamp); a combination picker when the layout has several drug pairs; the
+  panel cache is bounded (2 GB, LRU) and PNG/TIFF exports over 250 megapixels are refused
+  with an actionable message; raw/`step:` panels of a run share one reopened plate.
+- Figure sidecars fingerprint folder sources (OME-Zarr), so regeneration refuses changed
+  stores too; annotation labels follow layout file changes.
+- Experiment report: field QC flags summarised per flag (out of focus, saturated, edge,
+  excluded, low-count well); the layout is read once.
+- Pharmacology: % of control refuses a vehicle median ≤ 0 with a message (use %
+  inhibition); AUC works with numpy versions without `trapezoid`; the pharmacology run
+  step no longer rewrites `index.html` twice; concentration columns of mixed unit kinds
+  are grouped by kind.
+- Tests: pytest dumps all thread stacks after 180 s (`faulthandler_timeout`) to diagnose
+  hangs; an intermittent GUI-suite hang seen once did not recur in three repeated GUI runs.
+
 ### Phase 15 — integration, reports and regression tests
 - Run steps in the pipeline builder (marked "▶ after the run"): **pharmacology**,
   **compound_figures** and **experiment_report** run once after all wells, the tables and

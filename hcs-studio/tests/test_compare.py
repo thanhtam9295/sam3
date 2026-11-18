@@ -401,3 +401,77 @@ def test_combinations_in_layout() -> None:
         ("MCF7", "Drug A", "Drug B"),
         ("MCF7", "Drug A", "Drug C"),
     ]
+
+
+def test_review_fixes_layout_cache_unit_order_context_and_folder_fingerprint(
+    run: Path, tmp_path: Path
+) -> None:
+    import shutil
+
+    from hcs_studio.compare import sources
+    from hcs_studio.compare.render import annotation_text
+    from hcs_studio.io.layout_io import save_layout
+    from hcs_studio.model.annotation import PlateLayout
+    from hcs_studio.model.layout_tools import dilution_series
+
+    # labels follow a rewritten layout file (no stale cache)
+    copy = tmp_path / "run"
+    shutil.copytree(run, copy)
+    panel = by_annotation(copy, ["A01"], Comparison()).panels[0]
+    assert "MCF7" in annotation_text(panel, "{cell_line}", 1)
+    layout = load_plate_layout_of(copy)
+    save_layout(
+        layout.updated({k: replace_line(a, "U2OS") for k, a in layout.wells.items()}),
+        copy / "plate_layout.json",
+    )
+    assert annotation_text(panel, "{cell_line}", 1) == "U2OS"
+
+    # columns sorted within a unit kind: 10 µM never sorts between µg/mL doses
+    mixed = PlateLayout.for_plate_type(96)
+    mixed = dilution_series(mixed, (0, 0), "Drug X", 10.0, "µM", factor=10, points=3, cell_line="A")
+    mixed = dilution_series(
+        mixed, (1, 0), "Antibody", 10.0, "µg/mL", factor=10, points=3, cell_line="A"
+    )
+    save_layout(mixed, copy / "plate_layout.json")
+    wells = [f"{r}{c:02d}" for r in "AB" for c in (1, 2, 3)]
+    headers = by_annotation(copy, wells, Comparison()).col_headers
+    assert [h.split()[0] for h in headers] == ["Antibody"] * 3 + ["Drug"] * 3
+
+    # raw panels of one run share one reopened plate
+    sources.clear_cache()
+    for well in ("A01", "A02", "B03"):
+        load_panel(
+            by_annotation(run, [well], Comparison()).panels[0].model_copy(update={"source": "raw"})
+        )
+    assert len(sources._CONTEXTS) == 1
+
+    # folder sources (OME-Zarr) are fingerprinted: a changed store blocks regeneration
+    raw = by_annotation(copy, ["A01"], Comparison(settings=ExportSettings(dpi=80)))
+    raw = raw.model_copy(
+        update={"panels": [p.model_copy(update={"source": "raw"}) for p in raw.panels]}
+    )
+    sources.clear_cache()
+    export_figure(raw, tmp_path / "raw.png")
+    sidecar = json.loads((tmp_path / "raw.png.json").read_text())
+    assert any(v.startswith("tree:") for v in sidecar["checksums"].values())
+    store = Path(next(k for k, v in sidecar["checksums"].items() if v.startswith("tree:")))
+    chunk = next(p for p in store.rglob("*") if p.is_file() and p.name == "0.0.0.0")
+    chunk.write_bytes(chunk.read_bytes())  # rewritten: new modification time
+    import os
+    import time
+
+    os.utime(chunk, ns=(time.time_ns(), time.time_ns() + 10**9))
+    with pytest.raises(ValueError, match="source files changed"):
+        regenerate(tmp_path / "raw.png.json")
+
+
+def load_plate_layout_of(folder: Path):  # type: ignore[no-untyped-def]
+    from hcs_studio.model.layout import load_plate_layout
+
+    return load_plate_layout(folder / "plate_layout.json")
+
+
+def replace_line(annotation, line: str):  # type: ignore[no-untyped-def]
+    from dataclasses import replace
+
+    return replace(annotation, cell_line=line)
