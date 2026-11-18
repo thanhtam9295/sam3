@@ -46,10 +46,14 @@ def run(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def _two_by_six(run: Path, fmt: Literal["png", "svg"] = "png") -> Comparison:
-    base = Comparison(settings=ExportSettings(
-        format=fmt, dpi=300, width_mm=180,
-        scale_bar=ScaleBar(length_um=10.0, color=BAR, show_label=True, panels="all"),
-    ))  # fmt: skip
+    base = Comparison(
+        settings=ExportSettings(
+            format=fmt,
+            dpi=300,
+            width_mm=180,
+            scale_bar=ScaleBar(length_um=10.0, color=BAR, show_label=True, panels="all"),
+        )
+    )
     comparison = by_annotation(run, WELLS, base)
     images = load_images(comparison)
     channels = auto_contrast(
@@ -272,3 +276,41 @@ def test_presets_and_batch(run: Path, tmp_path: Path, monkeypatch: pytest.Monkey
     )
     assert [f.name for f in figures] == ["Drug-X.png"]
     assert (tmp_path / "batch" / "Drug-X.png.json").exists()
+
+
+def test_command_line(run: Path, tmp_path: Path) -> None:
+    from hcs_studio.app import main
+
+    comparison = by_annotation(run, ["A01", "A06"], Comparison(settings=ExportSettings(dpi=100)))
+    export_figure(comparison, tmp_path / "f.png")
+    assert (
+        main(
+            [
+                "figure",
+                "--regenerate",
+                str(tmp_path / "f.png.json"),
+                "--output",
+                str(tmp_path / "g.png"),
+            ]
+        )
+        == 0
+    )
+    a, b = (np.asarray(Image.open(tmp_path / n)) for n in ("f.png", "g.png"))
+    assert np.array_equal(a, b)
+    assert (
+        main(
+            [
+                "figure",
+                "--run",
+                str(run),
+                "--per-compound",
+                "--dpi",
+                "100",
+                "--output",
+                str(tmp_path / "per"),
+            ]
+        )
+        == 0
+    )
+    assert (tmp_path / "per" / "Drug-X.png").exists()
+    assert main(["figure"]) == 2

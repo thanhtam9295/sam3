@@ -103,6 +103,29 @@ def build_parser() -> argparse.ArgumentParser:
     acceptance.add_argument(
         "--report", type=Path, help="write the report as JSON (default: acceptance_<check>.json)"
     )
+    figure = sub.add_parser(
+        "figure", help="regenerate a figure from its sidecar, or make one figure per compound"
+    )
+    figure.add_argument(
+        "--regenerate",
+        type=Path,
+        metavar="SIDECAR",
+        help="the .json written next to an exported figure",
+    )
+    figure.add_argument("--run", type=Path, help="run folder (with --per-compound)")
+    figure.add_argument(
+        "--per-compound",
+        action="store_true",
+        help="a figure per compound: concentrations × cell lines",
+    )
+    figure.add_argument("--compound", action="append", default=[], help="only these compounds")
+    figure.add_argument("--source", default="corrected", help="raw, corrected, enhanced, step:<n>")
+    figure.add_argument("--format", default="png", choices=["png", "tiff", "svg", "pdf"])
+    figure.add_argument("--dpi", type=int, default=300)
+    figure.add_argument("--width-mm", type=float, default=180.0)
+    figure.add_argument("--split-channels", action="store_true")
+    figure.add_argument("--output", type=Path, help="output file (regenerate) or folder")
+
     pharm = sub.add_parser(
         "pharm",
         help="dose-response curves, combination matrices and synergy scores of finished runs",
@@ -315,6 +338,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _profile(args)
     if args.command == "pharm":
         return _pharm(args)
+    if args.command == "figure":
+        return _figure(args)
     if args.command == "train-classifier":
         return _train_classifier(args)
     if args.command == "train-cellpose":
@@ -551,6 +576,38 @@ def _train_classifier(args: argparse.Namespace) -> int:
         )
     print(f"Classifier: {args.output}")
     return 0
+
+
+def _figure(args: argparse.Namespace) -> int:
+    from hcs_studio.compare.export import batch_compound_figures, regenerate
+    from hcs_studio.compare.spec import Comparison, ExportSettings, PanelSpec
+
+    try:
+        if args.regenerate:
+            out = regenerate(args.regenerate, args.output)
+            print(f"Wrote {out}")
+            return 0
+        if args.per_compound and args.run:
+            settings = ExportSettings(
+                format=args.format,
+                dpi=args.dpi,
+                width_mm=args.width_mm,
+                split_channels=args.split_channels,
+            )
+            base = Comparison(
+                settings=settings,
+                panels=[PanelSpec(run=str(args.run), well="A01", source=args.source)],
+            )
+            folder = args.output or args.run / "figures"
+            files = batch_compound_figures(args.run, folder, base, args.compound or None)
+            for f in files:
+                print(f"Wrote {f}")
+            return 0 if files else 1
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    print("Error: use --regenerate SIDECAR, or --run RUN --per-compound")
+    return 2
 
 
 def _conc(value: float, unit: str) -> str:

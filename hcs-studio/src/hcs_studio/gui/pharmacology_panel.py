@@ -60,6 +60,7 @@ class PharmacologyPanel(QWidget):
 
     wells_selected = Signal(str, list)
     show_well = Signal(str, str)
+    compare_requested = Signal(object, list)  # run folder, wells
 
     def __init__(self, log: Any = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -205,7 +206,10 @@ class PharmacologyPanel(QWidget):
         )
         save.clicked.connect(lambda: self.analyse(write=True))
         actions = QHBoxLayout()
-        for widget in (self.selection_label, toggle, show, save):
+        compare = QPushButton("Compare")
+        compare.setToolTip("Open the selected wells in the Compare tab")
+        compare.clicked.connect(self._compare_selected)
+        for widget in (self.selection_label, toggle, show, compare, save):
             actions.addWidget(widget)
 
         self.fits_table = QTableWidget()
@@ -626,6 +630,17 @@ class PharmacologyPanel(QWidget):
                 self.included.discard(key)
                 self.excluded.add(key)
         self.analyse(write=False)
+
+    def run_folder(self, name: str) -> Path | None:
+        return next((p for p in self.runs if p.name == name), None)
+
+    def _compare_selected(self) -> None:
+        if not self.selection:
+            return
+        run = self.run_folder(self.selection[0][0])
+        if run is not None:
+            wells = [w for r, _, w in self.selection if r == run.name]
+            self.compare_requested.emit(run, wells)
 
     def _show_selected(self) -> None:
         if self.selection:

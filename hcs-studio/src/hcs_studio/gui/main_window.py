@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from hcs_studio import __version__
 from hcs_studio.gui.browser import BrowserPanel
 from hcs_studio.gui.classify_panel import ClassifyPanel
+from hcs_studio.gui.compare_panel import ComparePanel
 from hcs_studio.gui.jobs_panel import JobsPanel
 from hcs_studio.gui.layout_editor import LayoutEditor
 from hcs_studio.gui.measurements_panel import MeasurementsPanel
@@ -100,6 +101,10 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.profiles_panel, "Profiles")
         self.pharmacology_panel = PharmacologyPanel(self.log)
         self.tabs.addTab(self.pharmacology_panel, "Pharmacology")
+        #: The last wells selected anywhere (run folder, wells), for the Compare tab.
+        self.last_selection: tuple[Path, list[str]] | None = None
+        self.compare_panel = ComparePanel(self.log, lambda: self.last_selection)
+        self.tabs.addTab(self.compare_panel, "Compare")
         self.setCentralWidget(self.tabs)
 
         self.browser = BrowserPanel()
@@ -184,6 +189,8 @@ class MainWindow(QMainWindow):
         self.profiles_panel.wells_selected.connect(self._on_profile_wells)
         self.pharmacology_panel.wells_selected.connect(self._on_pharmacology_wells)
         self.pharmacology_panel.show_well.connect(self._show_pharmacology_well)
+        self.pharmacology_panel.compare_requested.connect(self.compare_wells)
+        self.results_panel.compare_wells.connect(self.compare_wells)
         self.profiles_panel.open_object.connect(self.open_result_object)
         self.classify_panel.show_field.connect(self._classify_show_field)
         self.classify_panel.add_steps.connect(self._add_table_steps)
@@ -455,13 +462,23 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Showing {stage.lower()} {well} field {index} from {folder.name}")
 
+    def compare_wells(self, folder: Path, wells: list[str]) -> None:
+        """Open wells of a run side by side in the Compare tab."""
+        self.last_selection = (Path(folder), list(wells))
+        self.compare_panel.set_wells(Path(folder), list(wells))
+        self.tabs.setCurrentWidget(self.compare_panel)
+
     def _on_profile_wells(self, folder: Path, wells: list[str]) -> None:
+        self.last_selection = (Path(folder), list(wells))
         results = self.results_panel.results
         if results is not None and results.folder == Path(folder):
             self.results_panel.mark_wells(wells)
 
     def _on_pharmacology_wells(self, run: str, wells: list[str]) -> None:
         """Wells of a clicked curve point or matrix cell: outlined on the Results plate."""
+        folder = self.pharmacology_panel.run_folder(run)
+        if folder is not None:
+            self.last_selection = (folder, list(wells))
         results = self.results_panel.results
         if results is not None and results.folder.name == run:
             self.results_panel.mark_wells(wells)

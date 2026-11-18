@@ -126,6 +126,7 @@ class ResultsPanel(QWidget):
     compare_field = Signal(object, str, int)
     open_mosaic = Signal(object, str)
     well_selected = Signal(str)
+    compare_wells = Signal(object, list)  # run folder, well names
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -206,6 +207,11 @@ class ResultsPanel(QWidget):
         self.mosaic.setToolTip("The stitched well (needs the 'Stitch well' step)")
         self.mosaic.clicked.connect(self._open_mosaic)
         self.mosaic.setEnabled(False)
+        self.compare_wells_button = QPushButton("Compare wells side by side")
+        self.compare_wells_button.setToolTip(
+            "Open the outlined wells (or the selected well) in the Compare tab"
+        )
+        self.compare_wells_button.clicked.connect(self._compare_wells)
 
         top = QHBoxLayout()
         top.addWidget(open_button)
@@ -253,7 +259,13 @@ class ResultsPanel(QWidget):
         right_layout.addWidget(self.fields, 1)
         right_layout.addWidget(self.large, 2)
         buttons = QHBoxLayout()
-        for button in (self.open_viewer, self.compare, self.mosaic, self.open_folder):
+        for button in (
+            self.open_viewer,
+            self.compare,
+            self.mosaic,
+            self.compare_wells_button,
+            self.open_folder,
+        ):
             buttons.addWidget(button)
         right_layout.addLayout(buttons)
 
@@ -539,6 +551,17 @@ class ResultsPanel(QWidget):
         if self.results is None:
             return
         self.plate.set_selection([parse_well_name(w) for w in wells if w in self.results.wells])
+
+    def selected_wells(self) -> list[str]:
+        if self.results is None:
+            return []
+        wells = [well_name(*k) for k in self.plate.selected_wells()]
+        return [w for w in wells if w in self.results.wells] or ([self.well] if self.well else [])
+
+    def _compare_wells(self) -> None:
+        wells = self.selected_wells()
+        if self.results is not None and wells:
+            self.compare_wells.emit(self.results.folder, wells)
 
     def _open_mosaic(self) -> None:
         if self.results is not None and self.well:

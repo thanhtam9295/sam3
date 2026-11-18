@@ -50,6 +50,7 @@ REQUIRED = (
     "sklearn",
     "openpyxl",
     "reportlab",
+    "imageio_ffmpeg",
     "umap",
     "numba",
     "mahotas",

@@ -4,7 +4,8 @@ Desktop image analysis for high-content and high-throughput fluorescence microsc
 (Nikon `.nd2`, Operetta CLS, ImageXpress). The full specification is in `PROMPT.md`;
 the project rules are in `CLAUDE.md`.
 
-**Status: Phases 11–13 (plate annotation; projection and background removal; pharmacology, PROMPT_ADDON.md) done; Phases 1–10 of PROMPT.md
+**Status: Phases 11–14 (plate annotation; projection and background removal; pharmacology;
+comparison and figure export, PROMPT_ADDON.md) done; Phases 1–10 of PROMPT.md
 done; validation on real instrument data pending.** Plates from Nikon, Operetta CLS,
 ImageXpress, OME-TIFF, OME-Zarr and plain TIFF folders can be browsed and viewed.
 Correction, enhancement, deconvolution, segmentation (Cellpose 4, SAM 3, threshold +
@@ -18,7 +19,8 @@ distance-to-control score and dose-response fits are linked to the plate. Plates
 annotated in a Layout tab (cell lines, compounds and combinations with units, roles;
 dilution-series and combination-matrix helpers, validation, versions, CSV/XLSX import and
 export). Dose–response curves (4PL/5PL/GR), 6 × 6 combination matrices and synergy
-scores (Bliss, HSA, Loewe, ZIP) come with plate QC and an HTML/PDF report. Algorithms are tested on synthetic data;
+scores (Bliss, HSA, Loewe, ZIP) come with plate QC and an HTML/PDF report. Fields can be
+compared side by side with linked contrast and exported as reproducible figures. Algorithms are tested on synthetic data;
 real-data validation is pending. See `docs/index.md`, `docs/processing.md`,
 `docs/measurements.md` and `docs/validation.md`.
 

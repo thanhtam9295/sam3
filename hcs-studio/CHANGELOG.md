@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Phase 14 — side-by-side comparison and export
+- New **Compare** tab: wells from the Results plate, Pharmacology points or matrix cells,
+  Profiles lassos or the annotation filter; arranged as a grid, by concentration × cell
+  line, as a combination matrix (6 × 6 image grid) or for one compound.
+- Linked zoom, pan, Z and contrast (identical LUTs, low/high and gamma per channel);
+  unlinked panels are marked; per-panel zoom lock; outlines (and category colours in
+  figures); label template from the annotation; synchronized crop.
+- Image source per panel: corrected, enhanced, raw, or the field recomputed up to any
+  pipeline step with the run's saved estimates. Representative field by a readout.
+- Figure export: PNG/TIFF (300/600 dpi), SVG/PDF with vector scale bars and editable text;
+  journal widths (85/120/180 mm), headers, channel legend, split channels, Z stamp,
+  presets, and a figure per compound.
+- Data export (OME-TIFF per panel + readouts CSV) and Z movies (GIF, MP4).
+- Every export writes a JSON sidecar (sources with SHA-256, steps, display, geometry);
+  `hcs-studio figure --regenerate` re-creates the figure pixel-identically.
+- New dependencies: imageio, imageio-ffmpeg (MP4).
+
 ### Phase 13 — pharmacology: dose–response, combination matrices, synergy
 - New **Pharmacology** tab and `hcs-studio pharm`: one or more readouts of one or more
   runs, normalized per plate and cell line (% of control, % inhibition, GR with time-zero

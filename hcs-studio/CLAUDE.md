@@ -126,7 +126,7 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - `multiprocessing.freeze_support()` must run first in the frozen entry (`packaging/entry.py`); worker processes of the bundle restart the executable.
 - `scripts/make_test_plate.py` writes realistic synthetic plates (384 wells); `scripts/pipelines/perf_384.yaml` is the reference pipeline for performance numbers in docs/validation.md.
 
-## Add-on phases 11–15 (PROMPT_ADDON.md) — approved; Phases 11–13 built
+## Add-on phases 11–15 (PROMPT_ADDON.md) — approved; Phases 11–14 built
 
 Order: 11 annotation → 12 projection + background → 13 pharmacology → 14 comparison/export → 15 integration (all prerequisites, Phases 1–10, are built). Stop for review after each phase.
 
@@ -197,6 +197,23 @@ PlateLayout (model/annotation.py)
 - GUI: `gui/pharmacology_panel.py`; analysis runs in a `BackgroundTask` (thread), not in
   the job queue; re-analysis after an exclusion does not write files (Write report does).
 
+### Comparison conventions (Phase 14, built)
+
+- Headless package `compare/`: `spec.py` (`Comparison`, `PanelSpec`, `ChannelDisplay`,
+  `ExportSettings`: pydantic, JSON round trip), `sources.py` (`load_panel`, cached;
+  corrected / enhanced / raw / `step:<n>` recomputed with `state/fitted.pkl`;
+  representative field), `render.py` (`compose`, overlays, crop, matplotlib figure with
+  geometry in mm), `export.py` (figure + sidecar, `regenerate`, data, movies, presets,
+  batch), `arrange.py` (grid, by annotation, combination matrix, one compound).
+- Determinism: figures are drawn on an Agg canvas with fixed metadata; the sidecar freezes
+  automatic choices (fields, channel display) so regeneration is pixel-identical.
+  `svg.fonttype = none`, `pdf.fonttype = 42` keep text editable.
+- GUI: `gui/compare_panel.py` (pyqtgraph views; ImageItem gets RGB transposed to (x, y));
+  the main window keeps `last_selection` (run, wells) from Results, Pharmacology and
+  Profiles. Do not name widgets `width`/`layout` (they shadow QWidget methods).
+- Test plate with images: `tests/compare_builders.make_run` (2 × 6 wells, 2 channels,
+  5 planes, 2 fields, layout).
+
 ### New dependencies (approved list for 11–15)
 
 | Library | Phase | Use |
@@ -225,6 +242,7 @@ Run from this folder (`hcs-studio/`).
 - Check an installation: `hcs-studio selftest`; GUI: `hcs-studio gui --smoke-test`
 - Layouts: `hcs-studio layout <file> --validate [--export out.xlsx [--plate-map]]`; re-annotate a run: `hcs-studio annotate <run> --layout <file>`
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
+- Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)

@@ -200,6 +200,21 @@ Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
 
 Still to do: time a real 384-well plate on the analysis workstation (Phase 10).
 
+## Comparison and figure export (Phase 14)
+
+| Check | Result |
+|---|---|
+| 2 × 6 comparison (64 px fields at 0.5 µm), PNG 300 dpi, 10 µm scale bars on every panel | measured bar length in the PNG = 20 image px × the panel's output scale, within 1.5 output px, for all 12 panels |
+| Same comparison as SVG | scale-bar paths 20/64 of the panel width (in points) within 1 %; labels kept as text |
+| Regenerating a PNG from its sidecar | pixel-identical (also via `hcs-studio figure --regenerate`) |
+| Linked contrast | every panel drawn with the same channel display; an unlinked panel is labelled in the figure |
+| Sources | `raw` equals the raw field; `step:1` recomputes the first step with its labels |
+| Crop (µm) | output panel size equals the crop at the pixel size |
+| Movies | GIF and MP4 with one frame per Z plane |
+
+Not yet checked: figures from real plates in journal templates; 600 dpi exports of large
+grids (memory); colour-blind-safe channel colours are the user's choice.
+
 ## Pharmacology (Phase 13)
 
 ### Verified on synthetic data

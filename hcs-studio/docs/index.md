@@ -682,6 +682,18 @@ Other options: `--curve 5pl|3pl_bottom|3pl_top`, `--robust`, `--bootstrap 200`,
 references: [pharmacology.md](pharmacology.md). Synergy labels follow SynergyFinder's
 conventions and are a guide, not proof.
 
+## Comparing fields and making figures
+
+The **Compare** tab shows fields of a run side by side (wells from the Results plate, a
+Pharmacology point or matrix cell, a Profiles lasso or the annotation filter), arranged
+as a grid, by concentration × cell line, or as a combination matrix. Zoom, pan, Z and
+contrast are linked (an unlinked panel is marked), outlines can be shown, and crops apply
+to all panels. Export figures (PNG/TIFF 300–600 dpi, SVG, PDF) with scale bars, headers,
+legends and split channels, the panels' data (OME-TIFF + CSV), Z movies (GIF, MP4), or a
+figure per compound. Every export writes a JSON sidecar from which
+`hcs-studio figure --regenerate` re-creates it exactly. Details:
+[figures.md](figures.md).
+
 ## Limitations in this phase
 
 - Readers have been tested on synthetic plates only, not yet on real instrument exports.
