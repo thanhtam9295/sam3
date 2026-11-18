@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import errno
 import hashlib
 import json
@@ -369,7 +370,7 @@ def pipeline_hash(
     data["steps"] = [
         step
         for step, parsed in zip(data["steps"], pipeline.steps, strict=True)
-        if not parsed.is_table_step()
+        if not parsed.is_table_step() and not parsed.is_run_step()
     ]
     payload = json.dumps(
         [
@@ -1197,6 +1198,23 @@ def run_pipeline(
     history[-1]["finished"] = datetime.now(UTC).isoformat()
     history[-1]["status"] = status
     manifest(status)
+    if pipeline.run_steps() and status in ("completed", "completed_with_failures"):
+        emit({"type": "status", "text": "Run steps (pharmacology, figures, reports)"})
+        step_log = _run_log(folder, "steps")
+        try:
+            for record in finish_run_steps(folder, pipeline.run_steps(), step_log):
+                if record["status"] != "completed":
+                    emit(
+                        {
+                            "type": "log",
+                            "level": "warning",
+                            "text": f"Run step {record['module']} failed: {record.get('error')}",
+                        }
+                    )
+        finally:
+            for h in list(step_log.handlers):
+                step_log.removeHandler(h)
+                h.close()
     emit(
         {
             "type": "finished",
@@ -1263,6 +1281,37 @@ def run_performance(
     }
 
 
+def _run_log(folder: Path, name: str) -> logging.Logger:
+    """A logger that appends to the run's ``logs/run.log``."""
+    log = logging.getLogger(f"hcs_studio.{name}.{folder.name}")
+    log.setLevel(logging.INFO)
+    log.propagate = False
+    (folder / "logs").mkdir(exist_ok=True)
+    handler = logging.FileHandler(folder / "logs" / "run.log", encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    log.addHandler(handler)
+    return log
+
+
+def finish_run_steps(folder: Path, steps: list[Any], log: logging.Logger) -> list[dict[str, Any]]:
+    """Run the run steps, record them in the manifest and refresh ``index.html``."""
+    from hcs_studio.analysis.run_steps import run_run_steps
+
+    records = run_run_steps(folder, steps, log)
+    manifest_path = folder / "run_manifest.json"
+    with contextlib.suppress(OSError, ValueError):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["run_steps"] = records
+        write_json(manifest_path, manifest)
+    try:
+        from hcs_studio.output.report import write_report
+
+        write_report(folder)
+    except Exception:
+        log.exception("The HTML report could not be rewritten after the run steps")
+    return records
+
+
 def summarise_run(
     folder: Path, image_modules: list[Module], table_modules: list[Module], log: logging.Logger
 ) -> None:
@@ -1297,13 +1346,22 @@ def analyze_run(
         run_pipeline_def = Pipeline.model_validate(manifest["pipeline"])
     except (OSError, ValueError, KeyError):
         raise ValueError(f"{folder} is not an HCS Studio run folder") from None
-    steps = table_steps.table_steps() if isinstance(table_steps, Pipeline) else list(table_steps)
+    if isinstance(table_steps, Pipeline):
+        steps = table_steps.table_steps()
+        extra_run_steps = table_steps.run_steps()
+    else:
+        given = list(table_steps)
+        steps = [s for s in given if s.is_table_step()]
+        extra_run_steps = [s for s in given if s.is_run_step()]
+        if len(steps) + len(extra_run_steps) != len(given):
+            raise ValueError(
+                "Only table steps and run steps (pharmacology, figures, reports) can be "
+                "applied to a finished run"
+            )
     if include_run_steps:
         steps = run_pipeline_def.table_steps() + steps
     image_modules = [s.create() for s in run_pipeline_def.image_steps()]
     table_modules = [s.create() for s in steps]
-    if not all(s.is_table_step() for s in steps):
-        raise ValueError("Only table steps can be applied to a finished run")
     log = logging.getLogger(f"hcs_studio.analyze.{folder.name}")
     log.setLevel(logging.INFO)
     log.propagate = False
@@ -1317,12 +1375,23 @@ def analyze_run(
     finally:
         log.removeHandler(handler)
         handler.close()
-    record = {
+    record: dict[str, Any] = {
         "finished": datetime.now(UTC).isoformat(),
         "steps": [s.model_dump(mode="json") for s in steps],
     }
     manifest.setdefault("analyses", []).append(record)
     write_json(manifest_path, manifest)
+    if extra_run_steps:
+        step_log = _run_log(folder, "analyze-steps")
+        try:
+            record["run_steps"] = finish_run_steps(folder, extra_run_steps, step_log)
+        finally:
+            for h in list(step_log.handlers):
+                step_log.removeHandler(h)
+                h.close()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["analyses"][-1] = record
+        write_json(manifest_path, manifest)
     return record
 
 

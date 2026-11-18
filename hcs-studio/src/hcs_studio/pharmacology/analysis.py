@@ -331,6 +331,17 @@ def run_pharmacology(
 
         target = Path(output) if output is not None else folders[0] / "pharmacology"
         write_outputs(result, target)
+        if output is None:  # the runs' index.html shows the new results
+            from hcs_studio.output.report import write_report
+
+            for folder in folders:
+                if (folder / "wells").exists():
+                    try:
+                        write_report(folder)
+                    except Exception:  # the report is a convenience; never fail the analysis
+                        import logging
+
+                        logging.getLogger(__name__).exception("index.html not refreshed")
     result.seconds = time.perf_counter() - started
     return result
 

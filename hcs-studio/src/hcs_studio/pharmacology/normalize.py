@@ -93,7 +93,18 @@ def wells_table(
         )
     frame = pd.DataFrame(rows)
     readouts = summary.select_dtypes("number")
-    readouts = readouts.drop(columns=[c for c in ("row", "col") if c in readouts], errors="ignore")
+    # per-well summaries of runs carry the annotation columns too (conc_1, time_point_h …):
+    # those are not readouts, and the well table already has the annotation
+    from hcs_studio.io.layout_io import is_annotation_column
+
+    drop = [
+        c
+        for c in readouts
+        if c in ("row", "col")
+        or c in frame.columns
+        or (layout is not None and is_annotation_column(str(c), layout))
+    ]
+    readouts = readouts.drop(columns=drop)
     return frame.merge(readouts, left_on="well", right_index=True, how="left")
 
 

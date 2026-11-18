@@ -1,0 +1,23 @@
+{
+ "bliss Drug A x Drug B": 11.637051039697544,
+ "bliss Drug A x Drug C": 0.449905482041588,
+ "ec50 HeLa Drug A": 2.038832619561842e-06,
+ "ec50 HeLa Drug D": 1.0680843101090854e-06,
+ "ec50 MCF7 Drug A": 9.817853356678123e-07,
+ "ec50 MCF7 Drug B": 3.0411388633371875e-07,
+ "ec50 MCF7 Drug C": 1.994944870082849e-06,
+ "ec50 MCF7 Drug D": 1.0628916272574284e-07,
+ "hill HeLa Drug A": 1.2323338252016842,
+ "hill HeLa Drug D": 0.980587947109883,
+ "hill MCF7 Drug A": 1.1200454276806913,
+ "hill MCF7 Drug B": 1.586308079488974,
+ "hill MCF7 Drug C": 1.0404735824079967,
+ "hill MCF7 Drug D": 0.9655841654727318,
+ "hsa Drug A x Drug B": 16.69565217391304,
+ "hsa Drug A x Drug C": 7.304347826086955,
+ "loewe Drug A x Drug B": 12.285347837165215,
+ "loewe Drug A x Drug C": 3.438832391904086,
+ "z_prime": 1.0,
+ "zip Drug A x Drug B": 11.404411577544057,
+ "zip Drug A x Drug C": 0.3637210564329654
+}

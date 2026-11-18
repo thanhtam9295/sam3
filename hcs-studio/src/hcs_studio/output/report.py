@@ -50,6 +50,8 @@ def report_data(results: RunResults) -> dict[str, Any]:
         }
     layout = {
         w: {
+            "drug": " + ".join(t.compound for t in _drugs(a)),
+            "log_molar": _log_molar(a),
             "compound": a.compound,
             "concentration": a.concentration,
             "treatment": a.treatment,
@@ -66,8 +68,14 @@ def report_data(results: RunResults) -> dict[str, Any]:
         for r in readouts
         if any(m in r for m in _KEY_MATCHES) and not r.endswith(("_std", "_mean"))
     ][:14]
+    pharmacology, normalized = pharmacology_data(results.folder)
+    for key, per_well in normalized.items():
+        values[key] = per_well
+    readouts = [*readouts, *normalized]
     return {
         "plate": {"name": results.plate_name, "rows": results.rows, "cols": results.cols},
+        "pharmacology": pharmacology,
+        "links": report_links(results.folder),
         "readouts": readouts,
         "key_readouts": key_readouts,
         "values": values,
@@ -75,6 +83,73 @@ def report_data(results: RunResults) -> dict[str, Any]:
         "layout": layout,
         "embedding": results.profile_embedding(max_cells=3000),
     }
+
+
+def _drugs(a: Any) -> list[Any]:
+    if a.role in ("negative_control", "positive_control", "untreated"):
+        return []
+    return [t for t in a.active_treatments if t.kind != "percent"]
+
+
+def _log_molar(a: Any) -> float | None:
+    """log10 of the summed molar concentration of a well's drugs (None without drugs)."""
+    molar = [t.concentration for t in _drugs(a) if t.kind == "molar"]
+    return _round(math.log10(sum(molar))) if molar else None
+
+
+def pharmacology_data(folder: Path) -> tuple[dict[str, Any] | None, dict[str, dict[str, Any]]]:
+    """The run's pharmacology results (points and matrix cells of this run only) and its
+    normalized readouts by well, when ``pharmacology/`` exists."""
+    import pandas as pd
+
+    pharm = folder / "pharmacology"
+    data_file = pharm / "report_data.json"
+    normalized: dict[str, dict[str, Any]] = {}
+    table = pharm / "normalized_well_data.csv"
+    if table.exists():
+        frame = pd.read_csv(table)
+        frame = frame[frame["run"] == folder.name] if "run" in frame else frame
+        for column in frame.columns:
+            if "__" in column and not column.endswith(("__excluded", "__exclusion_reason")):
+                readout, kind = column.split("__", 1)
+                name = f"pharmacology · {readout} · {kind.replace('_', ' ')}"
+                normalized[name] = {
+                    str(w): _round(v)
+                    for w, v in zip(frame["well"], frame[column], strict=True)
+                    if isinstance(v, (int, float))
+                }
+    if not data_file.exists():
+        return None, normalized
+    data = json.loads(data_file.read_text(encoding="utf-8"))
+    mine = folder.name
+    for block in data.values():
+        for curve in block.get("curves", []):
+            curve["points"] = [p for p in curve["points"] if p.get("run") in (mine, "")]
+        for combo in block.get("combinations", []):
+            combo["wells"] = {
+                cell: [w[2] for w in wells if w[0] in (mine, "")]
+                for cell, wells in combo["wells"].items()
+            }
+    return data, normalized
+
+
+def report_links(folder: Path) -> list[dict[str, str]]:
+    """Reports and figures of the run, as relative links."""
+    links = []
+    for path, title in (
+        ("pharmacology/pharmacology_report.html", "Pharmacology report (HTML)"),
+        ("pharmacology/pharmacology_report.pdf", "Pharmacology report (PDF)"),
+        ("experiment_report/experiment_report.html", "Experiment report (HTML)"),
+        ("experiment_report/experiment_report.pdf", "Experiment report (PDF)"),
+    ):
+        if (folder / path).exists():
+            links.append({"title": title, "href": path})
+    for sub, kind in (("figures", "Figure"), ("experiment_report/montages", "Montage")):
+        if (folder / sub).exists():
+            for f in sorted((folder / sub).iterdir()):
+                if f.suffix.lower() in (".png", ".svg", ".pdf", ".tif", ".tiff"):
+                    links.append({"title": f"{kind}: {f.stem}", "href": f"{sub}/{f.name}"})
+    return links
 
 
 def analysis_lines(folder: Path) -> list[tuple[str, str]]:

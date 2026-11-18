@@ -16,7 +16,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from hcs_studio.compare.render import compose, crop_slices, default_channels, render
+from hcs_studio.compare.render import (
+    auto_contrast,
+    compose,
+    crop_slices,
+    default_channels,
+    render,
+)
 from hcs_studio.compare.sources import PanelImage, file_sha256, load_panel, plane
 from hcs_studio.compare.spec import Comparison, ExportSettings
 from hcs_studio.io.sidecar import config_dir
@@ -55,7 +61,10 @@ def _filled(comparison: Comparison, images: dict[int, PanelImage]) -> Comparison
     panels = [
         p.model_copy(update={"field": images[k].field}) for k, p in enumerate(comparison.panels)
     ]
-    channels = comparison.channels or default_channels(images[0].image.metadata)
+    channels = comparison.channels or auto_contrast(
+        [plane(images[k].image, p.z) for k, p in enumerate(comparison.panels)],
+        default_channels(images[0].image.metadata),
+    )
     return comparison.model_copy(update={"panels": panels, "channels": channels})
 
 

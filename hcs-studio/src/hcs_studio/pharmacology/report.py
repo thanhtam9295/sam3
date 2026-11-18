@@ -436,6 +436,10 @@ def write_outputs(result: PharmResult, folder: Path) -> None:
             stems["qc"] = qc_figures(rr, figures, files)
         figure_stems[readout] = stems
 
+    data = interactive_data(result)
+    (folder / "report_data.json").write_text(json.dumps(data, separators=(",", ":")), "utf-8")
+    files.append(str(folder / "report_data.json"))
+
     info = {
         "software": "HCS Studio",
         "version": __version__,
@@ -459,6 +463,108 @@ def write_outputs(result: PharmResult, folder: Path) -> None:
     )
     result.folder = folder
     result.files = {Path(f).name: f for f in files}
+
+
+# ------------------------------------------------- interactive data (index.html)
+
+
+def _num(value: Any) -> float | None:
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return float(f"{v:.6g}") if math.isfinite(v) else None
+
+
+def _factor(unit: str) -> float:
+    try:
+        return float(units.from_base(1.0, unit))
+    except (ValueError, KeyError):
+        return 1.0
+
+
+def interactive_data(result: PharmResult) -> dict[str, Any]:
+    """Curves (points with their wells, fitted parameters) and matrices (values, synergy,
+    wells per cell) for the run's clickable ``index.html``; concentrations in display units."""
+    out: dict[str, Any] = {}
+    for readout, rr in result.readouts.items():
+        runs = dict(zip(rr.data.wells["plate"], rr.data.wells["run"], strict=False))
+        curves = []
+        for c in rr.curves:
+            f, factor = c.fit, _factor(c.unit)
+            center = f.log_xb if f.log_xb is not None else f.log_ec50
+            curves.append(
+                {
+                    "cell_line": c.cell_line,
+                    "compound": c.compound,
+                    "unit": c.unit,
+                    "points": [
+                        {
+                            "run": runs.get(p, ""),
+                            "plate": p,
+                            "well": w,
+                            "x": _num(x * factor),
+                            "y": _num(y),
+                            "excluded": bool(e),
+                        }
+                        for x, y, e, p, w in c.points[
+                            ["conc", "normalized", "excluded", "plate", "well"]
+                        ].itertuples(index=False)
+                    ],
+                    "fit": None
+                    if not math.isfinite(f.top)
+                    else {
+                        "bottom": _num(f.bottom),
+                        "top": _num(f.top),
+                        "hill": _num(f.hill),
+                        "s": _num(f.asymmetry),
+                        "center": _num(center + math.log10(factor)),
+                    },
+                    "ec50": _num(f.ec50 * factor),
+                    "abs_ic50": _num(f.abs_ic50 * factor),
+                    "r2": _num(f.r2),
+                    "flags": f.flags,
+                }
+            )
+        combos = []
+        for combo in rr.combinations:
+            m = combo.matrix
+
+            def grid(values: Any) -> list[list[float | None]]:
+                return [[_num(v) for v in row] for row in values]
+
+            combos.append(
+                {
+                    "cell_line": m.cell_line,
+                    "drug_a": m.drug_a,
+                    "drug_b": m.drug_b,
+                    "unit_a": m.unit_a,
+                    "unit_b": m.unit_b,
+                    "conc_a": [_num(v) for v in _display(m.conc_a, m.unit_a)],
+                    "conc_b": [_num(v) for v in _display(m.conc_b, m.unit_b)],
+                    "response": grid(m.response),
+                    "synergy": {k: grid(r.synergy) for k, r in combo.models.items()},
+                    "scores": {
+                        k: {
+                            "mean": _num(r.mean),
+                            "window": _num(r.window_mean),
+                            "p": _num(r.p_value),
+                            "label": r.label,
+                        }
+                        for k, r in combo.models.items()
+                    },
+                    "wells": {
+                        f"{i},{j}": [[runs.get(p, ""), p, w] for p, w in ws]
+                        for (i, j), ws in m.wells.items()
+                    },
+                }
+            )
+        out[readout] = {
+            "label": LABELS.get(rr.data.method, rr.data.method),
+            "curves": curves,
+            "combinations": combos,
+        }
+    return out
 
 
 # --------------------------------------------------------------------- report

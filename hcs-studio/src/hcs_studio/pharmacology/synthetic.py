@@ -142,3 +142,63 @@ def write_run(folder: Path, noise: float = 15.0, seed: int = 0, name: str = "Syn
     }
     (folder / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     return folder
+
+
+# ------------------------------------------------------------- image plate
+
+
+N_VEHICLE = 48  # nuclei per field in vehicle wells
+N_POSITIVE = 2  # nuclei per field in positive-control wells
+
+
+def nuclei_count(cell_line: str, role: str, treatments: list[tuple[str, float]]) -> int:
+    """True nuclei count of a well: vehicle 48, positive control 2, treated wells
+    50 − 48·I/100 … (counts follow the true % inhibition I between the controls)."""
+    if role == "positive_control":
+        return N_POSITIVE
+    if role == "negative_control" or not treatments:
+        return N_VEHICLE
+    inhibition = true_response(cell_line, treatments)
+    return round(N_VEHICLE - (N_VEHICLE - N_POSITIVE) * inhibition / 100)
+
+
+def write_image_plate(root: Path, size: int = 96, seed: int = 0) -> tuple[Path, Path]:
+    """An OME-Zarr 384-well plate (one 2-channel field per well, 0.65 µm pixels) whose
+    nuclei counts follow the known dose–response and combination truth of ``layout()``,
+    and the layout as JSON. Nuclei are discs of radius 3.5 px on a jittered 7 × 7 grid
+    (at least 3 px apart, so counts are exact)."""
+    from hcs_studio.io.layout_io import save_layout
+    from hcs_studio.utils.synthetic import write_ome_zarr_plate
+
+    plate = layout()
+    yy, xx = np.mgrid[0:size, 0:size]
+    pitch = size / 7.4
+    sites = [(pitch * (0.7 + i), pitch * (0.7 + j)) for i in range(7) for j in range(7)]
+
+    def field(row: int, col: int, f: int) -> np.ndarray:
+        rng = np.random.default_rng(seed + row * 24 + col)
+        a = plate.get((row, col))
+        drugs = [(t.compound, t.concentration) for t in a.active_treatments if t.kind != "percent"]
+        n = nuclei_count(a.cell_line, a.role, drugs if a.role == "sample" else [])
+        data = np.full((2, 1, size, size), 100.0)
+        for k in rng.permutation(len(sites))[:n]:
+            y, x = sites[k] + rng.uniform(-1.0, 1.0, 2)
+            disc = (yy - y) ** 2 + (xx - x) ** 2 <= 12.25  # radius 3.5 px: gaps ≥ 3 px
+            data[0, 0][disc] += 1200
+            data[1, 0][disc] += 300 + 600 * (1 - n / N_VEHICLE)  # a stress marker
+        data += rng.normal(0, 8, data.shape)
+        return np.asarray(np.clip(data, 0, 65535), dtype=np.uint16)
+
+    wells = [(r, c) for r in range(16) for c in range(24) if (r, c) in plate.wells]
+    path = write_ome_zarr_plate(
+        root / "plate.zarr",
+        wells,
+        field,
+        channels=("DAPI", "Stress"),
+        pixel_size_um=0.65,
+        z_step_um=1.0,
+        name="RegressionPlate",
+    )
+    layout_file = root / "layout.json"
+    save_layout(plate, layout_file)
+    return path, layout_file

@@ -266,22 +266,27 @@ def render(
         k: load_panel(p, comparison.representative_readout) for k, p in enumerate(comparison.panels)
     }
     first = loaded[0].image
-    channels = comparison.channels or default_channels(first.metadata)
-    visible = [c for c in channels if c.visible]
-    split = s.split_channels
-    per_panel = (len(visible) + 1) if split else 1
-    rows, cols = comparison.rows, comparison.cols * per_panel
     planes = {
         k: plane(img.image, p.z)
         for k, (p, img) in enumerate(zip(comparison.panels, loaded.values(), strict=True))
     }
+    # no display given: linked auto contrast over all panels (never the 0–1 defaults)
+    channels = comparison.channels or auto_contrast(
+        list(planes.values()), default_channels(first.metadata)
+    )
+    if not comparison.channels:
+        comparison = comparison.model_copy(update={"channels": channels})
+    visible = [c for c in channels if c.visible]
+    split = s.split_channels
+    per_panel = (len(visible) + 1) if split else 1
+    rows, cols = comparison.rows, comparison.cols * per_panel
     pixel_um = first.metadata.pixel_size_um
     ys, xs = crop_slices(comparison, planes[0].shape[1:], pixel_um)
     crop_h, crop_w = ys.stop - ys.start, xs.stop - xs.start
 
     font_mm = s.font_size_pt * PT_MM
     left = font_mm * 2.2 if (s.headers and comparison.row_headers) else 0.5
-    top = font_mm * 2.0 if (s.headers and (comparison.col_headers or split)) else 0.5
+    top = font_mm * 3.4 if (s.headers and (comparison.col_headers or split)) else 0.5
     label_h = font_mm * 3.0 if s.panel_labels else 0.0  # up to two lines
     legend_h = font_mm * 2.2 if (s.legend and not split) else 0.0
     gap = s.spacing_mm
@@ -451,9 +456,10 @@ def render(
             fig.text(
                 (x + w / 2) / s.width_mm,
                 1 - (top - font_mm * 0.4) / height_mm,
-                text,
+                wrap_label(text, w, font_mm),
                 ha="center",
                 va="bottom",
+                multialignment="center",
                 **font,
             )
         for r, text in enumerate(comparison.row_headers[: comparison.rows]):

@@ -125,7 +125,9 @@ def compound_grid(run: Path, compound: str, base: Comparison) -> Comparison:
         )
     ]
     comparison = by_annotation(run, wells, base)
-    return comparison.model_copy(update={"title": compound})
+    prefix = f"{compound} "
+    headers = [h[len(prefix) :] if h.startswith(prefix) else h for h in comparison.col_headers]
+    return comparison.model_copy(update={"title": compound, "col_headers": headers})
 
 
 def combination_grid(

@@ -245,6 +245,7 @@ def load_builtin_modules() -> None:
         classifier,
         clustering,
         measure,
+        run_steps,
         spatial,
         stitching,
         table_steps,

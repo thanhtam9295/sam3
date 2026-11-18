@@ -59,6 +59,21 @@ footer { padding: 10px 20px 20px; color: var(--muted); font-size: 12px; }
 #profiles h2 { font-size: 16px; margin: 18px 0 8px; }
 #embed { width: 100%; height: 380px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: crosshair; touch-action: none; }
 #legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+#plate-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin: 6px 0; }
+#plate-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--dot); margin-right: 5px; vertical-align: -1px; }
+#pharm h2, #links-box h2 { font-size: 16px; margin: 22px 0 8px; }
+#curve { width: 100%; max-width: 620px; height: 320px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+#curve .pt { cursor: pointer; }
+#curve .axis { stroke: var(--muted); stroke-width: 1; }
+#curve text { fill: var(--muted); font-size: 11px; }
+.matrices { display: flex; flex-wrap: wrap; gap: 16px; }
+table.matrix { border-collapse: collapse; font-size: 11px; }
+table.matrix td, table.matrix th { width: 44px; height: 30px; text-align: center; border: 1px solid var(--line); padding: 0; }
+table.matrix th { color: var(--muted); font-weight: 500; }
+table.matrix td { cursor: pointer; font-variant-numeric: tabular-nums; }
+table.matrix td.missing { background: var(--nan); cursor: default; }
+#pharm-note { color: var(--muted); font-size: 12.5px; }
+#links li { margin: 2px 0; }
 #legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--dot); margin-right: 5px; vertical-align: -1px; }
 </style>
 </head>
@@ -72,6 +87,13 @@ footer { padding: 10px 20px 20px; color: var(--muted); font-size: 12px; }
     <div class="controls">
       <label>Filter readouts <input id="filter" placeholder="e.g. nuclei_count" autocomplete="off"></label>
       <label>Readout <select id="readout"></select></label>
+      <label>Colour by <select id="colour">
+        <option value="readout">readout</option>
+        <option value="drug">annotation: compound</option>
+        <option value="concentration">annotation: concentration</option>
+        <option value="cell_line">annotation: cell line</option>
+        <option value="role">annotation: role</option>
+      </select></label>
       <label>Scale <select id="norm">
         <option value="none">values</option>
         <option value="plate">robust Z (plate)</option>
@@ -80,6 +102,7 @@ footer { padding: 10px 20px 20px; color: var(--muted); font-size: 12px; }
     </div>
     <div id="plate" role="grid" aria-label="Plate map"></div>
     <div class="colorbar"><span id="cmin"></span><div class="bar" id="bar"></div><span id="cmax"></span></div>
+    <div id="plate-legend"></div>
     <p id="zprime"></p>
     <p id="note"></p>
     <div id="profiles" hidden>
@@ -91,6 +114,24 @@ footer { padding: 10px 20px 20px; color: var(--muted); font-size: 12px; }
       <canvas id="embed" role="img" aria-label="PCA or UMAP of the profiles; click a point to open its well, drag to select wells"></canvas>
       <div id="legend"></div>
       <p id="embed-note" class="empty">Click a point to open its well; drag a rectangle to mark wells on the plate.</p>
+    </div>
+    <div id="pharm" hidden>
+      <h2>Pharmacology</h2>
+      <div class="controls">
+        <label>Readout <select id="pharm-readout"></select></label>
+        <label>Curve or combination <select id="pharm-item"></select></label>
+        <label>Synergy model <select id="pharm-model"></select></label>
+      </div>
+      <svg id="curve" role="img" aria-label="Dose–response curve; click a point to open its well" hidden></svg>
+      <div class="matrices" id="matrices" hidden>
+        <div><p>Response (% inhibition)</p><table class="matrix" id="matrix-response"></table></div>
+        <div><p id="syn-title">Synergy</p><table class="matrix" id="matrix-synergy"></table></div>
+      </div>
+      <p id="pharm-note"></p>
+    </div>
+    <div id="links-box" hidden>
+      <h2>Reports and figures</h2>
+      <ul id="links"></ul>
     </div>
   </section>
   {% if analysis %}
@@ -193,7 +234,43 @@ function buildPlate() {
   }
 }
 
+function annotationValue(w, mode) {
+  const a = DATA.layout[w];
+  if (!a) return null;
+  if (mode === "cell_line") return a.cell_line || null;
+  if (mode === "drug") return a.drug || (a.role && a.role !== "sample" ? a.role.replace("_", " ") : null);
+  if (mode === "role") return a.role || null;
+  if (mode === "concentration") return finite(a.log_molar) ? a.log_molar : null;
+  return null;
+}
+function drawAnnotation(mode) {
+  const legend = $("plate-legend"); legend.innerHTML = "";
+  const wells = [...document.querySelectorAll(".well.data")];
+  const numeric = mode === "concentration";
+  const values = Object.fromEntries(wells.map((b) => [b.dataset.well, annotationValue(b.dataset.well, mode)]));
+  const nums = Object.values(values).filter(finite);
+  const lo = nums.length ? Math.min(...nums) : 0, hi = nums.length ? Math.max(...nums) : 1;
+  const names = numeric ? [] : [...new Set(Object.values(values).filter((v) => v !== null))].sort();
+  for (const b of wells) {
+    const v = values[b.dataset.well];
+    const colour = v === null ? "" : numeric ? interpolate(VIRIDIS, (v - lo) / ((hi - lo) || 1)) : PALETTE[names.indexOf(v) % PALETTE.length];
+    b.style.background = colour; b.classList.toggle("nan", v === null);
+    const a = DATA.layout[b.dataset.well];
+    b.title = `${b.dataset.well}: ${a ? a.label : "not annotated"}`;
+    b.setAttribute("aria-label", b.title);
+  }
+  if (numeric) {
+    $("bar").style.background = `linear-gradient(to right, ${VIRIDIS.join(", ")})`;
+    $("cmin").textContent = nums.length ? `${fmt(10 ** lo * 1e6)} µM` : ""; $("cmax").textContent = nums.length ? `${fmt(10 ** hi * 1e6)} µM` : "";
+  } else {
+    $("bar").style.background = "none"; $("cmin").textContent = ""; $("cmax").textContent = "";
+    names.forEach((n, i) => { const s = el("span", {}, n); s.style.setProperty("--dot", PALETTE[i % PALETTE.length]); legend.appendChild(s); });
+  }
+}
+
 function draw() {
+  if ($("colour").value !== "readout") { drawAnnotation($("colour").value); if (selectedWell) renderWell(); return; }
+  $("plate-legend").innerHTML = "";
   const key = $("readout").value, norm = $("norm").value, { values, raw } = currentValues();
   const isZ = norm !== "none";
   const finiteValues = Object.values(values).filter(finite);
@@ -400,9 +477,111 @@ function renderWell() {
   panel.appendChild(viewer);
 }
 
+// ------------------------------------------------------------- pharmacology
+const SVGNS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs) { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; }
+function pharmBlock() { return DATA.pharmacology[$("pharm-readout").value]; }
+function fillPharmItems() {
+  const block = pharmBlock(), item = $("pharm-item"); item.innerHTML = "";
+  block.curves.forEach((c, i) => { const o = el("option", { value: "curve:" + i }, `${c.cell_line} · ${c.compound}`); item.appendChild(o); });
+  block.combinations.forEach((c, i) => { const o = el("option", { value: "combo:" + i }, `${c.cell_line} · ${c.drug_a} × ${c.drug_b}`); item.appendChild(o); });
+  renderPharm();
+}
+function openWells(wells) {
+  const present = wells.filter((w) => DATA.wells[w]);
+  if (DATA.embedding) setPicked(present); else { picked = new Set(present); for (const b of document.querySelectorAll(".well.data")) b.classList.toggle("picked", picked.has(b.dataset.well)); }
+  if (present.length) selectWell(present[0]);
+}
+function renderPharm() {
+  const [kind, index] = $("pharm-item").value.split(":"), block = pharmBlock();
+  $("curve").hidden = kind !== "curve"; $("matrices").hidden = kind !== "combo";
+  $("pharm-model").parentElement.hidden = kind !== "combo";
+  if (kind === "curve") drawCurve(block.curves[+index], block.label);
+  else if (kind === "combo") drawMatrix(block.combinations[+index]);
+}
+function drawCurve(c, label) {
+  const svg = $("curve"); svg.innerHTML = "";
+  const W = 620, H = 320, L = 52, R = 14, T = 14, B = 40;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const pts = c.points.filter((p) => finite(p.x) && p.x > 0 && finite(p.y));
+  const xs = pts.map((p) => Math.log10(p.x)), ys = pts.map((p) => p.y);
+  const x0 = Math.min(...xs) - 0.3, x1 = Math.max(...xs) + 0.3;
+  const curveAt = (x) => { const f = c.fit; return f.bottom + (f.top - f.bottom) / Math.pow(1 + Math.pow(10, (f.center - x) * f.hill), f.s || 1); };
+  const fitted = c.fit ? Array.from({ length: 120 }, (_, i) => x0 + (x1 - x0) * i / 119).map((x) => [x, curveAt(x)]) : [];
+  const allY = [...ys, ...fitted.map((p) => p[1])].filter(finite);
+  const y0 = Math.min(0, ...allY), y1 = Math.max(100, ...allY);
+  const sx = (v) => L + (v - x0) / (x1 - x0) * (W - L - R), sy = (v) => H - B - (v - y0) / (y1 - y0) * (H - T - B);
+  svg.appendChild(svgEl("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, class: "axis" }));
+  svg.appendChild(svgEl("line", { x1: L, y1: T, x2: L, y2: H - B, class: "axis" }));
+  for (let d = Math.ceil(x0); d <= Math.floor(x1); d++) {
+    svg.appendChild(svgEl("line", { x1: sx(d), y1: H - B, x2: sx(d), y2: H - B + 4, class: "axis" }));
+    const t = svgEl("text", { x: sx(d), y: H - B + 16, "text-anchor": "middle" }); t.textContent = `10^${d}`; svg.appendChild(t);
+  }
+  for (const v of [y0, (y0 + y1) / 2, y1]) { const t = svgEl("text", { x: L - 6, y: sy(v) + 4, "text-anchor": "end" }); t.textContent = fmt(v); svg.appendChild(t); }
+  const xl = svgEl("text", { x: (L + W) / 2, y: H - 6, "text-anchor": "middle" }); xl.textContent = `concentration (${c.unit})`; svg.appendChild(xl);
+  const yl = svgEl("text", { x: 12, y: (T + H - B) / 2, transform: `rotate(-90 12 ${(T + H - B) / 2})`, "text-anchor": "middle" }); yl.textContent = label; svg.appendChild(yl);
+  if (fitted.length) svg.appendChild(svgEl("path", { d: fitted.map((p, i) => `${i ? "L" : "M"}${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join(" "), fill: "none", stroke: "#4477aa", "stroke-width": 2 }));
+  pts.forEach((p, i) => {
+    const dot = svgEl("circle", { cx: sx(Math.log10(p.x)), cy: sy(p.y), r: 4.5, class: "pt", "data-well": p.well, fill: p.excluded ? "none" : "#ee6677", stroke: "#ee6677", "stroke-width": 1.5 });
+    const tip = svgEl("title", {}); tip.textContent = `${p.well}: ${fmt(p.y)} at ${fmt(p.x)} ${c.unit}${p.excluded ? " (excluded)" : ""}`; dot.appendChild(tip);
+    dot.addEventListener("click", () => openWells([p.well]));
+    svg.appendChild(dot);
+  });
+  $("pharm-note").textContent = `${c.compound} · ${c.cell_line}: EC50 ${fmt(c.ec50)} ${c.unit}, absolute IC50 ${fmt(c.abs_ic50)} ${c.unit}, R² ${fmt(c.r2)}${c.flags.length ? " — " + c.flags.join("; ") : ""}. Click a point to open its well (hollow = excluded).`;
+}
+function fillMatrix(table, c, values, colour) {
+  table.innerHTML = "";
+  const head = el("tr"); head.appendChild(el("th", {}, `${c.drug_a} \\ ${c.drug_b}`));
+  c.conc_b.forEach((v) => head.appendChild(el("th", {}, fmt(v)))); table.appendChild(head);
+  for (let i = c.conc_a.length - 1; i >= 0; i--) {
+    const tr = el("tr"); tr.appendChild(el("th", {}, fmt(c.conc_a[i])));
+    for (let j = 0; j < c.conc_b.length; j++) {
+      const v = values[i][j], td = el("td", {}, finite(v) ? v.toFixed(0) : "×");
+      td.dataset.cell = `${i},${j}`;
+      if (!finite(v)) td.classList.add("missing");
+      else {
+        const col = colour(v); td.style.background = col;
+        const rgb = col.match(/\d+/g).map(Number); td.style.color = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] > 140 ? "#000" : "#fff";
+        td.title = `${c.drug_a} ${fmt(c.conc_a[i])} + ${c.drug_b} ${fmt(c.conc_b[j])} ${c.unit_b}: ${fmt(v)}; wells ${(c.wells[`${i},${j}`] || []).join(", ")}`;
+        td.addEventListener("click", () => openWells(c.wells[`${i},${j}`] || []));
+      }
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+  }
+}
+function drawMatrix(c) {
+  const models = Object.keys(c.synergy), select = $("pharm-model"), keep = select.value;
+  select.innerHTML = ""; models.forEach((m) => select.appendChild(el("option", { value: m }, m.toUpperCase())));
+  if (models.includes(keep)) select.value = keep;
+  const model = select.value, syn = c.synergy[model] || [], score = c.scores[model] || {};
+  fillMatrix($("matrix-response"), c, c.response, (v) => interpolate(VIRIDIS, v / 100));
+  const bound = Math.max(10, ...syn.flat().filter(finite).map(Math.abs));
+  fillMatrix($("matrix-synergy"), c, syn, (v) => interpolate(DIVERGING, (v + bound) / (2 * bound)));
+  $("syn-title").textContent = `${model.toUpperCase()} synergy (% points)`;
+  $("pharm-note").textContent = `${c.cell_line} · ${c.drug_a} × ${c.drug_b}: ${model.toUpperCase()} mean ${fmt(score.mean)}, best 3 × 3 window ${fmt(score.window)}, p ${fmt(score.p)} — ${score.label} (SynergyFinder conventions: a guide, not proof). Concentrations in ${c.unit_a} (rows, highest at the top) and ${c.unit_b} (columns). Click a cell to open its wells.`;
+}
+function setupPharmacology() {
+  const P = DATA.pharmacology;
+  if (P && Object.keys(P).length) {
+    $("pharm").hidden = false;
+    for (const r of Object.keys(P)) $("pharm-readout").appendChild(el("option", { value: r }, `${r} (${P[r].label})`));
+    $("pharm-readout").addEventListener("change", fillPharmItems);
+    $("pharm-item").addEventListener("change", renderPharm);
+    $("pharm-model").addEventListener("change", renderPharm);
+    fillPharmItems();
+  }
+  if (DATA.links && DATA.links.length) {
+    $("links-box").hidden = false;
+    for (const l of DATA.links) { const li = el("li"); li.appendChild(el("a", { href: l.href, target: "_blank" }, l.title)); $("links").appendChild(li); }
+  }
+}
+
 buildPlate();
 fillReadouts();
 setupEmbedding();
+setupPharmacology();
+$("colour").addEventListener("change", draw);
 $("filter").addEventListener("input", fillReadouts);
 $("readout").addEventListener("change", draw);
 $("norm").addEventListener("change", draw);

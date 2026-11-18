@@ -538,15 +538,19 @@ def _analyze(args: argparse.Namespace) -> int:
 
     try:
         pipeline = Pipeline.load(args.pipeline)
-        if not pipeline.table_steps() and args.only:
-            print("Error: the pipeline has no table steps")
+        if not pipeline.table_steps() and not pipeline.run_steps() and args.only:
+            print("Error: the pipeline has no table steps or run steps")
             return 2
         record = analyze_run(args.folder, pipeline, include_run_steps=not args.only)
     except (OSError, ValueError, ModuleError) as exc:
         print(f"Error: {exc}")
         return 2
     print(f"Applied {len(record['steps'])} table step(s); tables and report updated")
-    return 0
+    for step in record.get("run_steps", []):
+        outcome = step["status"] + (f": {step['error']}" if step.get("error") else "")
+        print(f"Run step {step['module']}: {outcome} ({step['seconds']} s)")
+    failed = any(s["status"] != "completed" for s in record.get("run_steps", []))
+    return 1 if failed else 0
 
 
 def _train_classifier(args: argparse.Namespace) -> int:
@@ -593,6 +597,7 @@ def _figure(args: argparse.Namespace) -> int:
                 dpi=args.dpi,
                 width_mm=args.width_mm,
                 split_channels=args.split_channels,
+                label_template="{well}",
             )
             base = Comparison(
                 settings=settings,

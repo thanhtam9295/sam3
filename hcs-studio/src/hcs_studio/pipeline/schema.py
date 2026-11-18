@@ -37,6 +37,11 @@ class PipelineStep(BaseModel):
 
         return is_table_module(self.module)
 
+    def is_run_step(self) -> bool:
+        from hcs_studio.analysis.run_steps import is_run_module
+
+        return is_run_module(self.module)
+
     def create(self) -> Module:
         cls = MODULES.get(self.module)
         return cls(cls.Params.model_validate(self.params))
@@ -63,11 +68,16 @@ class Pipeline(BaseModel):
 
     def image_steps(self) -> list[PipelineStep]:
         """Enabled steps that run on each field."""
-        return [s for s in self.enabled_steps() if not s.is_table_step()]
+        return [s for s in self.enabled_steps() if not s.is_table_step() and not s.is_run_step()]
 
     def table_steps(self) -> list[PipelineStep]:
         """Enabled steps that run on the object tables after all wells, in order."""
         return [s for s in self.enabled_steps() if s.is_table_step()]
+
+    def run_steps(self) -> list[PipelineStep]:
+        """Enabled steps that run once on the finished run folder (pharmacology, figures,
+        experiment report), in order."""
+        return [s for s in self.enabled_steps() if s.is_run_step()]
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
