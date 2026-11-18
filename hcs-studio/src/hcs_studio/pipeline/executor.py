@@ -27,7 +27,7 @@ from hcs_studio.analysis.stitching import StitchWell, mosaic, owner_fields, stit
 from hcs_studio.io.base import reopen_plate
 from hcs_studio.io.sidecar import load_overrides
 from hcs_studio.model.annotation import PlateLayout
-from hcs_studio.model.layout import WellAnnotation, processing_signature
+from hcs_studio.model.layout import WellAnnotation, load_plate_layout, processing_signature
 from hcs_studio.model.plate import Field, ImageMetadata, Plate, parse_well_name, well_name
 from hcs_studio.output.manifest import build_manifest, describe_inputs, write_json
 from hcs_studio.output.tables import aggregate_run, write_well_tables
@@ -790,6 +790,8 @@ def run_pipeline(
     """
     max_memory = max_memory_gb * 1024**3 if max_memory_gb else None
     started = datetime.now(UTC)
+    if layout is None and layout_path is not None:
+        layout = load_plate_layout(Path(layout_path))
     document = (
         layout
         if isinstance(layout, PlateLayout)
@@ -1213,7 +1215,7 @@ def annotate_run(folder: Path, layout: PlateLayout, source: Path | None = None) 
     the layout is written to the run folder, the tables (annotation columns, table steps)
     and the report are rebuilt, and the manifest records the change. Refused when the
     unstained or blank wells differ from those the images were processed with."""
-    from hcs_studio.model.layout import load_plate_layout, run_layout_file
+    from hcs_studio.model.layout import run_layout_file
 
     folder = Path(folder)
     manifest_path = folder / "run_manifest.json"

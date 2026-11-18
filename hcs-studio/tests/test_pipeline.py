@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from hcs_studio.app import main
 from hcs_studio.io.base import open_plate
+from hcs_studio.model.layout import load_plate_layout
 from hcs_studio.pipeline.executor import (
     PipelineRunner,
     make_run_folder,
@@ -152,7 +153,10 @@ def test_run_writes_a_self_describing_folder(plate_dir: Path, tmp_path: Path) ->
 
     assert sorted(p.name for p in (folder / "wells").iterdir()) == ["A01", "B02"]
     assert Pipeline.load(folder / "pipeline.yaml") == Pipeline.from_text(PIPELINE_YAML)
-    assert (folder / "plate_layout.csv").read_text() == layout.read_text()
+    assert (folder / "plate_layout_source.csv").read_text() == layout.read_text()
+    kept = load_plate_layout(folder / "plate_layout.json")
+    assert kept.get((0, 0)).compound == "DMSO"
+    assert json.loads((folder / "run_manifest.json").read_text())["layout"]["wells"] == 1
     assert "Run started" in (folder / "logs" / "run.log").read_text()
 
     well = folder / "wells" / "B02"

@@ -150,6 +150,8 @@ class WellAnnotation:
         active = " + ".join(t.label() for t in self.active_treatments)
         if active:
             parts.append(active)
+        elif self.treatments:  # vehicle-only wells, the 0 × 0 corner of a matrix
+            parts.append(" + ".join(t.compound for t in self.treatments) + " at 0")
         if self.role != "sample":
             parts.append(self.role.replace("_", " "))
         return " · ".join(parts) or "not annotated"
