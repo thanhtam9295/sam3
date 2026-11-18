@@ -29,6 +29,7 @@ dependencies = [
     "umap-learn>=0.5.7",
     "matplotlib>=3.8",
     "openpyxl>=3.1",
+    "reportlab>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -93,6 +94,6 @@ strict = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*", "sklearn.*", "joblib.*", "igraph.*", "leidenalg.*", "umap", "umap.*", "matplotlib", "matplotlib.*", "openpyxl", "openpyxl.*"]
+module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*", "sklearn.*", "joblib.*", "igraph.*", "leidenalg.*", "umap", "umap.*", "matplotlib", "matplotlib.*", "openpyxl", "reportlab", "reportlab.*", "openpyxl.*"]
 ignore_missing_imports = true
 follow_imports = "skip"

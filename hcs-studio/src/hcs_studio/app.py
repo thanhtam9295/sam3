@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -102,6 +103,71 @@ def build_parser() -> argparse.ArgumentParser:
     acceptance.add_argument(
         "--report", type=Path, help="write the report as JSON (default: acceptance_<check>.json)"
     )
+    pharm = sub.add_parser(
+        "pharm",
+        help="dose-response curves, combination matrices and synergy scores of finished runs",
+    )
+    pharm.add_argument("runs", nargs="*", type=Path, help="run folder(s); plates are merged")
+    pharm.add_argument(
+        "--run",
+        dest="extra_runs",
+        action="append",
+        type=Path,
+        default=[],
+        help="run folder (may be repeated)",
+    )
+    pharm.add_argument(
+        "--readout", required=True, help="per-well readout(s), comma separated, e.g. nuclei_count"
+    )
+    pharm.add_argument(
+        "--normalize",
+        default="percent_inhibition",
+        choices=["percent_of_control", "percent_inhibition", "gr"],
+    )
+    pharm.add_argument(
+        "--models",
+        default="bliss,hsa,loewe,zip",
+        help="synergy models: bliss, hsa, loewe, zip (comma separated; empty = none)",
+    )
+    pharm.add_argument("--curve", default="4pl", choices=["4pl", "5pl", "3pl_bottom", "3pl_top"])
+    pharm.add_argument("--robust", action="store_true", help="robust (soft L1) curve fitting")
+    pharm.add_argument(
+        "--bootstrap",
+        type=int,
+        default=0,
+        help="bootstrap intervals with this many resamples (default: covariance)",
+    )
+    pharm.add_argument(
+        "--outliers",
+        type=float,
+        default=None,
+        metavar="K",
+        help="exclude wells beyond median ± K·MAD of their replicates",
+    )
+    pharm.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        metavar="PLATE:WELL",
+        help="exclude a well (repeatable)",
+    )
+    pharm.add_argument("--z-threshold", type=float, default=0.5, help="flag plates below this Z′")
+    pharm.add_argument("--doubling-time", type=float, help="GR: doubling time (h)")
+    pharm.add_argument("--duration", type=float, help="GR: assay duration (h)")
+    pharm.add_argument(
+        "--time-zero",
+        action="append",
+        type=Path,
+        default=[],
+        help="GR: run folder of a time-zero plate",
+    )
+    pharm.add_argument("--surfaces", action="store_true", help="also draw 3D synergy surfaces")
+    pharm.add_argument("--no-figures", action="store_true")
+    pharm.add_argument("--no-pdf", action="store_true")
+    pharm.add_argument(
+        "--output", type=Path, help="output folder (default: <first run>/pharmacology)"
+    )
+
     profile = sub.add_parser(
         "profile",
         help="PCA/UMAP phenotypic profiles, distance to control and dose-response of runs",
@@ -247,6 +313,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _acceptance(args)
     if args.command == "profile":
         return _profile(args)
+    if args.command == "pharm":
+        return _pharm(args)
     if args.command == "train-classifier":
         return _train_classifier(args)
     if args.command == "train-cellpose":
@@ -482,6 +550,74 @@ def _train_classifier(args: argparse.Namespace) -> int:
             f"(balanced {model.cv_balanced_accuracy:.3f})"
         )
     print(f"Classifier: {args.output}")
+    return 0
+
+
+def _conc(value: float, unit: str) -> str:
+    from hcs_studio.model import units
+
+    if not math.isfinite(value):
+        return "—"
+    try:
+        return units.format_concentration(value, unit)
+    except (ValueError, KeyError):
+        return f"{value:.3g}"
+
+
+def _pharm(args: argparse.Namespace) -> int:
+    from hcs_studio.pharmacology.analysis import PharmOptions, run_pharmacology
+
+    runs = [*args.runs, *args.extra_runs]
+    if not runs:
+        print("Error: give at least one run folder")
+        return 2
+    excluded = []
+    for item in args.exclude:
+        plate, _, well = item.rpartition(":")
+        if not plate or not well:
+            print(f"Error: --exclude needs PLATE:WELL, got {item!r}")
+            return 2
+        excluded.append((plate, well))
+    options = PharmOptions(
+        readouts=[r.strip() for r in args.readout.split(",") if r.strip()],
+        normalization=args.normalize,
+        models=tuple(m.strip() for m in args.models.split(",") if m.strip()),
+        curve_model=args.curve,
+        robust=args.robust,
+        bootstrap=args.bootstrap,
+        outlier_mad=args.outliers,
+        z_threshold=args.z_threshold,
+        doubling_time_h=args.doubling_time,
+        assay_duration_h=args.duration,
+        time_zero_runs=[str(p) for p in args.time_zero],
+        excluded_wells=excluded,
+        figures=not args.no_figures,
+        surfaces=args.surfaces,
+        pdf=not args.no_pdf,
+    )
+    try:
+        result = run_pharmacology(runs, options, args.output)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    for readout, rr in result.readouts.items():
+        print(f"== {readout} ==")
+        for row in rr.qc.itertuples():
+            print(f"plate {row.plate}: Z′ {row.z_prime:.2f}, SSMD {row.ssmd:.1f}  {row.flag}")
+        for c in rr.curves:
+            f = c.fit
+            print(
+                f"{c.cell_line} · {c.compound}: EC50 {_conc(f.ec50, c.unit)}, Hill "
+                f"{f.hill:.2f}, R² {f.r2:.3f}" + (f"  [{'; '.join(f.flags)}]" if f.flags else "")
+            )
+        for combo in rr.combinations:
+            scores = ", ".join(
+                f"{name} {res.mean:+.1f} ({res.label})" for name, res in combo.models.items()
+            )
+            print(f"{combo.matrix.name}: {scores}")
+        for note in rr.notes:
+            print(f"Note: {note}")
+    print(f"Wrote {result.folder} in {result.seconds:.1f} s")
     return 0
 
 
