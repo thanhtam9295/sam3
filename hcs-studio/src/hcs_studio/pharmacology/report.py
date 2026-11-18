@@ -228,6 +228,12 @@ def curve_figures(rr: ReadoutResult, folder: Path, files: list[str]) -> list[str
     return stems
 
 
+def _label_colour(image: Any, value: float) -> str:
+    """Black or white, whichever reads better on the cell's colour."""
+    r, g, b, _ = image.cmap(image.norm(value))
+    return "black" if 0.299 * r + 0.587 * g + 0.114 * b > 0.5 else "white"
+
+
 def _heatmap(
     ax: Any, m: Matrix, values: np.ndarray, title: str, diverging: bool, response_scale: bool = True
 ) -> Any:
@@ -258,7 +264,7 @@ def _heatmap(
                 ha="center",
                 va="center",
                 fontsize=6,
-                color="#888" if not math.isfinite(v) else "black",
+                color="#888" if not math.isfinite(v) else _label_colour(image, v),
             )
     ax.set_xticks(
         range(m.conc_b.size),

@@ -126,7 +126,7 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - `multiprocessing.freeze_support()` must run first in the frozen entry (`packaging/entry.py`); worker processes of the bundle restart the executable.
 - `scripts/make_test_plate.py` writes realistic synthetic plates (384 wells); `scripts/pipelines/perf_384.yaml` is the reference pipeline for performance numbers in docs/validation.md.
 
-## Add-on phases 11–15 (PROMPT_ADDON.md) — approved; Phases 11–12 built
+## Add-on phases 11–15 (PROMPT_ADDON.md) — approved; Phases 11–13 built
 
 Order: 11 annotation → 12 projection + background → 13 pharmacology → 14 comparison/export → 15 integration (all prerequisites, Phases 1–10, are built). Stop for review after each phase.
 
@@ -182,6 +182,21 @@ PlateLayout (model/annotation.py)
 - Large synthetic Z-stack plates: `utils/synthetic.write_ome_zarr_plate` (compact; a
   384 × 3 × 20-plane plate writes in ~10 s).
 
+### Pharmacology conventions (Phase 13, built)
+
+- Headless package `pharmacology/`: `normalize.py` (well table from runs, normalization,
+  outliers, plate QC), `curves.py` (Prism-form 4PL/5PL/3PL, CIs, AUC, GR, F test),
+  `combination.py` (matrix detection, Bliss/HSA/Loewe/ZIP, summaries), `analysis.py`
+  (`PharmOptions`, `analyse`, `run_pharmacology`), `report.py` (all files, figures,
+  HTML/PDF), `synthetic.py` (known-answer 384-well plate + minimal run folder).
+- Concentrations are fitted in base units (M); display units only for labels and CSVs.
+  `effect` (% inhibition scale) is what synergy models use.
+- Vehicles in % and treatments of control wells are not drugs (`drug_treatments`).
+- Keep synergy definitions in step with docs/pharmacology.md; the reference-data tests in
+  `tests/data/pharmacology/` (Prism, SynergyFinder) run when files are present.
+- GUI: `gui/pharmacology_panel.py`; analysis runs in a `BackgroundTask` (thread), not in
+  the job queue; re-analysis after an exclusion does not write files (Write report does).
+
 ### New dependencies (approved list for 11–15)
 
 | Library | Phase | Use |
@@ -209,6 +224,7 @@ Run from this folder (`hcs-studio/`).
 - Acceptance tests on real data (docs/acceptance.md): `hcs-studio acceptance counts|coloc|run|kill-resume|beads …` (PASS/FAIL + JSON report)
 - Check an installation: `hcs-studio selftest`; GUI: `hcs-studio gui --smoke-test`
 - Layouts: `hcs-studio layout <file> --validate [--export out.xlsx [--plate-map]]`; re-annotate a run: `hcs-studio annotate <run> --layout <file>`
+- Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)

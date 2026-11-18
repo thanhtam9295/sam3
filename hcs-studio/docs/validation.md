@@ -200,6 +200,46 @@ Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
 
 Still to do: time a real 384-well plate on the analysis workstation (Phase 10).
 
+## Pharmacology (Phase 13)
+
+### Verified on synthetic data
+
+| Check | Result |
+|---|---|
+| 4PL on 10 concentrations × 3 replicates (noise SD 2 %) | LogEC50 within 0.05, Hill within 0.1, Top/Bottom within 3 %; absolute IC50 matches the analytic value |
+| 95 % intervals (covariance, t distribution), 200 simulated curves | coverage 0.90–0.99 for LogEC50 and Hill (300 curves: 94 % and 93 %) |
+| 5PL (S = 3) | Prism's LogEC50 recovered within 0.02 |
+| Robust fit with one wild well | EC50 closer to the truth than least squares |
+| F test of EC50 shift (0.5 log units, 3 replicates) | p < 10⁻⁶; identical curves p > 0.05 |
+| GR from a known GR curve (doubling time path) | GEC50 and GR50 within 2 %, GRinf within 0.02 |
+| Z′ and SSMD | equal to the formulas on simulated controls |
+| Bliss-additive 6 × 6 matrix | Bliss 0 (exact), ZIP < 0.5 |
+| Sham combination (a drug with itself) | Loewe < 0.05, combination index 1.000 |
+| Synthetic 384-well plate (synthetic.py, noise ≈ 1.5 %): EC50s of six curves | within 6 % of the truth (EC50s 0.1–2 µM); HeLa/MCF7 EC50 shift of 10× found (p ≈ 10⁻¹⁹) |
+| Same plate: A × B built synergistic, A × C Bliss-additive | A × B > 10 on all four models ("likely synergistic"); A × C Bliss 0.0, ZIP 0.0 |
+| Full report (2 readouts, HTML + PDF + 12 figures as PNG and SVG) from that plate | 10–20 s (requirement: < 1 min) |
+
+### Choices to know
+
+- Prism's parametrisation and sign convention (falling curves have a negative Hill slope).
+- Loewe uses HSA where no Loewe solution exists (as SynergyFinder does); such points are
+  counted in a note.
+- Bliss and HSA use the observed single agents; SynergyFinder 3 can apply a baseline
+  correction (`correction = TRUE`), which changes scores.
+- Single-agent fits for Loewe/ZIP include the 0 point as a dose six decades below the
+  lowest (the log-logistic limit of a zero dose).
+- Outliers: the MAD of a replicate group is floored by the vehicle wells' spread; with
+  triplicates k = 3 still flags about 2 % of ordinary wells.
+
+### Still to do with reference data
+
+- GraphPad Prism: 5 curves (EC50 within 5 %, Hill within 0.1) — put the files in
+  `tests/data/pharmacology/prism/` (format in the README there); the regression test runs
+  automatically.
+- SynergyFinder: a reference 6 × 6 matrix with its Bliss, HSA, Loewe and ZIP scores and
+  the SynergyFinder version/options — `tests/data/pharmacology/synergyfinder/`.
+- MuSyC (needs the `synergy` package; not added).
+
 ## Projection and background removal (Phase 12)
 
 ### Verified on synthetic data

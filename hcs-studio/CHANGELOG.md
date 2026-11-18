@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Phase 13 — pharmacology: dose–response, combination matrices, synergy
+- New **Pharmacology** tab and `hcs-studio pharm`: one or more readouts of one or more
+  runs, normalized per plate and cell line (% of control, % inhibition, GR with time-zero
+  wells, a time-zero plate or a doubling time).
+- Plate QC: Z′, SSMD, signal window, control CVs, flag below a Z′ threshold, control and
+  plate-trend figure.
+- Optional robust outlier exclusion (median ± k·MAD within replicate groups) and manual
+  exclusion by clicking a point; excluded wells stay visible (hollow) and are listed.
+- Dose–response: 4PL (default), 5PL, 3PL in GraphPad Prism's form; robust fitting;
+  relative and absolute IC50 with 95 % intervals (covariance or bootstrap), Hill, Top,
+  Bottom, Emax, AUC, activity area, GR50/GRmax/GR_AOC/GI50, R², RMSE, flags; EC50 shifts
+  between cell lines with an F test.
+- Combination matrices detected from the annotation (any N × M size, 0 row/column
+  included, missing wells marked); Bliss, HSA, Loewe (+ combination index) and ZIP with
+  mean, best 3 × 3 window, maximum cell, replicate t test and SynergyFinder labels.
+- Outputs in `pharmacology/`: normalized wells, QC, fits, comparisons, scores, matrices,
+  Prism XY tables, figures (PNG 300 dpi + SVG), HTML and PDF report.
+- Synthetic 384-well combination plate with known answers (`pharmacology/synthetic.py`).
+- New dependency: reportlab (PDF).
+- Methods and references: `docs/pharmacology.md`.
+
 ### Phase 12 — Z projection and background removal after projection
 - Projection: max (default), mean, sum, min, standard deviation, extended depth of field
   (variance or multi-scale pyramid); all planes, a plane range, or automatically chosen

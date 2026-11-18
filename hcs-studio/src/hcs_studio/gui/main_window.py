@@ -31,6 +31,7 @@ from hcs_studio.gui.layout_editor import LayoutEditor
 from hcs_studio.gui.measurements_panel import MeasurementsPanel
 from hcs_studio.gui.metadata_panel import MetadataPanel
 from hcs_studio.gui.pattern_dialog import PatternDialog
+from hcs_studio.gui.pharmacology_panel import PharmacologyPanel
 from hcs_studio.gui.pipeline_panel import PipelinePanel
 from hcs_studio.gui.plate_panel import PlatePanel
 from hcs_studio.gui.profiles_panel import ProfilesPanel
@@ -97,6 +98,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.results_panel, "Results")
         self.profiles_panel = ProfilesPanel()
         self.tabs.addTab(self.profiles_panel, "Profiles")
+        self.pharmacology_panel = PharmacologyPanel(self.log)
+        self.tabs.addTab(self.pharmacology_panel, "Pharmacology")
         self.setCentralWidget(self.tabs)
 
         self.browser = BrowserPanel()
@@ -179,6 +182,8 @@ class MainWindow(QMainWindow):
             lambda well: self.profiles_panel.highlight_wells([well])
         )
         self.profiles_panel.wells_selected.connect(self._on_profile_wells)
+        self.pharmacology_panel.wells_selected.connect(self._on_pharmacology_wells)
+        self.pharmacology_panel.show_well.connect(self._show_pharmacology_well)
         self.profiles_panel.open_object.connect(self.open_result_object)
         self.classify_panel.show_field.connect(self._classify_show_field)
         self.classify_panel.add_steps.connect(self._add_table_steps)
@@ -431,6 +436,7 @@ class MainWindow(QMainWindow):
         self.results_panel.load(folder)
         self.classify_panel.set_run(folder)
         self.profiles_panel.set_run(folder)
+        self.pharmacology_panel.set_run(folder)
         self.tabs.setCurrentWidget(self.results_panel)
         report = folder / "index.html"
         if report.exists():
@@ -453,6 +459,20 @@ class MainWindow(QMainWindow):
         results = self.results_panel.results
         if results is not None and results.folder == Path(folder):
             self.results_panel.mark_wells(wells)
+
+    def _on_pharmacology_wells(self, run: str, wells: list[str]) -> None:
+        """Wells of a clicked curve point or matrix cell: outlined on the Results plate."""
+        results = self.results_panel.results
+        if results is not None and results.folder.name == run:
+            self.results_panel.mark_wells(wells)
+
+    def _show_pharmacology_well(self, run: str, well: str) -> None:
+        results = self.results_panel.results
+        if results is None or results.folder.name != run:
+            self.log(f"Open run {run} in the Results tab to see {well}")
+            return
+        self.results_panel.select_well(well)
+        self.tabs.setCurrentWidget(self.results_panel)
 
     def open_result_object(
         self, folder: Path, well: str, field: int, object_id: int, object_type: str

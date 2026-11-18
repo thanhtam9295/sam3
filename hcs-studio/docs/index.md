@@ -646,6 +646,42 @@ writes `advanced/` (PCA and UMAP coordinates, loadings, variance, well profiles,
 the features used) and updates the run's `index.html`, which then has a linked PCA/UMAP
 panel: click a point to open its well, drag a rectangle to mark wells on the plate.
 
+## Pharmacology (dose–response and combinations)
+
+The **Pharmacology** tab works on finished runs: the run open in the Results tab, plus
+any others (**Add run…**; plates are merged by their annotation). Tick one or more
+readouts (e.g. `nuclei_count` for viability, a `class_…_fraction` for a phenotype),
+choose the normalization (% of control, % inhibition, GR), the curve model (4PL, 5PL,
+3PL), the synergy models (Bliss, HSA, Loewe, ZIP) and, optionally, outlier exclusion,
+then **Analyse**. Results need the plate layout: cell lines, compounds with
+concentrations, vehicle (negative) and positive controls (Layout tab).
+
+- The list groups results by readout → cell line → compound or combination. A curve
+  shows every well (hollow = excluded), mean ± SD and the fit; the line below gives EC50
+  with its 95 % interval, absolute IC50, Hill slope, AUC, Emax and flags.
+- Click a point to select its well (outlined on the Results plate; **Show in Results**
+  opens it there). **Ctrl+click** a point, or **Exclude / include selected wells**,
+  excludes it (or includes it again) and refits.
+- A combination shows the response matrix and the synergy matrix of the chosen model
+  (red synergy, blue antagonism; × = missing well). Click a cell to select its replicate
+  wells.
+- Tables: IC50/AUC across compounds and cell lines (coloured by EC50), synergy ranking,
+  plate QC (Z′ flagged below the threshold).
+- **Write report** writes `pharmacology/` in the first run folder: CSV tables, matrices,
+  Prism XY tables, figures (PNG 300 dpi + SVG), `pharmacology_report.html` and `.pdf`.
+
+From the command line:
+
+```bash
+hcs-studio pharm <run folder> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip
+```
+
+Other options: `--curve 5pl|3pl_bottom|3pl_top`, `--robust`, `--bootstrap 200`,
+`--outliers 4`, `--exclude PLATE:WELL`, `--doubling-time 24 --duration 72` (GR),
+`--time-zero <run>`, `--surfaces`, `--output <folder>`. Formulas, definitions and
+references: [pharmacology.md](pharmacology.md). Synergy labels follow SynergyFinder's
+conventions and are a guide, not proof.
+
 ## Limitations in this phase
 
 - Readers have been tested on synthetic plates only, not yet on real instrument exports.
@@ -662,5 +698,7 @@ panel: click a point to open its well, drag a rectangle to mark wells on the pla
 - Apart from deconvolution, every field is processed whole in memory.
 - Stitched mosaics are previews; fields are not blended into one full-resolution image.
 - Classification, clustering and spatial statistics are verified on synthetic data only.
+- Dose–response fits and synergy scores are verified on synthetic data; comparison with
+  GraphPad Prism and SynergyFinder on reference data is pending (see validation.md).
 - Profiles of several plates are saved with the first plate's run; the other runs' reports
   do not show them.

@@ -119,11 +119,14 @@ def load_wells(folders: Iterable[Path]) -> pd.DataFrame:
 
 def readout_choices(wells: pd.DataFrame) -> list[str]:
     """Numeric readout columns of a well table."""
-    fixed = {"row", "col", "n_active", "time_point_h"}
+    fixed = {"row", "col", "n_active", "time_point_h", "vehicle_only"}
     return [
         c
         for c in wells.columns
-        if c not in fixed and pd.api.types.is_numeric_dtype(wells[c]) and wells[c].notna().any()
+        if c not in fixed
+        and pd.api.types.is_numeric_dtype(wells[c])
+        and not pd.api.types.is_bool_dtype(wells[c])
+        and wells[c].notna().any()
     ]
 
 

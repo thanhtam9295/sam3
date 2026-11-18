@@ -21,6 +21,7 @@ PAGES = [
     ("acceptance.md", "Acceptance tests"),
     ("processing.md", "Processing modules"),
     ("measurements.md", "Measurement columns"),
+    ("pharmacology.md", "Pharmacology methods"),
     ("validation.md", "Validation"),
 ]
 TEMPLATE = """<!doctype html>

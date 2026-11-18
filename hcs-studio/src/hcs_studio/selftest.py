@@ -48,6 +48,8 @@ REQUIRED = (
     "pandas",
     "pyarrow",
     "sklearn",
+    "openpyxl",
+    "reportlab",
     "umap",
     "numba",
     "mahotas",
