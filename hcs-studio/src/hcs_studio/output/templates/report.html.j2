@@ -122,7 +122,7 @@ table.matrix td.missing { background: var(--nan); cursor: default; }
         <label>Curve or combination <select id="pharm-item"></select></label>
         <label>Synergy model <select id="pharm-model"></select></label>
       </div>
-      <svg id="curve" role="img" aria-label="Dose–response curve; click a point to open its well" hidden></svg>
+      <svg id="curve" role="img" aria-label="Dose–response curve; click a point to open its well" style="display: none"></svg>
       <div class="matrices" id="matrices" hidden>
         <div><p>Response (% inhibition)</p><table class="matrix" id="matrix-response"></table></div>
         <div><p id="syn-title">Synergy</p><table class="matrix" id="matrix-synergy"></table></div>
@@ -494,7 +494,8 @@ function openWells(wells) {
 }
 function renderPharm() {
   const [kind, index] = $("pharm-item").value.split(":"), block = pharmBlock();
-  $("curve").hidden = kind !== "curve"; $("matrices").hidden = kind !== "combo";
+  $("curve").style.display = kind === "curve" ? "" : "none";  // SVG elements ignore .hidden
+  $("matrices").hidden = kind !== "combo";
   $("pharm-model").parentElement.hidden = kind !== "combo";
   if (kind === "curve") drawCurve(block.curves[+index], block.label);
   else if (kind === "combo") drawMatrix(block.combinations[+index]);
@@ -559,7 +560,7 @@ function drawMatrix(c) {
   const bound = Math.max(10, ...syn.flat().filter(finite).map(Math.abs));
   fillMatrix($("matrix-synergy"), c, syn, (v) => interpolate(DIVERGING, (v + bound) / (2 * bound)));
   $("syn-title").textContent = `${model.toUpperCase()} synergy (% points)`;
-  $("pharm-note").textContent = `${c.cell_line} · ${c.drug_a} × ${c.drug_b}: ${model.toUpperCase()} mean ${fmt(score.mean)}, best 3 × 3 window ${fmt(score.window)}, p ${fmt(score.p)} — ${score.label} (SynergyFinder conventions: a guide, not proof). Concentrations in ${c.unit_a} (rows, highest at the top) and ${c.unit_b} (columns). Click a cell to open its wells.`;
+  $("pharm-note").textContent = `${c.cell_line} · ${c.drug_a} × ${c.drug_b}: ${model.toUpperCase()} mean ${fmt(score.mean)}, best 3 × 3 window ${fmt(score.window)}, ${finite(score.p) ? (score.p < 0.001 ? "p < 0.001" : `p ${score.p.toFixed(3)}`) : "no replicate test"} — ${score.label} (SynergyFinder conventions: a guide, not proof). Concentrations in ${c.unit_a} (rows, highest at the top) and ${c.unit_b} (columns). Click a cell to open its wells.`;
 }
 function setupPharmacology() {
   const P = DATA.pharmacology;

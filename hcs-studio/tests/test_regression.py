@@ -182,6 +182,9 @@ const { chromium } = require('playwright');
   const combo = out.items.findIndex((t) => t === 'MCF7 · Drug A × Drug B');
   await page.selectOption('#pharm-item', { index: combo });
   out.cells = await page.$$eval('#matrix-synergy td', (els) => els.length);
+  out.curveShownWithMatrix = await page.$eval('#curve',
+    (e) => getComputedStyle(e).display !== 'none');
+  out.note = await page.textContent('#pharm-note');
   out.cellTitle = await page.$eval('#matrix-synergy td[data-cell="3,3"]', (e) => e.title);
   await page.click('#matrix-synergy td[data-cell="3,3"]');
   out.selectedAfterCell = await page.textContent('#well h2');
@@ -223,7 +226,8 @@ def test_index_html_pharmacology_offline(run: Path, tmp_path: Path) -> None:
     assert "HeLa · Drug D" in out["items"] and "MCF7 · Drug A × Drug B" in out["items"]
     assert out["points"] == 20  # 10 concentrations in duplicate
     assert out["selectedAfterPoint"] == f"Well {out['pointWell']}"
-    assert out["cells"] == 36
+    assert out["cells"] == 36 and not out["curveShownWithMatrix"]
+    assert "p < 0.001" in out["note"]
     wells = out["cellTitle"].split("wells ")[1].split(", ")
     assert len(wells) == 3 and sorted(out["picked"]) == sorted(wells)
     assert out["selectedAfterCell"] == f"Well {sorted(wells)[0]}"
