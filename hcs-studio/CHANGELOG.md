@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Phase 15 — integration, reports and regression tests
+- Run steps in the pipeline builder (marked "▶ after the run"): **pharmacology**,
+  **compound_figures** and **experiment_report** run once after all wells, the tables and
+  the report; outside the pipeline hash; recorded in `run_manifest.json` → `run_steps`;
+  a failing run step never fails the run. `hcs-studio analyze` applies them to finished runs.
+- **Experiment report** (HTML + PDF, `experiment_report/`): provenance, plate layout figures,
+  QC, dose–response, combinations, representative image montages per compound, and methods
+  text generated from the manifest (acquisition, every step with its parameters, analyses,
+  pharmacology, software). Also from Tools → Experiment report.
+- `index.html`: colour the plate by annotation (compound, concentration, cell line, role);
+  pharmacology normalized readouts; a Pharmacology section with curves (click a point to
+  open its well) and response/synergy matrices (click a cell to open its wells); links to
+  reports, figures and montages. Refreshed after pharmacology and run steps.
+- Regression suite: a synthetic 384-well image plate with known dose–response, a
+  synergistic and a Bliss-additive combination, run end to end in CI with a stored baseline.
+- Docs: `docs/annotation.md` (annotation guide), run steps and the experiment report in
+  the user guide; pharmacology methods and the comparison/export guide (Phases 13–14).
+- Fixed: pharmacology on real runs (per-well summaries carry annotation columns, which
+  were mistaken for readouts); per-compound montages used the 0–1 default contrast instead
+  of linked auto contrast; long column headers overlapped.
+
 ### Phase 14 — side-by-side comparison and export
 - New **Compare** tab: wells from the Results plate, Pharmacology points or matrix cells,
   Profiles lassos or the annotation filter; arranged as a grid, by concentration × cell

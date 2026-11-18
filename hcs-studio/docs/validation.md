@@ -200,6 +200,30 @@ Regression test: `test_real_sam3_agrees_with_cellpose_on_real_nuclei` (set
 
 Still to do: time a real 384-well plate on the analysis workstation (Phase 10).
 
+## End-to-end regression plate (Phase 15)
+
+`tests/test_regression.py` runs a synthetic 384-well plate with images through the whole
+system in CI (about 45 s): segmentation, measurement, QC, the pharmacology, figure and
+experiment-report run steps, and the clickable `index.html` in a browser (offline).
+Each well's nuclei count follows the known truth (`pharmacology/synthetic.py`): 48 nuclei
+in vehicle wells, 2 in positive controls, and 48 − 46 · I/100 for a true inhibition I;
+nuclei are discs at least 3 px apart, so counts are exact.
+
+| Check | Result (this version) |
+|---|---|
+| Nuclei count in all 384 wells | equal to the truth in every well |
+| EC50 of six curves (four drugs, two cell lines) | within 7 % of the truth (limit 10 %); Hill slopes within 0.2 |
+| HeLa vs MCF7 EC50 shift for Drug D (10×) | Δlog EC50 −1.00, F test p < 10⁻⁶ |
+| Synergistic combination (A × B) | Bliss +11.6, Loewe +12.3, ZIP +11.4: "likely synergistic", p < 0.05 |
+| Bliss-additive combination (A × C) | Bliss +0.45, ZIP +0.36: "likely additive" |
+| Z′ | 1.0 (counts have no noise; real plates will be lower) |
+| Run steps | all completed; the pipeline hash is the same without them |
+| index.html | curve points and matrix cells open their wells; colouring by annotation; links |
+
+`tests/data/regression/baseline.json` stores these values; the suite fails when a change
+moves any of them by more than 2 % (regenerate deliberately with
+`HCS_UPDATE_BASELINE=1 pytest tests/test_regression.py`).
+
 ## Comparison and figure export (Phase 14)
 
 | Check | Result |

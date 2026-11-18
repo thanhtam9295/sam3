@@ -102,3 +102,24 @@ def test_pharmacology_tab(window: MainWindow, qtbot: QtBot, tmp_path: Path) -> N
         panel.analyse(write=True)
     assert (run / "pharmacology" / "pharmacology_report.html").exists()
     assert "wrote" in panel.status.text()
+
+
+def test_run_steps_in_builder_and_experiment_report(
+    window: MainWindow, qtbot: QtBot, tmp_path: Path
+) -> None:
+    panel = window.pipeline_panel
+    panel.add_step("measure_objects", {})
+    panel.add_step("gate_objects", {"rules": [{"feature": "area_um2", "min": 1}]})
+    panel.add_step("pharmacology", {"readouts": ["nuclei_count"]})
+    labels = [panel.steps.item(i).text() for i in range(panel.steps.count())]
+    assert labels[1].endswith("▦ after all wells (tables)")
+    assert labels[2].endswith("▶ after the run")
+    assert [s.module for s in panel.pipeline().run_steps()] == ["pharmacology"]
+
+    run = write_run(tmp_path / "run")
+    window.show_results(run)
+    with qtbot.waitSignal(window.report_task.finished, timeout=120000):
+        window.experiment_report()
+    assert (run / "experiment_report" / "experiment_report.html").exists()
+    assert (run / "pharmacology" / "pharmacology.json").exists()  # run on the way
+    assert "Experiment report of run" in window.log_view.toPlainText()

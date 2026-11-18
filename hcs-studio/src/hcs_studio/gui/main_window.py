@@ -146,6 +146,9 @@ class MainWindow(QMainWindow):
         self.analysis_task = BackgroundTask(self)
         self.analysis_task.finished.connect(self._on_analysis_finished)
         self.analysis_task.failed.connect(self._on_analysis_failed)
+        self.report_task = BackgroundTask(self)
+        self.report_task.finished.connect(self._on_report_finished)
+        self.report_task.failed.connect(lambda m: self.log(f"Experiment report failed: {m}"))
         self.jobs_panel = JobsPanel()
         self.jobs_dock = self._add_dock(
             "Jobs", "jobsDock", self.jobs_panel, Qt.DockWidgetArea.BottomDockWidgetArea
@@ -253,6 +256,9 @@ class MainWindow(QMainWindow):
         tools_menu = self.menuBar().addMenu("&Tools")
         tools_menu.addAction(self._action("&PSF tool…", self.open_psf_tool))
         tools_menu.addAction(self._action("&SAM 3 settings…", self.open_sam_settings))
+        tools_menu.addAction(
+            self._action("&Experiment report for the run in Results", self.experiment_report)
+        )
 
         view_menu = self.menuBar().addMenu("&View")
         for dock in (
@@ -556,6 +562,30 @@ class MainWindow(QMainWindow):
     def _on_analysis_failed(self, message: str) -> None:
         self.log(f"Applying table steps failed: {message}")
         self.statusBar().showMessage("Analysis failed", 5000)
+
+    def experiment_report(self) -> None:
+        """Write the experiment report (HTML + PDF) of the run open in Results."""
+        results = self.results_panel.results
+        if results is None:
+            self.log("Open a run in the Results tab first.")
+            return
+        folder = results.folder
+
+        def work() -> tuple[Path, list[Path]]:
+            from hcs_studio.output.experiment import write_experiment_report
+
+            return folder, write_experiment_report(folder)
+
+        self.statusBar().showMessage("Writing the experiment report…")
+        self.report_task.request(work)
+
+    def _on_report_finished(self, outcome: tuple[Path, list[Path]]) -> None:
+        folder, files = outcome
+        report = next((f for f in files if f.suffix == ".html"), None)
+        self.log(f"Experiment report of {folder.name}: {report}")
+        self.statusBar().showMessage("Experiment report written", 5000)
+        if self.results_panel.results is not None and self.results_panel.results.folder == folder:
+            self.results_panel.load(folder)
 
     def compare_result_field(self, folder: Path, well: str, index: int) -> None:
         """Raw, corrected (incl. deconvolution) and enhanced versions of a field, side by side."""

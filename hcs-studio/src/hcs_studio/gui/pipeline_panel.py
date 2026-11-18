@@ -154,8 +154,15 @@ class PipelinePanel(QWidget):
     # ------------------------------------------------------------------ steps
 
     def _label(self, index: int) -> str:
+        from hcs_studio.analysis.run_steps import RunStep
+        from hcs_studio.analysis.table_steps import TableModule
+
         module = MODULES.get(self._steps[index]["module"])
         mark = "" if module.preserves_linearity else "  ◐ display only"
+        if issubclass(module, TableModule):
+            mark = "  ▦ after all wells (tables)"
+        elif issubclass(module, RunStep):
+            mark = "  ▶ after the run"
         return f"{index + 1}. {module.title}{mark}"
 
     def _rebuild(self, select: int | None = None) -> None:

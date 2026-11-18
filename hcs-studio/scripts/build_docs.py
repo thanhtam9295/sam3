@@ -21,6 +21,7 @@ PAGES = [
     ("acceptance.md", "Acceptance tests"),
     ("processing.md", "Processing modules"),
     ("measurements.md", "Measurement columns"),
+    ("annotation.md", "Plate annotation"),
     ("pharmacology.md", "Pharmacology methods"),
     ("figures.md", "Comparison and figures"),
     ("validation.md", "Validation"),

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from hcs_studio.analysis.run_steps import RunStep
 from hcs_studio.analysis.table_steps import TableModule
 from hcs_studio.processing.base import MODULES, load_builtin_modules
 
@@ -28,8 +29,13 @@ NOTES = {
     "af_channel": "Subtracts `k × AF channel` from each target channel, then clips at 0. `k` is "
     "estimated by robust regression (Tukey biweight), which ignores pixels carrying real "
     "signal as long as background pixels are the majority.",
-    "background": "Removes smooth background per plane. The radius must be larger than the "
-    "largest object, or object intensity is removed too.",
+    "background": "Removes background per plane, typically after projection: top-hat, rolling "
+    "ball or sliding paraboloid (estimated on a 3 × 3 mean), Gaussian or median background "
+    "(subtracted or divided), a polynomial or spline surface fitted to background pixels, a "
+    "constant (percentile or blank wells), or BaSiC-style flat- and dark-field estimated "
+    "across the plate. Negatives are clipped; output stays linear. Each field reports the "
+    "change inside objects and in the background, and warns when the radius is under 2× the "
+    "typical object diameter.",
     "unmix": "Solves the linear mixing model by least squares and clips negative values. The "
     "output has one channel per fluorophore.",
     "denoise": "Smoothing filters. Output is still treated as measurement-grade, but median and "
@@ -39,8 +45,11 @@ NOTES = {
     "sharpen": "Unsharp mask or difference-of-Gaussians band boost.",
     "clarity": "Mild Gaussian denoise, then an unsharp mask that does not amplify detail at the "
     "noise level (limits ringing and noise after deconvolution), then CLAHE.",
-    "projection": "Collapses Z. `edf` picks, per pixel, the plane with the highest local "
-    "sharpness.",
+    "projection": "Collapses Z: maximum (default), mean, sum, minimum, standard deviation or "
+    "extended depth of field (`variance`: sharpest plane per pixel; `pyramid`: multi-scale "
+    "fusion). Planes: all, a range, or `auto` (the planes around the best focus by normalized "
+    "variance or Brenner, per channel or from `focus_channel`). The planes used are recorded "
+    "per field in `well_summary.json`.",
     "deconvolution": "Richardson-Lucy with total-variation regularisation (Dey et al. 2006) and "
     "Biggs-Andrews acceleration, or a one-step Wiener filter for quick previews. 3D for Z "
     "stacks (2D per plane with `force_2d`). The image is mirror-padded by the PSF half-size, "
@@ -129,6 +138,19 @@ NOTES = {
     "simulated complete spatial randomness in the same area. `spatial_pattern_<r>um` is +1 "
     "(clustered), -1 (regular) or 0 (consistent with randomness at the 5 % pointwise level "
     "with 39 simulations). Full curves per well are in `wells/<W>/analysis.json`.",
+    "pharmacology": "Normalizes per-well readouts per plate and cell line (% of control, % "
+    "inhibition or GR), checks plate QC (Z′, SSMD, CVs), fits dose–response curves "
+    "(4PL/5PL/3PL in GraphPad Prism's form) and scores combination matrices (Bliss, HSA, "
+    "Loewe, ZIP). Writes `pharmacology/` (tables, figures, HTML and PDF report) and adds "
+    "curves and heat maps to `index.html`. Methods: docs/pharmacology.md.",
+    "compound_figures": "One montage per compound of the plate layout: concentrations as "
+    "columns (vehicle first), cell lines as rows, the representative field of each well, "
+    "linked contrast and scale bars; each with a JSON sidecar to regenerate it. Written to "
+    "`figures/`.",
+    "experiment_report": "One report per run (`experiment_report/`, HTML and PDF): provenance, "
+    "plate layout figures, QC, dose–response, combinations, representative montages and "
+    "methods text generated from the manifest. Runs pharmacology first when the layout has "
+    "drugs and `pharmacology/` does not exist yet.",
     "register_channels": "Corrects chromatic shift by translating channels, either by given "
     "shifts in µm or by shifts measured on an image of multicolour beads. Linear (sub-pixel "
     "interpolation), so measurements stay valid. Place it before segmentation and "
@@ -159,6 +181,13 @@ def render() -> str:
             lines += [
                 "Table step: runs on the object tables after all wells are processed, and can "
                 "be applied to a finished run with `hcs-studio analyze`.",
+                "",
+            ]
+        elif issubclass(module, RunStep):
+            lines += [
+                "Run step: runs once on the finished run (after all wells, the tables and "
+                "the report); it does not change images, is not part of the pipeline hash, "
+                "and can be applied to a finished run with `hcs-studio analyze`.",
                 "",
             ]
         elif module.needs_fit:

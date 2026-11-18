@@ -4,9 +4,9 @@ Desktop image analysis for high-content and high-throughput fluorescence microsc
 (Nikon `.nd2`, Operetta CLS, ImageXpress). The full specification is in `PROMPT.md`;
 the project rules are in `CLAUDE.md`.
 
-**Status: Phases 11–14 (plate annotation; projection and background removal; pharmacology;
-comparison and figure export, PROMPT_ADDON.md) done; Phases 1–10 of PROMPT.md
-done; validation on real instrument data pending.** Plates from Nikon, Operetta CLS,
+**Status: all phases done — PROMPT.md 1–10 and PROMPT_ADDON.md 11–15 (annotation, projection
+and background, pharmacology, comparison and figures, integration and reports); validation
+on real instrument data pending.** Plates from Nikon, Operetta CLS,
 ImageXpress, OME-TIFF, OME-Zarr and plain TIFF folders can be browsed and viewed.
 Correction, enhancement, deconvolution, segmentation (Cellpose 4, SAM 3, threshold +
 watershed) and measurement steps (object features, colocalization, QC and counts) are

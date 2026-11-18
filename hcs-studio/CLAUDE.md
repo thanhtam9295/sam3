@@ -126,7 +126,7 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - `multiprocessing.freeze_support()` must run first in the frozen entry (`packaging/entry.py`); worker processes of the bundle restart the executable.
 - `scripts/make_test_plate.py` writes realistic synthetic plates (384 wells); `scripts/pipelines/perf_384.yaml` is the reference pipeline for performance numbers in docs/validation.md.
 
-## Add-on phases 11–15 (PROMPT_ADDON.md) — approved; Phases 11–14 built
+## Add-on phases 11–15 (PROMPT_ADDON.md) — approved; Phases 11–15 built
 
 Order: 11 annotation → 12 projection + background → 13 pharmacology → 14 comparison/export → 15 integration (all prerequisites, Phases 1–10, are built). Stop for review after each phase.
 
@@ -214,6 +214,20 @@ PlateLayout (model/annotation.py)
 - Test plate with images: `tests/compare_builders.make_run` (2 × 6 wells, 2 channels,
   5 planes, 2 fields, layout).
 
+### Integration conventions (Phase 15, built)
+
+- Run steps subclass `RunStep` (`analysis/run_steps.py`), register in `MODULES`, pass images
+  through, and implement `run(folder, log)` returning a record. `Pipeline.run_steps()`;
+  `image_steps()` excludes them; `pipeline_hash` ignores them. `run_pipeline` runs them after
+  the final manifest write (`finish_run_steps`: manifest `run_steps`, then `write_report`).
+- `output/experiment.py` (`write_experiment_report`) and `output/methods.py`
+  (`methods_paragraphs`: add a `DESCRIPTIONS` entry for every new module).
+- `index.html` data: `report_data()` adds `pharmacology` (from `pharmacology/report_data.json`,
+  this run's wells only), normalized readouts and `links`. Keep the template self-contained.
+- Regression: `tests/test_regression.py` + `pharmacology/synthetic.write_image_plate`; the
+  baseline `tests/data/regression/baseline.json` changes only deliberately
+  (`HCS_UPDATE_BASELINE=1`).
+
 ### New dependencies (approved list for 11–15)
 
 | Library | Phase | Use |
@@ -242,6 +256,7 @@ Run from this folder (`hcs-studio/`).
 - Check an installation: `hcs-studio selftest`; GUI: `hcs-studio gui --smoke-test`
 - Layouts: `hcs-studio layout <file> --validate [--export out.xlsx [--plate-map]]`; re-annotate a run: `hcs-studio annotate <run> --layout <file>`
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
+- Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`

@@ -35,7 +35,7 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 
 ## Background removal (`background`)
 
-Removes smooth background per plane. The radius must be larger than the largest object, or object intensity is removed too.
+Removes background per plane, typically after projection: top-hat, rolling ball or sliding paraboloid (estimated on a 3 × 3 mean), Gaussian or median background (subtracted or divided), a polynomial or spline surface fitted to background pixels, a constant (percentile or blank wells), or BaSiC-style flat- and dark-field estimated across the plate. Negatives are clipped; output stays linear. Each field reports the change inside objects and in the background, and warns when the radius is under 2× the typical object diameter.
 
 Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
 
@@ -111,6 +111,22 @@ Pearson, Spearman, Li's ICQ, Manders M1/M2, thresholded tM1/tM2 with Costes auto
 | `object_labels_b` | None | ... these objects. |
 | `object_distance_um` | 0.0 | Object-based: 0 = overlapping. |
 
+## Figures: a montage per compound (`compound_figures`)
+
+One montage per compound of the plate layout: concentrations as columns (vehicle first), cell lines as rows, the representative field of each well, linked contrast and scale bars; each with a JSON sidecar to regenerate it. Written to `figures/`.
+
+Run step: runs once on the finished run (after all wells, the tables and the report); it does not change images, is not part of the pipeline hash, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `source` | 'corrected' | corrected, enhanced, raw or step:<n>. |
+| `representative_readout` | '' | Field closest to the well median of this readout (a fields.csv column or object feature); empty = by object count. |
+| `format` | 'png' | Format. |
+| `dpi` | 300 | PNG/TIFF resolution. |
+| `width_mm` | 180.0 | Figure width (85 / 180 mm). |
+| `split_channels` | False | Each channel in grayscale + merge. |
+| `compounds` | [] | Only these; empty = all. |
+
 ## Contrast (percentile rescale, gamma) (`contrast`) — **display only**
 
 Rescales each channel to 0-1 between two percentiles and applies gamma.
@@ -183,6 +199,20 @@ Grows each nucleus outward by up to `distance_um`, without overlap, so each cell
 | `mask_channel` | None | Limit growth to pixels where this channel is bright. |
 | `mask_threshold` | None | Threshold for mask_channel; empty = Otsu. |
 
+## Experiment report (HTML + PDF) (`experiment_report`)
+
+One report per run (`experiment_report/`, HTML and PDF): provenance, plate layout figures, QC, dose–response, combinations, representative montages and methods text generated from the manifest. Runs pharmacology first when the layout has drugs and `pharmacology/` does not exist yet.
+
+Run step: runs once on the finished run (after all wells, the tables and the report); it does not change images, is not part of the pipeline hash, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `readouts` | [] | Readouts for pharmacology when it has not run yet; empty = the first *_count readout. |
+| `montages` | True | Representative image montages. |
+| `montage_source` | 'corrected' | Image of the montages. |
+| `representative_readout` | '' | Field choice for montages. |
+| `pdf` | True | Also write the PDF. |
+
 ## Filter objects (`filter_objects`)
 
 Removes objects touching the border, outside a size range, below a solidity, or outside an intensity range (intensity gates need linear data, so put the filter before display-only steps). Objects of child label sets lose their parent or are removed with it. Removed IDs are not renumbered.
@@ -245,6 +275,25 @@ Measures every object of the chosen label sets on the linear image (never on con
 | `neighbor_radius_um` | 20.0 | Radius for neighbour counts. |
 | `nucleus_labels` | 'nuclei' | Label set used for nuclear/cytoplasmic ratios of its children. |
 
+## Pharmacology: dose–response and synergy (`pharmacology`)
+
+Normalizes per-well readouts per plate and cell line (% of control, % inhibition or GR), checks plate QC (Z′, SSMD, CVs), fits dose–response curves (4PL/5PL/3PL in GraphPad Prism's form) and scores combination matrices (Bliss, HSA, Loewe, ZIP). Writes `pharmacology/` (tables, figures, HTML and PDF report) and adds curves and heat maps to `index.html`. Methods: docs/pharmacology.md.
+
+Run step: runs once on the finished run (after all wells, the tables and the report); it does not change images, is not part of the pipeline hash, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `readouts` | [] | Per-well readouts (columns of per_well_summary); empty = the first *_count readout. |
+| `normalization` | 'percent_inhibition' | % of control, % inhibition (needs positive controls) or GR. |
+| `models` | ['bliss', 'hsa', 'loewe', 'zip'] | Synergy models for combination matrices. |
+| `curve_model` | '4pl' | Dose–response model. |
+| `robust` | False | Robust (soft L1) curve fitting. |
+| `outlier_mad` | None | Exclude wells beyond median ± k·MAD; empty = off. |
+| `z_threshold` | 0.5 | Flag plates with Z′ below this. |
+| `doubling_time_h` | None | GR: doubling time. |
+| `assay_duration_h` | None | GR: assay duration. |
+| `pdf` | True | Also write the PDF report. |
+
 ## Phenotypic clusters (`phenotypic_clusters`)
 
 Groups objects by their features without labels: k-means, HDBSCAN, or Leiden (needs the optional `leidenalg` and `igraph`). Features are robust Z-scores clipped to ±10, optionally reduced by PCA. Clusters are learned on objects sampled across the plate; each object is then assigned (k-means: nearest centre; HDBSCAN and Leiden: majority of the 5 nearest sampled objects, an approximation). Cluster 1 is the largest, -1 is noise. Writes `cluster_<name>` per object and fractions per well; the features that set each cluster apart are listed in the analysis summary.
@@ -267,7 +316,7 @@ Table step: runs on the object tables after all wells are processed, and can be 
 
 ## Z projection (`projection`)
 
-Collapses Z. `edf` picks, per pixel, the plane with the highest local sharpness.
+Collapses Z: maximum (default), mean, sum, minimum, standard deviation or extended depth of field (`variance`: sharpest plane per pixel; `pyramid`: multi-scale fusion). Planes: all, a range, or `auto` (the planes around the best focus by normalized variance or Brenner, per channel or from `focus_channel`). The planes used are recorded per field in `well_summary.json`.
 
 | Parameter | Default | Meaning |
 |---|---|---|
