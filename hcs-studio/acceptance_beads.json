@@ -1,0 +1,39 @@
+{
+  "check": "beads",
+  "passed": true,
+  "items": [
+    {
+      "name": "FWHM x",
+      "passed": true,
+      "detail": "median of 5 beads 261 nm \u2192 145 nm (-45 %)",
+      "values": {
+        "before_um": 0.26065034125356906,
+        "after_um": 0.14453034958206062,
+        "beads": 5
+      }
+    },
+    {
+      "name": "FWHM y",
+      "passed": true,
+      "detail": "median of 5 beads 261 nm \u2192 145 nm (-45 %)",
+      "values": {
+        "before_um": 0.26074275552467363,
+        "after_um": 0.14470137688630477,
+        "beads": 5
+      }
+    },
+    {
+      "name": "FWHM z",
+      "passed": true,
+      "detail": "median of 5 beads 648 nm \u2192 285 nm (-56 %)",
+      "values": {
+        "before_um": 0.6476572699834581,
+        "after_um": 0.28463412339302624,
+        "beads": 5
+      }
+    }
+  ],
+  "notes": [
+    "measured PSF psf.ome.tif; 5 isolated beads (0 rejected); 30 iterations on cpu (numpy)"
+  ]
+}

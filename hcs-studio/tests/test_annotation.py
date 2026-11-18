@@ -411,3 +411,13 @@ def test_layout_in_a_run_and_annotate(tmp_path: Path) -> None:
         annotate_run(folder, unstained)
     rows = annotation_rows(renamed)
     assert rows["B02"]["conc_1"] == pytest.approx(10.0)
+
+
+def test_plate_without_any_cell_line_is_a_warning_not_an_error() -> None:
+    plate = PlateLayout.for_plate_type(96)
+    plate = dilution_series(plate, (0, 0), "Cpd 1", 10.0, "µM", factor=10, points=4, cell_line="")
+    plate = set_role(plate, [(1, c) for c in range(4)], "negative_control")
+    issues = {i.code: i for i in validate(plate)}
+    assert "missing_cell_line" not in issues
+    assert issues["no_cell_lines"].level == "warning"
+    assert len(issues["no_cell_lines"].wells) == 8

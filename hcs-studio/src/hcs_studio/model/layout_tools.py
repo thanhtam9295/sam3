@@ -290,7 +290,17 @@ def validate(layout: PlateLayout, min_controls: int = 3) -> list[Issue]:
     cells = {k: a for k, a in wells.items() if a.role not in ("blank", "empty", "excluded")}
 
     missing_line = sorted(k for k, a in cells.items() if not a.cell_line)
-    if missing_line:
+    if missing_line and len(missing_line) == len(cells):
+        # a single-cell-line plate recorded without names: analysable as one cell line
+        issues.append(
+            Issue(
+                "warning",
+                "no_cell_lines",
+                "No cell line recorded: all wells are analysed as one cell line",
+                tuple(missing_line),
+            )
+        )
+    elif missing_line:
         issues.append(
             Issue(
                 "error",

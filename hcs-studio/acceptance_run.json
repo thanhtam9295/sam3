@@ -1,0 +1,63 @@
+{
+  "check": "run",
+  "passed": true,
+  "items": [
+    {
+      "name": "status",
+      "passed": true,
+      "detail": "run completed",
+      "values": {}
+    },
+    {
+      "name": "run folder layout",
+      "passed": true,
+      "detail": "all present",
+      "values": {}
+    },
+    {
+      "name": "wells complete",
+      "passed": true,
+      "detail": "308 of 308",
+      "values": {}
+    },
+    {
+      "name": "no failed wells",
+      "passed": true,
+      "detail": "0 failed",
+      "values": {}
+    },
+    {
+      "name": "well folders",
+      "passed": true,
+      "detail": "previews and summaries present",
+      "values": {}
+    },
+    {
+      "name": "no partial files",
+      "passed": true,
+      "detail": "none",
+      "values": {}
+    },
+    {
+      "name": "object table",
+      "passed": true,
+      "detail": "tables/per_object_all.parquet",
+      "values": {}
+    },
+    {
+      "name": "report is self-contained",
+      "passed": true,
+      "detail": "no external resources",
+      "values": {}
+    },
+    {
+      "name": "report previews",
+      "passed": true,
+      "detail": "1232 linked images exist",
+      "values": {}
+    }
+  ],
+  "notes": [
+    "Open index.html from a copy of the folder (or a zip) with the network off and click a few wells: that is the interactive half of this criterion."
+  ]
+}

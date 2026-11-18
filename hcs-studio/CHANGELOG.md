@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### QC review of Phases 0–15
+- `docs/qc_review.md`: per-phase QC results (tests and every command-line tool run end to
+  end on synthetic data), open issues, the real data needed per phase and how to send it.
+- Fixed: layout validation reported a plate without any cell line (one-line screens, older
+  layout files) as an error; it is now a warning. Partly missing cell lines stay an error.
+
 ### Hardening pass (after Phase 15)
 - Compare: time-lapse movies (GIF/MP4 over timepoints from raw or recomputed sources,
   with a time stamp); a combination picker when the layout has several drug pairs; the
