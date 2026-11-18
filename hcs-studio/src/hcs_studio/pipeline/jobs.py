@@ -31,6 +31,7 @@ class Job:
     checksums: bool = True
     save_images: bool = True
     max_memory_gb: float | None = None
+    image_dtype: str = "float32"
     resume: str | None = None
     label: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
@@ -67,6 +68,7 @@ def run_job(job: Job, events: Any, cancel: Any, pause: Any) -> None:
             resume=Path(job.resume) if job.resume else None,
             save_images=job.save_images,
             max_memory_gb=job.max_memory_gb,
+            image_dtype=job.image_dtype,
         )
     except Exception as exc:
         events.put({"type": "log", "level": "error", "text": traceback.format_exc()})

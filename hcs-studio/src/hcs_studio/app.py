@@ -174,11 +174,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--wells", default="all", help="e.g. all, A01-H12, or B02,B03 (default: all)")
     run.add_argument("--output", type=Path, help="output root (default: next to the raw data)")
-    run.add_argument("--layout", type=Path, help="plate layout CSV")
+    run.add_argument("--layout", type=Path, help="plate layout (CSV, XLSX, plate-map XLSX or JSON)")
     run.add_argument(
         "--no-images",
         action="store_true",
         help="do not save corrected images (masks, previews and tables are still written)",
+    )
+    run.add_argument(
+        "--image-dtype",
+        choices=["float32", "original"],
+        default="float32",
+        help="corrected images as float32 (default) or in the camera's bit depth (rounded, "
+        "clipped; smaller files)",
     )
     run.add_argument(
         "--max-memory-gb", type=float, help="RAM the whole run may use (all workers together)"
@@ -410,6 +417,7 @@ def _run_jobs(
                 resume=folder,
                 save_images=not args.no_images,
                 max_memory_gb=args.max_memory_gb,
+                image_dtype=args.image_dtype,
                 cancel=cancel,
             )
         except (OSError, ValueError, ValidationError, ReaderError, ModuleError) as exc:

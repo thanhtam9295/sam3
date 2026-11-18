@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -143,4 +143,68 @@ def write_imagexpress_plate(
         '"EndFile"',
     ]
     (root / "Plate1.HTD").write_text("\r\n".join(lines) + "\r\n", encoding="latin-1")
+    return root
+
+
+def write_ome_zarr_plate(
+    root: Path,
+    wells: list[tuple[int, int]],
+    image_fn: Callable[[int, int, int], NDArray[Any]],
+    *,
+    channels: Sequence[str] = ("DAPI", "GFP", "mCherry"),
+    n_fields: int = 1,
+    pixel_size_um: float = 0.65,
+    z_step_um: float = 1.0,
+    plate_size: tuple[int, int] = (16, 24),
+    name: str = "synthetic",
+) -> Path:
+    """Write an OME-Zarr HCS plate (NGFF 0.4, zarr v2). ``image_fn(row, col, field)`` returns
+    one field as a (C, Z, Y, X) uint16 array; Z stacks of many planes stay compact."""
+    import zarr
+
+    from hcs_studio.model.plate import row_label
+
+    group: Any = zarr.open_group(str(root), mode="w", zarr_format=2)
+    group.attrs["plate"] = {
+        "name": name,
+        "version": "0.4",
+        "rows": [{"name": row_label(r)} for r in range(plate_size[0])],
+        "columns": [{"name": str(c + 1)} for c in range(plate_size[1])],
+        "wells": [
+            {"path": f"{row_label(r)}/{c + 1}", "rowIndex": r, "columnIndex": c} for r, c in wells
+        ],
+    }
+    for r, c in wells:
+        well = group.create_group(f"{row_label(r)}/{c + 1}")
+        well.attrs["well"] = {
+            "images": [{"path": str(f)} for f in range(n_fields)],
+            "version": "0.4",
+        }
+        for f in range(n_fields):
+            data = np.asarray(image_fn(r, c, f))
+            image = well.create_group(str(f))
+            image.attrs["multiscales"] = [
+                {
+                    "version": "0.4",
+                    "axes": [
+                        {"name": "c", "type": "channel"},
+                        {"name": "z", "type": "space", "unit": "micrometer"},
+                        {"name": "y", "type": "space", "unit": "micrometer"},
+                        {"name": "x", "type": "space", "unit": "micrometer"},
+                    ],
+                    "datasets": [
+                        {
+                            "path": "0",
+                            "coordinateTransformations": [
+                                {
+                                    "type": "scale",
+                                    "scale": [1, z_step_um, pixel_size_um, pixel_size_um],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+            image.attrs["omero"] = {"channels": [{"label": n} for n in channels]}
+            image.create_array("0", data=data, chunks=data.shape)
     return root

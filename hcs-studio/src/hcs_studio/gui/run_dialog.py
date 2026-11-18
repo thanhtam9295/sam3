@@ -8,6 +8,7 @@ from typing import Any
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -96,6 +97,12 @@ class RunDialog(QDialog):
         self.save_images.setToolTip(
             "Off: only masks, previews and tables are written (much smaller run folders)"
         )
+        self.image_dtype = QComboBox()
+        self.image_dtype.addItem("32-bit float (exact)", "float32")
+        self.image_dtype.addItem("Camera bit depth (smaller; rounded and clipped)", "original")
+        self.image_dtype.setToolTip(
+            "Type of the saved corrected images. Measurements always use the float values."
+        )
         self.memory = QDoubleSpinBox()
         self.memory.setRange(0, 4096)
         self.memory.setDecimals(1)
@@ -118,6 +125,7 @@ class RunDialog(QDialog):
         form.addRow("Memory limit", self.memory)
         form.addRow(self.checksums)
         form.addRow(self.save_images)
+        form.addRow("Saved images", self.image_dtype)
         box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -168,6 +176,7 @@ class RunDialog(QDialog):
             "workers": self.workers.value() or None,
             "checksums": self.checksums.isChecked(),
             "save_images": self.save_images.isChecked(),
+            "image_dtype": self.image_dtype.currentData(),
             "max_memory_gb": self.memory.value() or None,
         }
         plate = self.plate

@@ -1,4 +1,4 @@
-"""Enhancement steps: denoise, contrast, CLAHE, sharpening, clarity preset, Z projection.
+"""Enhancement steps: denoise, contrast, CLAHE, sharpening, clarity preset.
 
 Contrast, CLAHE, sharpening and clarity change intensities non-linearly. Their output
 is for viewing and as segmentation input only; it is flagged ``linear=False`` so that
@@ -21,8 +21,6 @@ from hcs_studio.processing.base import (
     FloatImage,
     ImageData,
     Module,
-    ModuleError,
-    replace,
     um_to_px,
 )
 
@@ -285,43 +283,3 @@ class Clarity(Module):
 
         out = _per_plane(image, params.selected(image.data.shape[0]), run)
         return image.derive(out, self.name, linear=False)
-
-
-# ----------------------------------------------------------------- projection
-
-
-class ProjectionParams(ChannelParams):
-    method: Literal["max", "mean", "edf"] = Field(
-        default="max", description="edf = extended depth of field (sharpest plane per pixel)."
-    )
-    channels: list[int] | None = Field(default=None, exclude=True, description="Not used.")
-
-
-def _edf(stack: FloatImage) -> FloatImage:
-    focus = np.stack([ndimage.gaussian_filter(ndimage.laplace(plane) ** 2, 2.0) for plane in stack])
-    best = ndimage.median_filter(np.argmax(focus, axis=0), size=5)
-    return np.asarray(np.take_along_axis(stack, best[None], axis=0)[0], dtype=np.float32)
-
-
-@MODULES.register("projection")
-class Projection(Module):
-    name = "projection"
-    title = "Z projection"
-    Params = ProjectionParams
-
-    def output_metadata(self, metadata: ImageMetadata) -> ImageMetadata:
-        return replace(metadata, z_step_um=None)
-
-    def apply(self, image: ImageData, state: Any) -> ImageData:
-        method = self.params.method
-        if image.data.shape[1] == 1:
-            return image.derive(image.data, self.name)
-        if method == "max":
-            out = image.data.max(axis=1, keepdims=True)
-        elif method == "mean":
-            out = image.data.mean(axis=1, keepdims=True)
-        elif method == "edf":
-            out = np.stack([_edf(channel) for channel in image.data])[:, None]
-        else:  # pragma: no cover - guarded by pydantic
-            raise ModuleError(f"Unknown projection method {method!r}")
-        return image.derive(out, self.name, metadata=self.output_metadata(image.metadata))

@@ -251,9 +251,11 @@ def load_builtin_modules() -> None:
     )
     from hcs_studio.processing import (  # noqa: F401
         autofluorescence,
+        background,
         deconvolution,
         enhance,
         flatfield,
+        projection,
     )
     from hcs_studio.segmentation import (  # noqa: F401
         cellpose_backend,

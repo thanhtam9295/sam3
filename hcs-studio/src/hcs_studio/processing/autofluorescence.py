@@ -1,9 +1,9 @@
 """Autofluorescence and background removal.
 
-Three approaches, each selectable per channel by stacking steps:
-reference wells (``af_reference``), a dedicated AF channel (``af_channel``),
-and morphological background estimation (``background``). ``unmix`` performs
-full linear spectral unmixing from a reference spectra matrix.
+Two approaches, each selectable per channel by stacking steps: reference wells
+(``af_reference``) and a dedicated AF channel (``af_channel``). ``unmix`` performs full
+linear spectral unmixing from a reference spectra matrix. Background removal is in
+``background.py``.
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ from hcs_studio.processing.base import (
     block_reduce_mean,
     replace,
     resize_to,
-    um_to_px,
 )
 
 # ------------------------------------------------------------ reference wells
@@ -220,52 +219,6 @@ class AfChannel(Module):
             "n_fields": state["n_fields"],
             "coefficients": {str(t + 1): k for t, k in state["k"].items()},
         }
-
-
-# ----------------------------------------------------------------- background
-
-
-class BackgroundParams(ChannelParams):
-    method: Literal["tophat", "rolling_ball"] = Field(
-        default="tophat",
-        description="tophat: fast morphological opening; rolling_ball: slower, smoother.",
-    )
-    radius_um: float = Field(
-        default=25.0, gt=0, description="Radius in µm; choose larger than the largest object."
-    )
-
-
-@MODULES.register("background")
-class Background(Module):
-    name = "background"
-    title = "Background subtraction"
-    Params = BackgroundParams
-
-    def validate(self, metadata: ImageMetadata) -> None:
-        radius = um_to_px(self.params.radius_um, metadata, "The background radius")
-        if radius < 1:
-            raise ModuleError("The background radius is smaller than one pixel")
-
-    def apply(self, image: ImageData, state: Any) -> ImageData:
-        import cv2
-
-        params: BackgroundParams = self.params
-        self.validate(image.metadata)
-        radius = round(um_to_px(params.radius_um, image.metadata, "The background radius"))
-        out = image.data.copy()
-        for c in params.selected(out.shape[0]):
-            for z in range(out.shape[1]):
-                plane = out[c, z]
-                if params.method == "tophat":
-                    size = 2 * radius + 1
-                    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
-                    out[c, z] = cv2.morphologyEx(plane, cv2.MORPH_TOPHAT, kernel)
-                else:
-                    from skimage.restoration import rolling_ball
-
-                    out[c, z] = plane - rolling_ball(plane, radius=radius)
-        np.clip(out, 0, None, out=out)
-        return image.derive(out, self.name)
 
 
 # ------------------------------------------------------------------- unmixing

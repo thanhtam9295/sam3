@@ -22,8 +22,15 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 
-from hcs_studio.analysis.stitching import StitchWell, mosaic, owner_fields, stitch
+from hcs_studio.analysis.stitching import (
+    StitchWell,
+    float_mosaic,
+    mosaic,
+    owner_fields,
+    stitch,
+)
 from hcs_studio.io.base import reopen_plate
 from hcs_studio.io.sidecar import load_overrides
 from hcs_studio.model.annotation import PlateLayout
@@ -401,6 +408,7 @@ class RunPlan:
     field_filter: dict[tuple[int, int], list[int]] | None = None
     save_images: bool = True
     max_memory_bytes: float | None = None
+    image_dtype: str = "float32"
 
 
 @dataclass
@@ -434,9 +442,11 @@ def process_well(
     wanted = plan.field_filter.get(key) if plan.field_filter else None
     items = [f for f in plate.wells[key].fields if wanted is None or f.index in wanted]
     written: list[dict[str, Any]] = []
+    well_warnings: list[str] = []
     well_tables: dict[str, list[Any]] = {}
     stitcher = next((m for m in runner.modules if isinstance(m, StitchWell)), None)
     small: dict[int, Any] = {}  # downsampled fields for stitching
+    linear_tiles: dict[int, Any] = {}  # downsampled corrected fields for the mosaic image
     previews: dict[int, Any] = {}
     field_shape: tuple[int, ...] | None = None
     runner.timings = {}
@@ -483,13 +493,23 @@ def process_well(
                 raw_first,
                 raw_colormaps,
                 save_images=plan.save_images,
+                image_dtype=plan.image_dtype,
             )
+            for warning in _field_warnings(record):
+                if warning not in well_warnings:
+                    well_warnings.append(warning)
+                    emit({"type": "log", "level": "warning", "text": f"{name}: {warning}"})
             clock["write"] += time.perf_counter() - started
             written.append(record)
             field_shape = finals[0].data.shape[-2:]
             if stitcher is not None:
                 plane = correcteds[0].data[stitcher.params.channel - 1].max(axis=0)
                 small[item.index] = block_reduce_mean(plane, stitcher.params.image_max_size)
+                if stitcher.params.save_mosaic:
+                    factor = stitcher.params.mosaic_downsample
+                    linear_tiles[item.index] = np.stack(
+                        [downsample(channel.max(axis=0), factor) for channel in correcteds[0].data]
+                    )
             outcome.inputs.extend(str(p) for p in item.sources)
             outcome.fields_written += 1
             emit({"type": "field_done", "well": name, "field": item.index})
@@ -522,6 +542,8 @@ def process_well(
             shutil.rmtree(well_dir)  # incomplete: redone on resume
         return outcome
     extra: dict[str, Any] = {}
+    if well_warnings:
+        extra["warnings"] = well_warnings
     pixel = runner.output_metadata.pixel_size_um
     if field_shape is not None and pixel is not None:
         shape = field_shape
@@ -530,7 +552,15 @@ def process_well(
         if stitcher is not None and outcome.error is None:
             try:
                 extra["stitching"] = _stitch_well(
-                    stitcher, items, size_um, small, previews, well_dir, well_tables
+                    stitcher,
+                    items,
+                    size_um,
+                    small,
+                    previews,
+                    well_dir,
+                    well_tables,
+                    linear_tiles,
+                    runner.output_metadata,
                 )
             except Exception as exc:  # stitching must not lose the well's measurements
                 outcome.error = f"stitching failed: {type(exc).__name__}: {exc}"
@@ -574,6 +604,8 @@ def _stitch_well(
     previews: dict[int, Any],
     well_dir: Path,
     well_tables: dict[str, list[Any]],
+    linear_tiles: dict[int, Any] | None = None,
+    metadata: ImageMetadata | None = None,
 ) -> dict[str, Any]:
     """Place the well's fields, write the mosaic and add well coordinates to the tables."""
     import pandas as pd
@@ -612,7 +644,21 @@ def _stitch_well(
         frame["field_y_um"] = frame.field.map(lambda f: offsets[int(f)][0])
         frame["field_x_um"] = frame.field.map(lambda f: offsets[int(f)][1])
         well_tables["fields"] = [frame]
+    extra: dict[str, Any] = {}
+    if linear_tiles and metadata is not None:
+        factor = stitcher.params.mosaic_downsample
+        tile = next(iter(linear_tiles.values()))
+        scale = size_um[0] / tile.shape[1]
+        image = float_mosaic(linear_tiles, result, scale)
+        pixel = metadata.pixel_size_um * factor if metadata.pixel_size_um else None
+        write_ome_tiff(
+            well_dir / "mosaic.ome.tif",
+            image[None, :, None],
+            replace(metadata, pixel_size_um=pixel, z_step_um=None),
+        )
+        extra = {"mosaic_image": "mosaic.ome.tif", "mosaic_image_um_per_px": scale}
     return {
+        **extra,
         "orientation": list(result.orientation),
         "refined_pairs": result.refined_pairs,
         "notes": result.notes,
@@ -632,6 +678,7 @@ def _write_field(
     raw_colormaps: list[str],
     *,
     save_images: bool = True,
+    image_dtype: str = "float32",
 ) -> tuple[dict[str, Any], Any]:
     """Write one field: images, masks, and previews of each stage plus outline overlays.
 
@@ -641,9 +688,11 @@ def _write_field(
     (well_dir / "previews").mkdir(exist_ok=True)
     corrected = np.stack([c.data for c in correcteds])
     files: dict[str, Any] = {}
+    saved_as: dict[str, Any] = {}
     if save_images:
+        stored, saved_as = to_storage_dtype(corrected, image_dtype, raw.metadata.bit_depth)
         write_ome_tiff(
-            well_dir / "enhanced" / f"{stem}_corrected.ome.tif", corrected, correcteds[0].metadata
+            well_dir / "enhanced" / f"{stem}_corrected.ome.tif", stored, correcteds[0].metadata
         )
         files["corrected"] = f"enhanced/{stem}_corrected.ome.tif"
     final = np.stack([f.data for f in finals])
@@ -698,6 +747,8 @@ def _write_field(
         "reports": [list(f.reports) for f in finals],
         "objects": objects,
     }
+    if saved_as:
+        record["corrected_saved_as"] = saved_as
     return record, preview
 
 
@@ -745,8 +796,61 @@ def auto_workers(plate: Plate, modules: list[Module], max_memory_bytes: float | 
     return max(1, min(cores, int(ram // worker_memory_bytes(plate)), len(plate.wells)))
 
 
+def downsample(plane: NDArray[Any], factor: int) -> NDArray[np.float32]:
+    """Block-average a 2D image by an integer factor (edges cropped)."""
+    if factor <= 1:
+        return np.asarray(plane, dtype=np.float32)
+    h, w = (plane.shape[0] // factor) * factor, (plane.shape[1] // factor) * factor
+    blocks = plane[:h, :w].reshape(h // factor, factor, w // factor, factor)
+    return np.asarray(blocks.mean(axis=(1, 3)), dtype=np.float32)
+
+
+def to_storage_dtype(
+    data: NDArray[Any], image_dtype: str, bit_depth: int | None
+) -> tuple[NDArray[Any], dict[str, Any]]:
+    """Corrected images as written: float32, or rounded to the camera's bit depth
+    ("original"; values outside the range are clipped and counted)."""
+    if image_dtype == "float32":
+        return data, {}
+    if image_dtype != "original":
+        raise ValueError(f"Unknown image type {image_dtype!r} (float32 or original)")
+    bits = bit_depth or 16
+    dtype = np.uint8 if bits <= 8 else np.uint16 if bits <= 16 else np.uint32
+    top = 2**bits - 1
+    rounded = np.rint(data)
+    clipped = int(np.count_nonzero((rounded < 0) | (rounded > top)))
+    stored = np.clip(rounded, 0, top).astype(dtype)
+    return stored, {
+        "dtype": np.dtype(dtype).name,
+        "bit_depth": bits,
+        "bit_depth_assumed": bit_depth is None,
+        "clipped_pixels": clipped,
+    }
+
+
+def _field_warnings(record: dict[str, Any]) -> list[str]:
+    """Warnings from the steps' reports of one field (e.g. a background radius check)."""
+    found: list[str] = []
+    for reports in record.get("reports", []):
+        for report in reports:
+            for warning in report.get("warnings", []) if isinstance(report, dict) else []:
+                if warning not in found:
+                    found.append(str(warning))
+    saved = record.get("corrected_saved_as") or {}
+    if saved.get("clipped_pixels"):
+        found.append(
+            f"{saved['clipped_pixels']} pixel(s) outside the {saved['bit_depth']}-bit range "
+            "were clipped when saving; measurements use the unclipped values"
+        )
+    return found
+
+
 def estimate_output_bytes(
-    plate: Plate, n_fields: int, metadata: ImageMetadata, save_images: bool
+    plate: Plate,
+    n_fields: int,
+    metadata: ImageMetadata,
+    save_images: bool,
+    bytes_per_value: int = 4,
 ) -> int:
     """Rough size of a run's outputs: corrected images (float32, if saved), masks and
     previews; tables are small in comparison."""
@@ -754,7 +858,7 @@ def estimate_output_bytes(
     per_field = 3 * 1024**2  # previews and outlines
     per_field += 2 * z * y * x  # masks (compressed int32, a rough allowance)
     if save_images:
-        per_field += 4 * t * max(c, len(metadata.channels)) * z * y * x
+        per_field += bytes_per_value * t * max(c, len(metadata.channels)) * z * y * x
     return int(n_fields * per_field * 1.1)
 
 
@@ -779,6 +883,7 @@ def run_pipeline(
     resume: Path | None = None,
     save_images: bool = True,
     max_memory_gb: float | None = None,
+    image_dtype: str = "float32",
 ) -> RunResult:
     """Process ``wells`` (default: all) and write the run folder. Raw data is only read.
 
@@ -787,7 +892,12 @@ def run_pipeline(
     wells it completed. ``cancel`` / ``pause``: events (threading or multiprocessing).
     ``save_images``: write corrected (and enhanced) OME-TIFFs; masks, previews and tables
     are always written. ``max_memory_gb``: RAM the whole run may use (all workers).
+    ``image_dtype``: corrected images as float32, or "original" (the camera's bit depth,
+    rounded and clipped; measurements always use the float values).
     """
+    if image_dtype not in ("float32", "original"):
+        raise ValueError(f"Unknown image type {image_dtype!r} (float32 or original)")
+    value_bytes = 4 if image_dtype == "float32" else 2
     max_memory = max_memory_gb * 1024**3 if max_memory_gb else None
     started = datetime.now(UTC)
     if layout is None and layout_path is not None:
@@ -833,7 +943,9 @@ def run_pipeline(
         raw = _plate_folder(plate)
         check_disk_space(
             output_root if output_root is not None else raw.parent,
-            estimate_output_bytes(plate, n_fields, runner.output_metadata, save_images),
+            estimate_output_bytes(
+                plate, n_fields, runner.output_metadata, save_images, value_bytes
+            ),
         )
         folder = make_run_folder(plate, pipeline, output_root)
     result = RunResult(folder=folder)
@@ -921,6 +1033,7 @@ def run_pipeline(
             record["layout"] = layout_record
         record["options"] = {
             "save_images": save_images,
+            "image_dtype": image_dtype,
             "max_memory_gb": max_memory_gb,
             "workers_requested": workers,
         }
@@ -976,11 +1089,14 @@ def run_pipeline(
             fields,
             save_images=save_images,
             max_memory_bytes=max_memory,
+            image_dtype=image_dtype,
         )
         if resume is not None:
             check_disk_space(
                 folder,
-                estimate_output_bytes(plate, total, runner.output_metadata, save_images),
+                estimate_output_bytes(
+                    plate, total, runner.output_metadata, save_images, value_bytes
+                ),
             )
         count = (
             workers

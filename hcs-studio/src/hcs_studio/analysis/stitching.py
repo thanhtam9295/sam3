@@ -299,6 +299,37 @@ def mosaic(
     return canvas, tile_scale_um / factor
 
 
+def float_mosaic(
+    tiles: dict[int, NDArray[np.float32]],
+    result: StitchResult,
+    tile_scale_um: float,
+) -> NDArray[np.float32]:
+    """(C, H, W) mosaic of linear (C, Y, X) tiles at the stitched positions (the top-left
+    field at 0, 0); overlaps are averaged, so intensities stay comparable with the single
+    fields."""
+    y_min = min(result.offsets_um[f][0] for f in tiles)
+    x_min = min(result.offsets_um[f][1] for f in tiles)
+    offsets = {f: (result.offsets_um[f][0] - y_min, result.offsets_um[f][1] - x_min) for f in tiles}
+    extent = np.zeros(2)
+    for f, tile in tiles.items():
+        y, x = offsets[f]
+        extent = np.maximum(
+            extent, [y / tile_scale_um + tile.shape[1], x / tile_scale_um + tile.shape[2]]
+        )
+    n_c = next(iter(tiles.values())).shape[0]
+    shape = (int(np.ceil(extent[0])) + 1, int(np.ceil(extent[1])) + 1)
+    total = np.zeros((n_c, *shape), dtype=np.float64)
+    count = np.zeros(shape, dtype=np.float64)
+    for f, tile in tiles.items():
+        y, x = offsets[f]
+        r0, c0 = round(y / tile_scale_um), round(x / tile_scale_um)
+        h = min(tile.shape[1], shape[0] - r0)
+        w = min(tile.shape[2], shape[1] - c0)
+        total[:, r0 : r0 + h, c0 : c0 + w] += tile[:, :h, :w]
+        count[r0 : r0 + h, c0 : c0 + w] += 1
+    return np.asarray(total / np.maximum(count, 1), dtype=np.float32)
+
+
 # ------------------------------------------------------------------ pipeline step
 
 ORIENTATIONS: dict[str, Orientation | None] = {
@@ -328,6 +359,18 @@ class StitchParams(ModuleParams):
     )
     image_max_size: int = _Field(
         default=1024, ge=128, le=4096, description="Fields are downsampled to this for matching."
+    )
+    save_mosaic: bool = _Field(
+        default=False,
+        description="Also write the well as one linear image (mosaic.ome.tif, all channels; "
+        "overlaps averaged), e.g. of projected and background-corrected fields.",
+    )
+    mosaic_downsample: int = _Field(
+        default=2,
+        ge=1,
+        le=16,
+        description="Mosaic image: block-average by this factor (1 = full resolution; needs "
+        "all fields of a well in memory).",
     )
 
 
