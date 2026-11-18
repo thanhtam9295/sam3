@@ -182,3 +182,13 @@ def combination_grid(
             "title": f"{cell_line} · {drug_a} × {drug_b}",
         }
     )
+
+
+def combinations_in_layout(layout: PlateLayout) -> list[tuple[str, str, str]]:
+    """(cell line, drug A, drug B) of every drug pair given together in some well."""
+    found = set()
+    for a in layout.wells.values():
+        drugs = sorted(t.compound for t in _drugs(a))
+        if len(drugs) == 2:
+            found.add((a.cell_line, drugs[0], drugs[1]))
+    return sorted(found)

@@ -392,8 +392,8 @@ def render(
                     if (panel.z == "max" and n_z > 1)
                     else (f"z {int(panel.z) + 1}/{n_z}" if n_z > 1 else "")
                 )
-                if panel.timepoint:
-                    stamp = f"t {panel.timepoint} " + stamp
+                if panel.timepoint or s.stamp_time:
+                    stamp = f"t {panel.timepoint + 1} " + stamp
                 if stamp:
                     ax.text(
                         0.03 * crop_w,

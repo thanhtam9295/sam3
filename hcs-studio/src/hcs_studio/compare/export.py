@@ -28,6 +28,8 @@ from hcs_studio.compare.spec import Comparison, ExportSettings
 from hcs_studio.io.sidecar import config_dir
 
 SIDECAR_FORMAT = "hcs-studio-figure/1"
+#: Raster figures above this are refused (an RGBA buffer of 250 MP is 1 GB).
+MAX_MEGAPIXELS = 250.0
 
 
 def _sidecar(path: Path, comparison: Comparison, kind: str, extra: dict[str, Any]) -> Path:
@@ -85,6 +87,14 @@ def export_figure(
     if path.suffix.lower().lstrip(".") not in (fmt, "tif" if fmt == "tiff" else fmt):
         path = path.with_suffix("." + fmt)
     fig, rendered = render(comparison, images)
+    if fmt in ("png", "tiff"):
+        dpi = comparison.settings.dpi
+        megapixels = rendered.width_in * dpi * rendered.height_in * dpi / 1e6
+        if megapixels > MAX_MEGAPIXELS:
+            raise ValueError(
+                f"The figure would be {megapixels:.0f} megapixels at {dpi} dpi (limit "
+                f"{MAX_MEGAPIXELS:.0f}): lower the dpi, use fewer panels or export SVG/PDF"
+            )
     path.parent.mkdir(parents=True, exist_ok=True)
     options: dict[str, Any] = {"facecolor": comparison.settings.background}
     if fmt == "png":
@@ -205,9 +215,31 @@ def export_data(
 
 
 def frame_count(comparison: Comparison, images: dict[int, PanelImage], axis: str) -> int:
+    """Frames of a movie: Z planes of the loaded panels, or timepoints of the raw data."""
     if axis == "z":
         return int(min(img.image.data.shape[1] for img in images.values()))
-    raise ValueError("Only Z movies are supported for run outputs (they keep one timepoint)")
+    if axis == "t":
+        sources = {p.source for p in comparison.panels}
+        if not all(s == "raw" or s.startswith("step:") for s in sources):
+            raise ValueError(
+                "Time movies need the raw data (image source 'raw' or 'step:<n>'): run "
+                "outputs keep the first timepoint only"
+            )
+        return min(timepoint_count(Path(p.run)) for p in comparison.panels)
+    raise ValueError(f"Unknown movie axis {axis!r} (z or t)")
+
+
+def timepoint_count(run: Path) -> int:
+    """Timepoints in a run's raw data (reopened from the manifest)."""
+    from hcs_studio.io.base import reopen_plate
+
+    manifest = json.loads((Path(run) / "run_manifest.json").read_text(encoding="utf-8"))
+    plate = reopen_plate(manifest["plate"]["source"])
+    shape = plate.shape_tczyx
+    if shape is None:
+        first = next(iter(plate.wells.values())).fields[0]
+        return int(first.load().shape[0])
+    return int(shape[0])
 
 
 def export_movie(
@@ -218,22 +250,42 @@ def export_movie(
     dpi: int = 120,
     images: dict[int, PanelImage] | None = None,
 ) -> Path:
-    """A GIF or MP4 scrolling through Z with all panels in step."""
+    """A GIF or MP4 with all panels in step: through Z (``axis="z"``) or through time
+    (``"t"``, from the raw data: one load per panel and timepoint)."""
     path = Path(path)
-    images = images or load_images(comparison)
+    if path.suffix.lower() not in (".gif", ".mp4"):
+        raise ValueError("Movies are written as .gif or .mp4")
+    if axis == "t":
+        n = frame_count(comparison, {}, axis)
+        images = load_images(comparison)
+    else:
+        images = images or load_images(comparison)
+        n = frame_count(comparison, images, axis)
     comparison = _filled(comparison, images)
-    n = frame_count(comparison, images, axis)
     if n < 2:
-        raise ValueError("The panels have a single Z plane: nothing to animate")
+        what = "Z plane" if axis == "z" else "timepoint"
+        raise ValueError(f"The panels have a single {what}: nothing to animate")
     frames = []
-    for z in range(n):
-        step = comparison.model_copy(
-            update={
-                "panels": [p.model_copy(update={"z": z}) for p in comparison.panels],
-                "settings": comparison.settings.model_copy(update={"stamp": True}),
-            }
-        )
-        fig, _ = render(step, images, dpi=dpi)
+    for k in range(n):
+        if axis == "z":
+            step = comparison.model_copy(
+                update={
+                    "panels": [p.model_copy(update={"z": k}) for p in comparison.panels],
+                    "settings": comparison.settings.model_copy(update={"stamp": True}),
+                }
+            )
+            frame_images = images
+        else:
+            step = comparison.model_copy(
+                update={
+                    "panels": [p.model_copy(update={"timepoint": k}) for p in comparison.panels],
+                    "settings": comparison.settings.model_copy(
+                        update={"stamp": True, "stamp_time": True}
+                    ),
+                }
+            )
+            frame_images = load_images(step)
+        fig, _ = render(step, frame_images, dpi=dpi)
         fig.canvas.draw()
         frames.append(np.asarray(fig.canvas.buffer_rgba())[..., :3].copy())
     if path.suffix.lower() == ".gif":

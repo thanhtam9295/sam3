@@ -157,9 +157,11 @@ def write_ome_zarr_plate(
     z_step_um: float = 1.0,
     plate_size: tuple[int, int] = (16, 24),
     name: str = "synthetic",
+    timepoints: int = 1,
 ) -> Path:
     """Write an OME-Zarr HCS plate (NGFF 0.4, zarr v2). ``image_fn(row, col, field)`` returns
-    one field as a (C, Z, Y, X) uint16 array; Z stacks of many planes stay compact."""
+    one field as a (C, Z, Y, X) uint16 array — or (T, C, Z, Y, X) with ``timepoints`` > 1;
+    Z stacks of many planes stay compact."""
     import zarr
 
     from hcs_studio.model.plate import row_label
@@ -186,7 +188,10 @@ def write_ome_zarr_plate(
             image.attrs["multiscales"] = [
                 {
                     "version": "0.4",
-                    "axes": [
+                    "axes": (
+                        [{"name": "t", "type": "time", "unit": "second"}] if timepoints > 1 else []
+                    )
+                    + [
                         {"name": "c", "type": "channel"},
                         {"name": "z", "type": "space", "unit": "micrometer"},
                         {"name": "y", "type": "space", "unit": "micrometer"},
@@ -198,7 +203,8 @@ def write_ome_zarr_plate(
                             "coordinateTransformations": [
                                 {
                                     "type": "scale",
-                                    "scale": [1, z_step_um, pixel_size_um, pixel_size_um],
+                                    "scale": [1] * (timepoints > 1)
+                                    + [1, z_step_um, pixel_size_um, pixel_size_um],
                                 }
                             ],
                         }

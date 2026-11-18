@@ -314,3 +314,90 @@ def test_command_line(run: Path, tmp_path: Path) -> None:
     )
     assert (tmp_path / "per" / "Drug-X.png").exists()
     assert main(["figure"]) == 2
+
+
+# ------------------------------------------------------------------- hardening
+
+
+def test_panel_cache_is_bounded_by_bytes(run: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hcs_studio.compare import sources
+
+    sources.clear_cache()
+    one = sources._nbytes(load_panel(by_annotation(run, ["A01"], Comparison()).panels[0]))
+    monkeypatch.setattr(sources, "CACHE_LIMIT_BYTES", int(one * 2.5))
+    for well in ("A01", "A02", "A03", "A04"):
+        load_panel(by_annotation(run, [well], Comparison()).panels[0])
+    assert len(sources._CACHE) == 2 and sources.cache_bytes() <= one * 2.5
+    assert [k[1] for k in sources._CACHE] == ["A03", "A04"]  # the most recent
+    sources.clear_cache()
+    assert sources.cache_bytes() == 0
+
+
+def test_oversized_raster_figures_are_refused(
+    run: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hcs_studio.compare import export
+
+    monkeypatch.setattr(export, "MAX_MEGAPIXELS", 1.0)
+    comparison = _two_by_six(run)
+    with pytest.raises(ValueError, match="megapixels at 300 dpi"):
+        export_figure(comparison, tmp_path / "big.png")
+    svg = comparison.model_copy(
+        update={"settings": comparison.settings.model_copy(update={"format": "svg"})}
+    )
+    assert export_figure(svg, tmp_path / "big.svg").exists()  # vector formats are fine
+
+
+def test_time_lapse_movie_from_raw_data(tmp_path: Path) -> None:
+    from hcs_studio.io.base import open_plate
+    from hcs_studio.pipeline.executor import run_pipeline
+    from hcs_studio.pipeline.schema import Pipeline
+    from hcs_studio.utils.synthetic import write_ome_zarr_plate
+
+    def series(row: int, col: int, f: int) -> np.ndarray:
+        data = np.full((4, 1, 1, 32, 32), 100, np.uint16)
+        for t in range(4):
+            data[t, 0, 0, 4 + 6 * t : 10 + 6 * t, 10:20] = 2000  # a moving object
+        return data
+
+    plate = write_ome_zarr_plate(
+        tmp_path / "t.zarr",
+        [(0, 0), (0, 1)],
+        series,
+        channels=("GFP",),
+        plate_size=(8, 12),
+        timepoints=4,
+    )
+    assert open_plate(plate).shape_tczyx == (4, 1, 1, 32, 32)
+    run = run_pipeline(
+        open_plate(plate),
+        Pipeline.from_text("name: t\nsteps:\n  - {module: qc}\n"),
+        output_root=tmp_path / "out",
+        checksums=False,
+    ).folder
+    comparison = grid(run, ["A01", "A02"], Comparison(settings=ExportSettings(width_mm=85)))
+    with pytest.raises(ValueError, match="raw data"):
+        export_movie(comparison, tmp_path / "t.gif", axis="t")
+    raw = comparison.model_copy(
+        update={"panels": [p.model_copy(update={"source": "raw"}) for p in comparison.panels]}
+    )
+    gif = export_movie(raw, tmp_path / "t.gif", axis="t")
+    assert getattr(Image.open(gif), "n_frames", 1) == 4
+    frames = []
+    image = Image.open(gif)
+    for k in range(4):
+        image.seek(k)
+        frames.append(np.asarray(image.convert("L")))
+    assert all(not np.array_equal(frames[0], f) for f in frames[1:])  # the object moves
+    with pytest.raises(ValueError, match=r"\.gif or \.mp4"):
+        export_movie(raw, tmp_path / "t.avi", axis="t")
+
+
+def test_combinations_in_layout() -> None:
+    from hcs_studio.compare.arrange import combinations_in_layout
+    from hcs_studio.pharmacology.synthetic import layout as synthetic_layout
+
+    assert combinations_in_layout(synthetic_layout()) == [
+        ("MCF7", "Drug A", "Drug B"),
+        ("MCF7", "Drug A", "Drug C"),
+    ]

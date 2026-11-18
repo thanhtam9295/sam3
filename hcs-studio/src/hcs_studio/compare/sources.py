@@ -11,8 +11,9 @@ from __future__ import annotations
 import hashlib
 import json
 import pickle
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -81,9 +82,36 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-@lru_cache(maxsize=64)
+#: Loaded panels, least recently used first; bounded by bytes, not count (real fields
+#: with Z stacks can be hundreds of MB each).
+_CACHE: OrderedDict[tuple[str, str, int, str, int], PanelImage] = OrderedDict()
+_LOCK = threading.Lock()
+CACHE_LIMIT_BYTES = 2 * 1024**3
+
+
+def _nbytes(panel: PanelImage) -> int:
+    return int(panel.image.data.nbytes + sum(ls.data.nbytes for ls in panel.image.labels))
+
+
+def cache_bytes() -> int:
+    with _LOCK:
+        return sum(_nbytes(p) for p in _CACHE.values())
+
+
 def _cached(run: str, well: str, field: int, source: str, timepoint: int) -> PanelImage:
-    return _load(Path(run), well, field, source, timepoint)
+    key = (run, well, field, source, timepoint)
+    with _LOCK:
+        if key in _CACHE:
+            _CACHE.move_to_end(key)
+            return _CACHE[key]
+    panel = _load(Path(run), well, field, source, timepoint)
+    with _LOCK:
+        _CACHE[key] = panel
+        total = sum(_nbytes(p) for p in _CACHE.values())
+        while total > CACHE_LIMIT_BYTES and len(_CACHE) > 1:
+            _, dropped = _CACHE.popitem(last=False)
+            total -= _nbytes(dropped)
+    return panel
 
 
 def load_panel(panel: PanelSpec, representative_readout: str | None = None) -> PanelImage:
@@ -99,7 +127,8 @@ def load_panel(panel: PanelSpec, representative_readout: str | None = None) -> P
 
 
 def clear_cache() -> None:
-    _cached.cache_clear()
+    with _LOCK:
+        _CACHE.clear()
 
 
 def _load(run: Path, well: str, field: int, source: str, timepoint: int) -> PanelImage:

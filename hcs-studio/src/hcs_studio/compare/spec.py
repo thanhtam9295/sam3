@@ -80,6 +80,7 @@ class ExportSettings(_Model):
     legend: bool = True
     split_channels: bool = False
     stamp: bool = False  # Z / time stamp in each panel
+    stamp_time: bool = False  # always show the timepoint (time-lapse movies)
     scale_bar: ScaleBar = Field(default_factory=ScaleBar)
 
 

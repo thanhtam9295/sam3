@@ -80,6 +80,9 @@ class ComparePanel(QWidget):
         self.task = BackgroundTask(self)
         self.task.finished.connect(self._on_loaded)
         self.task.failed.connect(self._on_failed)
+        self.movie_task = BackgroundTask(self)
+        self.movie_task.finished.connect(lambda out: self.status.setText(f"Wrote {out.name}"))
+        self.movie_task.failed.connect(lambda message: self.status.setText(f"Movie: {message}"))
         self._build()
 
     # ------------------------------------------------------------------- UI
@@ -177,7 +180,7 @@ class ComparePanel(QWidget):
         buttons = [
             ("Export figure…", self._export_figure),
             ("Export data…", self._export_data),
-            ("Export movie (Z)…", self._export_movie),
+            ("Export movie (Z or time)…", self._export_movie),
             ("Batch: a figure per compound…", self._batch),
         ]
         self.status = QLabel("Choose wells: Results, Pharmacology, Profiles or the filter above.")
@@ -320,17 +323,17 @@ class ComparePanel(QWidget):
 
     def _combination(self, base: Comparison) -> Comparison:
         assert self.run is not None
-        layout = arrange.layout_of(self.run)
-        a = layout.get(next(iter(sorted(layout.wells))))  # any well for the cell line default
-        text, ok = QInputDialog.getText(
-            self, "Combination matrix", "cell line; drug A; drug B", text=f"{a.cell_line}; ; "
+        choices = arrange.combinations_in_layout(arrange.layout_of(self.run))
+        if not choices:
+            raise ValueError("The layout has no wells with two drugs")
+        labels = [f"{line or 'no cell line'} · {a} × {b}" for line, a, b in choices]
+        label, ok = QInputDialog.getItem(
+            self, "Combination matrix", "Show this combination as an image grid:", labels, 0, False
         )
         if not ok:
             raise ValueError("cancelled")
-        parts = [p.strip() for p in text.split(";")]
-        if len(parts) != 3 or not all(parts[1:]):
-            raise ValueError("Give: cell line; drug A; drug B")
-        return arrange.combination_grid(self.run, parts[0], parts[1], parts[2], base)
+        line, a, b = choices[labels.index(label)]
+        return arrange.combination_grid(self.run, line, a, b, base)
 
     # ------------------------------------------------------------- loading
 
@@ -699,16 +702,27 @@ class ComparePanel(QWidget):
     def _export_movie(self) -> None:
         if not self._ready():
             return
+        axis, ok = QInputDialog.getItem(
+            self, "Export movie", "Animate through:", ["Z planes", "time (raw data)"], 0, False
+        )
+        if not ok:
+            return
         path, _ = QFileDialog.getSaveFileName(
             self, "Export movie", "comparison.mp4", "Movies (*.mp4 *.gif)"
         )
         if path:
-            try:
-                out = export_movie(self.export_comparison(), Path(path), images=self.images)
-            except ValueError as exc:
-                self.status.setText(str(exc))
-                return
-            self.status.setText(f"Wrote {out.name}")
+            self.export_movie_to(Path(path), "t" if axis.startswith("time") else "z")
+
+    def export_movie_to(self, path: Path, axis: str = "z") -> None:
+        """Write a movie in the background (time movies read every timepoint)."""
+        comparison = self.export_comparison()
+        images = dict(self.images) if axis == "z" else None
+        self.status.setText("Writing the movie…")
+
+        def work() -> Path:
+            return export_movie(comparison, path, axis=axis, images=images)
+
+        self.movie_task.request(work)
 
     def _batch(self) -> None:
         if self.run is None:

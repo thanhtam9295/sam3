@@ -75,6 +75,8 @@ packages = ["src/hcs_studio"]
 testpaths = ["tests"]
 qt_api = "pyside6"
 addopts = "-ra"
+# a test that runs this long is stuck: dump every thread's stack (diagnoses rare hangs)
+faulthandler_timeout = 180
 filterwarnings = [
     "ignore:.*json_encoders.*",
     "ignore:Setting the shape on a NumPy array:DeprecationWarning",
