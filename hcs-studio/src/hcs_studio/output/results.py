@@ -14,7 +14,8 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
-from hcs_studio.model.layout import WellAnnotation, read_plate_layout
+from hcs_studio.model.annotation import PlateLayout
+from hcs_studio.model.layout import WellAnnotation, load_plate_layout, run_layout_file
 from hcs_studio.model.plate import parse_well_name, well_name
 
 Normalisation = Literal["none", "robust_z_plate", "robust_z_negative"]
@@ -91,10 +92,13 @@ class RunResults:
         self._add_profile_readouts()
         flags_file = tables / "qc_flags.csv"
         self.flags = pd.read_csv(flags_file) if flags_file.exists() else None
-        layout_file = self.folder / "plate_layout.csv"
+        layout_file = run_layout_file(self.folder)
         self.layout: dict[str, WellAnnotation] = {}
-        if layout_file.exists():
-            self.layout = {well_name(*k): v for k, v in read_plate_layout(layout_file).items()}
+        #: The full layout (plate size, metadata, custom fields), when the run has one.
+        self.layout_document: PlateLayout | None = None
+        if layout_file is not None:
+            self.layout_document = load_plate_layout(layout_file)
+            self.layout = {well_name(*k): v for k, v in self.layout_document.wells.items()}
         self.wells: list[str] = (
             sorted(
                 p.name
@@ -211,7 +215,13 @@ class RunResults:
 
     def readout_columns(self) -> list[str]:
         """Numeric per-well summary columns, the most commonly used first."""
-        numeric = [c for c in self.summary.select_dtypes(include=["number", "bool"]).columns]
+        from hcs_studio.io.layout_io import is_annotation_column
+
+        numeric = [
+            c
+            for c in self.summary.select_dtypes(include=["number", "bool"]).columns
+            if not is_annotation_column(str(c), self.layout_document)
+        ]
 
         def rank(column: str) -> tuple[int, str]:
             for i, key in enumerate(_PREFERRED):

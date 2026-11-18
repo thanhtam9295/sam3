@@ -759,7 +759,17 @@ class ProfilesPanel(QWidget):
             [GROUP]
             + [
                 c
-                for c in ("compound", "concentration", "treatment", "control_type", "well", "plate")
+                for c in (
+                    "cell_line",
+                    "compound",
+                    "concentration",
+                    "role",
+                    "replicate_group",
+                    "treatment",
+                    "control_type",
+                    "well",
+                    "plate",
+                )
                 if c in self._points
             ]
             + [

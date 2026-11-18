@@ -41,16 +41,16 @@ def run_job(job: Job, events: Any, cancel: Any, pause: Any) -> None:
     try:
         from hcs_studio.io.base import reopen_plate
         from hcs_studio.io.sidecar import apply_overrides
-        from hcs_studio.model.layout import read_plate_layout
+        from hcs_studio.model.layout import load_plate_layout, run_layout_file
         from hcs_studio.pipeline.executor import run_pipeline
         from hcs_studio.pipeline.schema import Pipeline
 
         plate = reopen_plate(job.plate_source)
         plate = replace(plate, metadata=job.metadata) if job.metadata else apply_overrides(plate)
         layout_path = Path(job.layout_path) if job.layout_path else None
-        if layout_path is None and job.resume and (Path(job.resume) / "plate_layout.csv").exists():
-            layout_path = Path(job.resume) / "plate_layout.csv"
-        layout = read_plate_layout(layout_path) if layout_path else None
+        if layout_path is None and job.resume:
+            layout_path = run_layout_file(Path(job.resume))
+        layout = load_plate_layout(layout_path) if layout_path else None
         run_pipeline(
             plate,
             Pipeline.model_validate(job.pipeline),

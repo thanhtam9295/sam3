@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+### Phase 11 — plate annotation (PROMPT_ADDON.md)
+- New **Layout** tab: annotate cell line, treatments (single agents and combinations, each
+  with concentration, unit and vehicle), role, passage, cells per well, time point, notes
+  and custom fields; select by click, Shift+click, drag, Ctrl+click or row/column header;
+  edit only the ticked fields of a selection; undo/redo; copy/paste.
+- Fill helpers: dilution series (1:2, 1:3, 1:10, ½-log, custom; either direction;
+  replicates), combination matrix (6 × 6 by default, single agents and vehicle corner,
+  replicate matrices), vehicle/positive controls and blanks, edge-well exclusion.
+- Colour the plate by cell line, compound, concentration (log), role or replicate group.
+- Units: molar, mass and percent units stored in base units and shown as entered
+  (`model/units.py`); molar ↔ mass only with a molecular weight.
+- Validation with clickable problems (missing cell line, untreated samples, treated empty
+  wells, missing or too few vehicle controls, mixed units, combination matrices without
+  single agents).
+- Import long CSV/XLSX (column-mapping dialog for unfamiliar headers), plate-map XLSX and
+  JSON; export long CSV/XLSX, plate-map XLSX, PNG/PDF figure and JSON. CSV round trips are
+  byte-identical. Older layout CSVs (`compound`, `concentration`, `control_type`) still load.
+- Versions of each plate's layout (`~/.hcs_studio/layouts/`), templates with renaming of
+  cell lines and compounds; runs copy the version used and record version + SHA-256.
+- Annotation filter bar (cell line, compound, concentration range, role) on the Layout,
+  Plate and Results tabs.
+- `per_well_summary` carries the annotation columns; the report shows them.
+- CLI: `hcs-studio layout <file> [--validate] [--export <file> [--plate-map] [--layer …]]`
+  and `hcs-studio annotate <run> --layout <file>` (re-annotate a finished run without
+  reprocessing images).
+- New dependency: openpyxl.
+- Changing sample names, doses or roles in a layout no longer changes the pipeline hash
+  (only unstained/blank wells do), so such runs can be resumed.
+
 ### Acceptance-test toolkit (PROMPT.md §10)
 - `hcs-studio acceptance counts | coloc | run | kill-resume | beads`: one command per §10
   criterion, PASS/FAIL per item and a JSON report; protocol in `docs/acceptance.md`.

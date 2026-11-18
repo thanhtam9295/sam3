@@ -33,7 +33,15 @@ from hcs_studio import __version__
 from hcs_studio.analysis.table_steps import feature_columns, read_well_objects, unique_rows
 
 META = ("plate", "run", "well", "field", "timepoint", "object_id")
-ANNOTATION = ("compound", "concentration", "treatment", "control_type")
+ANNOTATION = (
+    "compound",
+    "concentration",
+    "treatment",
+    "control_type",
+    "cell_line",
+    "role",
+    "replicate_group",
+)
 POSITION = ("centroid_y_um", "centroid_x_um", "well_y_um", "well_x_um")
 #: Normalised values are clipped to ±CLIP before PCA and UMAP (outliers would dominate).
 CLIP = 10.0

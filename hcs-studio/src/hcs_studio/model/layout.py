@@ -1,62 +1,56 @@
-"""Plate layout import (CSV: well, compound, concentration, treatment, control_type)."""
+"""Plate layouts as used by runs: well → annotation.
+
+The annotation model is ``model/annotation.py`` (cell lines, single agents and
+combinations, roles); reading and writing files is ``io/layout_io.py``. This module keeps
+the names earlier code uses.
+"""
 
 from __future__ import annotations
 
-import csv
-from dataclasses import dataclass
 from pathlib import Path
 
-from hcs_studio.model.plate import parse_well_name
+from hcs_studio.model.annotation import PlateLayout, WellAnnotation
 
-_CONTROL_TYPES = {"", "negative", "positive", "unstained", "blank"}
-
-
-@dataclass(frozen=True)
-class WellAnnotation:
-    compound: str = ""
-    concentration: float | None = None
-    treatment: str = ""
-    control_type: str = ""
+Layout = dict[tuple[int, int], WellAnnotation]
 
 
-def read_plate_layout(path: Path) -> dict[tuple[int, int], WellAnnotation]:
-    """Read a layout CSV. Only the ``well`` column is required; headers are case-insensitive."""
-    layout: dict[tuple[int, int], WellAnnotation] = {}
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames is None:
-            raise ValueError(f"{path.name}: empty layout file")
-        headers = {h.strip().lower().replace(" ", "_"): h for h in reader.fieldnames}
-        if "well" not in headers:
-            raise ValueError(f"{path.name}: a 'well' column is required")
+def read_plate_layout(path: Path) -> Layout:
+    """Read a layout file (JSON, long CSV/XLSX, plate-map XLSX, or an older layout CSV)."""
+    from hcs_studio.io.layout_io import load_layout
 
-        def cell(row: dict[str, str], key: str) -> str:
-            return (row.get(headers[key]) or "").strip() if key in headers else ""
+    return dict(load_layout(Path(path)).layout.wells)
 
-        for line, row in enumerate(reader, start=2):
-            try:
-                position = parse_well_name(cell(row, "well"))
-            except ValueError as exc:
-                raise ValueError(f"{path.name} line {line}: {exc}") from None
-            if position in layout:
-                raise ValueError(f"{path.name} line {line}: well listed twice")
-            conc_text = cell(row, "concentration")
-            try:
-                concentration = float(conc_text) if conc_text else None
-            except ValueError:
-                raise ValueError(
-                    f"{path.name} line {line}: concentration {conc_text!r} is not a number"
-                ) from None
-            control = cell(row, "control_type").lower()
-            if control not in _CONTROL_TYPES:
-                allowed = ", ".join(sorted(t for t in _CONTROL_TYPES if t))
-                raise ValueError(
-                    f"{path.name} line {line}: control_type {control!r} (allowed: {allowed})"
-                )
-            layout[position] = WellAnnotation(
-                compound=cell(row, "compound"),
-                concentration=concentration,
-                treatment=cell(row, "treatment"),
-                control_type=control,
-            )
-    return layout
+
+def load_plate_layout(path: Path) -> PlateLayout:
+    from hcs_studio.io.layout_io import load_layout
+
+    return load_layout(Path(path)).layout
+
+
+def run_layout_file(folder: Path) -> Path | None:
+    """The layout a run used: ``plate_layout.json`` (or the CSV of older runs)."""
+    for name in ("plate_layout.json", "plate_layout.csv"):
+        if (Path(folder) / name).exists():
+            return Path(folder) / name
+    return None
+
+
+def processing_signature(layout: Layout | PlateLayout | None) -> list[tuple[str, str]]:
+    """The part of a layout that image processing uses (unstained and blank wells)."""
+    from hcs_studio.model.plate import well_name
+
+    wells = layout.wells if isinstance(layout, PlateLayout) else (layout or {})
+    return sorted(
+        (well_name(*k), a.role) for k, a in wells.items() if a.role in ("unstained", "blank")
+    )
+
+
+__all__ = [
+    "Layout",
+    "PlateLayout",
+    "WellAnnotation",
+    "load_plate_layout",
+    "processing_signature",
+    "read_plate_layout",
+    "run_layout_file",
+]

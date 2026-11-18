@@ -26,7 +26,8 @@ import numpy as np
 from hcs_studio.analysis.stitching import StitchWell, mosaic, owner_fields, stitch
 from hcs_studio.io.base import reopen_plate
 from hcs_studio.io.sidecar import load_overrides
-from hcs_studio.model.layout import WellAnnotation
+from hcs_studio.model.annotation import PlateLayout
+from hcs_studio.model.layout import WellAnnotation, processing_signature
 from hcs_studio.model.plate import Field, ImageMetadata, Plate, parse_well_name, well_name
 from hcs_studio.output.manifest import build_manifest, describe_inputs, write_json
 from hcs_studio.output.tables import aggregate_run, write_well_tables
@@ -185,7 +186,7 @@ class PipelineRunner:
             [
                 str(self.plate.path),
                 repr(self.plate.metadata),
-                sorted((k, repr(v)) for k, v in self.layout.items()),
+                processing_signature(self.layout),
                 self.fit_field_limit,
                 steps,
             ],
@@ -313,6 +314,30 @@ def make_run_folder(plate: Plate, pipeline: Pipeline, output_root: Path | None) 
     return folder
 
 
+def write_run_layout(
+    folder: Path, layout: PlateLayout, source: Path | None = None
+) -> dict[str, Any]:
+    """Write the layout a run uses (``plate_layout.json`` and a long CSV for people, plus
+    the imported file as given) and return its record for the manifest."""
+    from hcs_studio.io.layout_io import save_layout
+    from hcs_studio.io.layout_store import layout_sha256
+
+    save_layout(layout, folder / "plate_layout.json")
+    save_layout(layout, folder / "plate_layout.csv")
+    record: dict[str, Any] = {
+        "file": "plate_layout.json",
+        "version": layout.version or None,
+        "sha256": layout_sha256(layout),
+        "wells": len(layout.wells),
+    }
+    if source is not None and Path(source).exists():
+        copy = folder / f"plate_layout_source{Path(source).suffix.lower()}"
+        if Path(source).resolve() != copy.resolve():
+            shutil.copyfile(source, copy)
+        record["source"] = {"path": str(source), "copy": copy.name}
+    return record
+
+
 def check_disk_space(path: Path, needed: int) -> None:
     """Refuse to start when the output disk clearly cannot hold the run's outputs."""
     from hcs_studio.utils.resources import free_disk_bytes
@@ -327,7 +352,9 @@ def check_disk_space(path: Path, needed: int) -> None:
 
 
 def pipeline_hash(
-    plate: Plate, pipeline: Pipeline, layout: dict[tuple[int, int], WellAnnotation]
+    plate: Plate,
+    pipeline: Pipeline,
+    layout: dict[tuple[int, int], WellAnnotation] | PlateLayout,
 ) -> str:
     """Identifies what a run's wells contain: image steps, plate, metadata (with overrides)
     and layout. Table steps are left out: they are recomputed from the tables every time."""
@@ -342,7 +369,7 @@ def pipeline_hash(
             data,
             str(Path(plate.path).resolve()),
             repr(plate.metadata),
-            sorted((f"{k}", repr(v)) for k, v in layout.items()),
+            processing_signature(layout),
         ],
         sort_keys=True,
         default=str,
@@ -741,7 +768,7 @@ def run_pipeline(
     output_root: Path | None = None,
     wells: list[tuple[int, int]] | None = None,
     fields: dict[tuple[int, int], list[int]] | None = None,
-    layout: dict[tuple[int, int], WellAnnotation] | None = None,
+    layout: dict[tuple[int, int], WellAnnotation] | PlateLayout | None = None,
     layout_path: Path | None = None,
     checksums: bool = True,
     progress: Progress | None = None,
@@ -763,7 +790,12 @@ def run_pipeline(
     """
     max_memory = max_memory_gb * 1024**3 if max_memory_gb else None
     started = datetime.now(UTC)
-    layout = layout or {}
+    document = (
+        layout
+        if isinstance(layout, PlateLayout)
+        else PlateLayout(rows=plate.rows, cols=plate.cols, wells=layout or {})
+    )
+    layout = dict(document.wells)  # plain dict: picklable for worker processes
     runner = PipelineRunner(plate, pipeline, layout)
     selected = wells if wells is not None else sorted(plate.wells)
     missing = [well_name(*w) for w in selected if w not in plate.wells]
@@ -883,6 +915,8 @@ def run_pipeline(
         )
         record["pipeline_hash"] = run_hash
         record["history"] = history
+        if layout_record:
+            record["layout"] = layout_record
         record["options"] = {
             "save_images": save_images,
             "max_memory_gb": max_memory_gb,
@@ -894,11 +928,12 @@ def run_pipeline(
 
     status = "failed"
     performance: dict[str, Any] = {}
+    layout_record: dict[str, Any] = {}
     phase_started = time.monotonic()
     try:
         (folder / "pipeline.yaml").write_text(pipeline.to_yaml(), encoding="utf-8")
-        if layout_path is not None:
-            shutil.copyfile(layout_path, folder / "plate_layout.csv")
+        if document.wells:
+            layout_record = write_run_layout(folder, document, layout_path)
         manifest("running")
         log.info(
             "Run %s: plate %s, pipeline %s, %d wells (%d already complete)",
@@ -1169,6 +1204,56 @@ def analyze_run(
         "steps": [s.model_dump(mode="json") for s in steps],
     }
     manifest.setdefault("analyses", []).append(record)
+    write_json(manifest_path, manifest)
+    return record
+
+
+def annotate_run(folder: Path, layout: PlateLayout, source: Path | None = None) -> dict[str, Any]:
+    """Give a finished run a new or corrected plate layout without reprocessing images:
+    the layout is written to the run folder, the tables (annotation columns, table steps)
+    and the report are rebuilt, and the manifest records the change. Refused when the
+    unstained or blank wells differ from those the images were processed with."""
+    from hcs_studio.model.layout import load_plate_layout, run_layout_file
+
+    folder = Path(folder)
+    manifest_path = folder / "run_manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        run_pipeline_def = Pipeline.model_validate(manifest["pipeline"])
+    except (OSError, ValueError, KeyError):
+        raise ValueError(f"{folder} is not an HCS Studio run folder") from None
+    previous_file = run_layout_file(folder)
+    previous = load_plate_layout(previous_file) if previous_file else None
+    if processing_signature(previous) != processing_signature(layout):
+        raise ValueError(
+            "The new layout marks different unstained or blank wells than the images were "
+            "processed with (they drive autofluorescence subtraction); run the plate again"
+        )
+    record = write_run_layout(folder, layout, source)
+    log = logging.getLogger(f"hcs_studio.annotate.{folder.name}")
+    log.setLevel(logging.INFO)
+    log.propagate = False
+    (folder / "logs").mkdir(exist_ok=True)
+    handler = logging.FileHandler(folder / "logs" / "run.log", encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    log.addHandler(handler)
+    try:
+        log.info(
+            "Annotation: layout %s applied (%d wells)", record["sha256"][:12], len(layout.wells)
+        )
+        summarise_run(
+            folder,
+            [s.create() for s in run_pipeline_def.image_steps()],
+            [s.create() for s in run_pipeline_def.table_steps()],
+            log,
+        )
+    finally:
+        log.removeHandler(handler)
+        handler.close()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("layout"):
+        manifest.setdefault("layout_history", []).append(manifest["layout"])
+    manifest["layout"] = {**record, "applied": datetime.now(UTC).isoformat()}
     write_json(manifest_path, manifest)
     return record
 

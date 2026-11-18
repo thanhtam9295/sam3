@@ -126,7 +126,7 @@ All napari access goes through `gui/viewer.py` (`ViewerPanel`).
 - `multiprocessing.freeze_support()` must run first in the frozen entry (`packaging/entry.py`); worker processes of the bundle restart the executable.
 - `scripts/make_test_plate.py` writes realistic synthetic plates (384 wells); `scripts/pipelines/perf_384.yaml` is the reference pipeline for performance numbers in docs/validation.md.
 
-## Add-on phases 11–15 (PROMPT_ADDON.md) — proposed, pending approval
+## Add-on phases 11–15 (PROMPT_ADDON.md) — approved; Phase 11 built
 
 Order: 11 annotation → 12 projection + background → 13 pharmacology → 14 comparison/export → 15 integration (all prerequisites, Phases 1–10, are built). Stop for review after each phase.
 
@@ -150,6 +150,24 @@ PlateLayout (model/annotation.py)
 - Layouts are immutable values; an edit makes a new version. Versions live in `<settings>/layouts/<plate key>/vNNNN.json` (plate key = barcode, else a hash of the plate path). Each run copies the version it used to `plate_layout.json` and records `{version, sha256}` in `run_manifest.json`. Templates live in `<settings>/layout_templates/`.
 - Only the processing-relevant part of a layout (unstained/blank wells) enters `pipeline_hash`; changing names, doses or roles of samples does not block resuming. Annotation can be re-applied to a finished run (tables and report refreshed, no image reprocessing).
 - Per-well tables get the annotation columns joined at aggregation; per-object tables are joined by well at read time (no duplication across 10⁷ rows).
+
+### Annotation conventions (Phase 11, built)
+
+- Model: `model/annotation.py` (PlateLayout, WellAnnotation, Treatment, AnnotationFilter);
+  helpers `model/layout_tools.py` (pure functions returning new layouts: `dilution_series`,
+  `combination_matrix`, `set_role`, `exclude_edges`, `apply_fields`, copy/paste, templates,
+  `validate` → `Issue`s); files `io/layout_io.py` (`load_layout` → `LayoutImport`,
+  `save_layout`, plate-map XLSX, figures); versions/templates `io/layout_store.py`.
+  `model/layout.py` is a compatibility shim (`load_plate_layout`, `run_layout_file`).
+- Values are canonicalised to 12 significant digits so CSV/XLSX/JSON round trips are exact;
+  keep that when adding fields. Custom keys starting with `_` are internal (not exported
+  as columns, e.g. the edge-exclusion marker).
+- `apply_fields` on an unannotated well starts from a sample, not from `EMPTY`.
+- GUI: `gui/layout_editor.py` (`LayoutEditor`; its document is `self.doc`, never
+  `self.layout`, which is `QWidget.layout()`), `gui/annotation_filter.py`. The main window
+  keeps `layout_document` (shown), `_run_layout` + `layout_path` (what runs use);
+  `layout_for_run()` saves unsaved edits as a new version first.
+- Echo/D300 dispense-file import is deferred until a sample file is provided.
 
 ### New dependencies (approved list for 11–15)
 
@@ -177,6 +195,7 @@ Run from this folder (`hcs-studio/`).
 - Apply table steps to a finished run: `hcs-studio analyze <run folder> --pipeline steps.yaml [--only]`; train a classifier from a labels CSV: `hcs-studio train-classifier --run <folder> --labels labels.csv --output model.joblib`
 - Acceptance tests on real data (docs/acceptance.md): `hcs-studio acceptance counts|coloc|run|kill-resume|beads …` (PASS/FAIL + JSON report)
 - Check an installation: `hcs-studio selftest`; GUI: `hcs-studio gui --smoke-test`
+- Layouts: `hcs-studio layout <file> --validate [--export out.xlsx [--plate-map]]`; re-annotate a run: `hcs-studio annotate <run> --layout <file>`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`
 - All checks: `./scripts/ci.sh` (ruff check, ruff format --check, mypy --strict, pytest)

@@ -4,8 +4,8 @@ Desktop image analysis for high-content and high-throughput fluorescence microsc
 (Nikon `.nd2`, Operetta CLS, ImageXpress). The full specification is in `PROMPT.md`;
 the project rules are in `CLAUDE.md`.
 
-**Status: Phase 10 (hardening and packaging) — all build phases done; validation on real
-instrument data pending.** Plates from Nikon, Operetta CLS,
+**Status: Phase 11 (plate annotation, PROMPT_ADDON.md) done; Phases 1–10 of PROMPT.md
+done; validation on real instrument data pending.** Plates from Nikon, Operetta CLS,
 ImageXpress, OME-TIFF, OME-Zarr and plain TIFF folders can be browsed and viewed.
 Correction, enhancement, deconvolution, segmentation (Cellpose 4, SAM 3, threshold +
 watershed) and measurement steps (object features, colocalization, QC and counts) are
@@ -14,7 +14,10 @@ appear on a clickable plate (any readout, % positive, robust Z, Z′) in the app
 self-contained `index.html` that works offline. Wells can be stitched; objects can be
 gated, classified (trained on clicked examples), clustered, and analysed for spatial
 organisation, also after a run. PCA/UMAP profiles normalised to negative controls, a
-distance-to-control score and dose-response fits are linked to the plate. Algorithms are tested on synthetic data;
+distance-to-control score and dose-response fits are linked to the plate. Plates are
+annotated in a Layout tab (cell lines, compounds and combinations with units, roles;
+dilution-series and combination-matrix helpers, validation, versions, CSV/XLSX import and
+export). Algorithms are tested on synthetic data;
 real-data validation is pending. See `docs/index.md`, `docs/processing.md`,
 `docs/measurements.md` and `docs/validation.md`.
 

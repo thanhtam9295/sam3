@@ -18,9 +18,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from hcs_studio.gui.annotation_filter import AnnotationFilterBar
 from hcs_studio.gui.plate_map import PlateMapView
 from hcs_studio.gui.workers import ThumbnailLoader
-from hcs_studio.model.layout import WellAnnotation
+from hcs_studio.model.annotation import PlateLayout, WellAnnotation
 from hcs_studio.model.plate import Plate, well_name
 
 _THUMB = 128
@@ -51,6 +52,10 @@ class PlatePanel(QWidget):
         self.notes.setVisible(False)
 
         self.plate_map = PlateMapView()
+        #: The full annotation of the open plate (for the filter bar).
+        self.layout_document: PlateLayout | None = None
+        self.filter_bar = AnnotationFilterBar(lambda: self.layout_document)
+        self.filter_bar.selected.connect(self.plate_map.set_selection)
         self.preview = QLabel("Hover over a well for a preview")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setFixedSize(_THUMB + 60, _THUMB + 40)
@@ -91,6 +96,7 @@ class PlatePanel(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(self.header)
         layout.addWidget(self.notes)
+        layout.addWidget(self.filter_bar)
         layout.addWidget(splitter, 1)
 
     def set_plate(
@@ -109,6 +115,7 @@ class PlatePanel(QWidget):
         self.preview.setPixmap(QPixmap())
         self.preview.setText("Hover over a well for a preview")
         self.plate_map.set_plate(plate, layout)
+        self.filter_bar.refresh()
         if plate is None:
             self.header.setText("No plate open. Choose a plate folder in the data browser.")
             self.notes.setVisible(False)

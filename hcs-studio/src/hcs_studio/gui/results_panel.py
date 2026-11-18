@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from hcs_studio.gui.annotation_filter import AnnotationFilterBar
 from hcs_studio.gui.plate_map import PlateMapView
 from hcs_studio.model.plate import parse_well_name, well_name
 from hcs_studio.output.results import RunResults, WellField
@@ -160,6 +161,10 @@ class ResultsPanel(QWidget):
 
         self.plate = PlateMapView()
         self.plate.setDragMode(PlateMapView.DragMode.NoDrag)
+        self.annotation_filter = AnnotationFilterBar(
+            lambda: self.results.layout_document if self.results is not None else None
+        )
+        self.annotation_filter.selected.connect(self.plate.set_selection)
         self.plate.well_clicked.connect(lambda r, c: self.select_well(well_name(r, c)))
         self.colorbar = QLabel()
         self.colorbar.setFixedHeight(16)
@@ -228,6 +233,7 @@ class ResultsPanel(QWidget):
         left_layout = QVBoxLayout(left)
         left_layout.addLayout(controls)
         left_layout.addLayout(positive_box)
+        left_layout.addWidget(self.annotation_filter)
         left_layout.addWidget(self.plate, 1)
         left_layout.addLayout(bar)
         left_layout.addWidget(self.zprime)
@@ -294,6 +300,7 @@ class ResultsPanel(QWidget):
         layout = {parse_well_name(w): a for w, a in results.layout.items()}
         present = {parse_well_name(w) for w in results.wells}
         self.plate.set_grid(results.rows, results.cols, present, {}, layout)
+        self.annotation_filter.refresh()
         self.object_type.clear()
         self._features = results.object_features()
         self.object_type.addItems(list(self._features))
@@ -378,12 +385,7 @@ class ResultsPanel(QWidget):
             annotation = self.results.layout.get(well)
             extra = ""
             if annotation:
-                parts = (
-                    annotation.compound,
-                    annotation.concentration or "",
-                    annotation.control_type,
-                )
-                extra = "\n" + " ".join(str(x) for x in parts if x != "")
+                extra = "\n" + annotation.label()
             tips[key] = f"{well}: {fmt(raw)}" + (f" (Z {fmt(value)})" if z else "") + extra
         self.plate.set_fills(fills, tips)
         self._draw_colorbar(stops)
@@ -429,20 +431,7 @@ class ResultsPanel(QWidget):
         self.plate._restyle()
         annotation = self.results.layout.get(well)
         self.title.setText(f"Well {well}")
-        self.annotation.setText(
-            " ".join(
-                str(x)
-                for x in (
-                    annotation.compound,
-                    annotation.concentration or "",
-                    annotation.treatment,
-                    f"({annotation.control_type} control)" if annotation.control_type else "",
-                )
-                if x
-            )
-            if annotation
-            else ""
-        )
+        self.annotation.setText(annotation.label() if annotation else "")
         flags = self.results.well_flags(well)
         self.flags.setText("QC: " + "; ".join(flags) if flags else "")
         self._fields = self.results.well_fields(well)

@@ -65,6 +65,24 @@ class _WellItem(QGraphicsEllipseItem):
         super().paint(painter, option, widget)
 
 
+class _HeaderItem(QGraphicsSimpleTextItem):
+    """A row letter or column number: clicking it selects the whole row or column."""
+
+    def __init__(self, view: PlateMapView, text: str, kind: str, index: int) -> None:
+        super().__init__(text)
+        self._view, self.kind, self.index = view, kind, index
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(f"Select {'row' if kind == 'row' else 'column'} {text}")
+
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            add = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+            self._view.select_line(self.kind, self.index, add=add)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 class PlateMapView(QGraphicsView):
     """Plate grid with the correct geometry; wells that contain images are clickable."""
 
@@ -122,9 +140,9 @@ class PlateMapView(QGraphicsView):
         font = QFont()
         font.setPixelSize(int(_PITCH * 0.42))
         for col in range(cols):
-            self._label(str(col + 1), col * _PITCH, -_PITCH * 0.75, font)
+            self._label(str(col + 1), col * _PITCH, -_PITCH * 0.75, font, ("col", col))
         for row in range(rows):
-            self._label(row_label(row), -_PITCH * 0.95, row * _PITCH, font)
+            self._label(row_label(row), -_PITCH * 0.95, row * _PITCH, font, ("row", row))
         for row in range(rows):
             for col in range(cols):
                 has_data = (row, col) in present
@@ -153,8 +171,14 @@ class PlateMapView(QGraphicsView):
     def fill_of(self, key: tuple[int, int]) -> QColor:
         return self._items[key].brush().color()
 
-    def _label(self, text: str, x: float, y: float, font: QFont) -> None:
-        item = QGraphicsSimpleTextItem(text)
+    def _label(
+        self, text: str, x: float, y: float, font: QFont, header: tuple[str, int] | None = None
+    ) -> None:
+        item = (
+            _HeaderItem(self, text, header[0], header[1])
+            if header is not None
+            else QGraphicsSimpleTextItem(text)
+        )
         item.setFont(font)
         rect = item.boundingRect()
         item.setPos(x + (_PITCH - rect.width()) / 2, y + (_PITCH - rect.height()) / 2)
@@ -168,10 +192,9 @@ class PlateMapView(QGraphicsView):
             lines.append(well.label)
         note = self._layout.get((row, col))
         if note is not None:
-            parts = [note.compound, note.treatment, note.control_type]
-            if note.concentration is not None:
-                parts.insert(1, f"{note.concentration:g}")
-            lines.append(" · ".join(p for p in parts if p))
+            lines.append(note.label())
+            if note.replicate_group and note.role == "sample":
+                lines.append(f"replicate group: {note.replicate_group}")
         return "\n".join(lines)
 
     def _restyle(self) -> None:
@@ -217,6 +240,17 @@ class PlateMapView(QGraphicsView):
         self._scene.clearSelection()
         for key, item in self._items.items():
             if item.has_data and key[0] in rows and key[1] in cols:
+                item.setSelected(True)
+        self._scene.blockSignals(False)
+        self._on_selection_changed()
+
+    def select_line(self, kind: str, index: int, add: bool = False) -> None:
+        """Select every well with data in a row or column (``add``: keep the selection)."""
+        self._scene.blockSignals(True)
+        if not add:
+            self._scene.clearSelection()
+        for (row, col), item in self._items.items():
+            if item.has_data and (row if kind == "row" else col) == index:
                 item.setSelected(True)
         self._scene.blockSignals(False)
         self._on_selection_changed()

@@ -53,6 +53,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="apply only these steps (default: the run's own table steps first)",
     )
+    annotate = sub.add_parser(
+        "annotate", help="apply a plate layout to a finished run (tables and report rebuilt)"
+    )
+    annotate.add_argument("folder", type=Path, help="run folder")
+    annotate.add_argument(
+        "--layout", type=Path, required=True, help="layout: JSON, long CSV/XLSX or plate-map XLSX"
+    )
+    layout_cmd = sub.add_parser("layout", help="check or convert a plate layout file")
+    layout_cmd.add_argument("path", type=Path)
+    layout_cmd.add_argument("--validate", action="store_true", help="list problems")
+    layout_cmd.add_argument(
+        "--export", type=Path, help="write as .json, .csv, .xlsx, or a figure (.png/.pdf)"
+    )
+    layout_cmd.add_argument("--plate-map", action="store_true", help="export as a plate-map XLSX")
+    layout_cmd.add_argument("--layer", default="compound", help="figure colouring")
     selftest = sub.add_parser(
         "selftest", help="check this installation on a small synthetic plate (about a minute)"
     )
@@ -207,6 +222,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "analyze":
         return _analyze(args)
+    if args.command == "annotate":
+        return _annotate(args)
+    if args.command == "layout":
+        return _layout(args)
     if args.command == "selftest":
         from hcs_studio.selftest import run_selftest
 
@@ -298,7 +317,7 @@ def _run(args: argparse.Namespace) -> int:
 
     from hcs_studio.io.base import ReaderError, open_plate, reopen_plate
     from hcs_studio.io.sidecar import apply_overrides
-    from hcs_studio.model.layout import read_plate_layout
+    from hcs_studio.model.layout import load_plate_layout, run_layout_file
     from hcs_studio.pipeline.executor import parse_wells
     from hcs_studio.pipeline.schema import Pipeline
     from hcs_studio.processing.base import ModuleError
@@ -317,8 +336,8 @@ def _run(args: argparse.Namespace) -> int:
             pipeline = Pipeline.load(folder / "pipeline.yaml")
             source = manifest["plate"].get("source") or {"path": manifest["plate"]["path"]}
             plate = apply_overrides(reopen_plate(source))
-            layout_file = folder / "plate_layout.csv"
-            layout = read_plate_layout(layout_file) if layout_file.exists() else None
+            layout_file = run_layout_file(folder)
+            layout = load_plate_layout(layout_file) if layout_file else None
             if args.retry_failed:
                 failed = list(manifest.get("failed_wells", {}))
                 if not failed:
@@ -332,7 +351,7 @@ def _run(args: argparse.Namespace) -> int:
             if args.pipeline is None or not args.input:
                 raise ValueError("--pipeline and --input are required (or use --resume)")
             pipeline = Pipeline.load(args.pipeline)
-            layout = read_plate_layout(args.layout) if args.layout else None
+            layout = load_plate_layout(args.layout) if args.layout else None
             for path in args.input:
                 plate = apply_overrides(open_plate(path))
                 jobs.append((plate, pipeline, parse_wells(args.wells, plate), layout, args.layout))
@@ -530,3 +549,64 @@ def _acceptance(args: argparse.Namespace) -> int:
     report.save(target)
     print(f"Report: {target}")
     return 0 if report.passed else 1
+
+
+def _annotate(args: argparse.Namespace) -> int:
+    from hcs_studio.io.layout_io import load_layout
+    from hcs_studio.pipeline.executor import annotate_run
+    from hcs_studio.processing.base import ModuleError
+
+    try:
+        imported = load_layout(args.layout)
+        for note in imported.notes:
+            print(f"Note: {note}")
+        record = annotate_run(args.folder, imported.layout, args.layout)
+    except (OSError, ValueError, KeyError, ModuleError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    print(
+        f"Layout applied ({record['wells']} wells, sha256 {record['sha256'][:12]}…); "
+        "tables and report rebuilt"
+    )
+    return 0
+
+
+def _layout(args: argparse.Namespace) -> int:
+    from hcs_studio.io.layout_io import (
+        load_layout,
+        save_layout,
+        write_layout_figure,
+        write_platemap_xlsx,
+    )
+    from hcs_studio.model.layout_tools import validate
+
+    try:
+        imported = load_layout(args.path)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    layout = imported.layout
+    print(
+        f"{len(layout.wells)} annotated wells on a {layout.rows}×{layout.cols} plate; "
+        f"cell lines: {', '.join(layout.cell_lines()) or '-'}; compounds: "
+        f"{', '.join(layout.compounds()) or '-'}"
+    )
+    for note in imported.notes:
+        print(f"Note: {note}")
+    code = 0
+    if args.validate:
+        issues = validate(layout)
+        for issue in issues:
+            print(f"{issue.level.upper()}: {issue.text()}")
+        print("No problems found." if not issues else f"{len(issues)} problem(s)")
+        code = 1 if any(i.level == "error" for i in issues) else 0
+    if args.export:
+        suffix = args.export.suffix.lower()
+        if suffix in (".png", ".pdf", ".svg"):
+            write_layout_figure(layout, args.export, args.layer)
+        elif args.plate_map:
+            write_platemap_xlsx(layout, args.export)
+        else:
+            save_layout(layout, args.export)
+        print(f"Wrote {args.export}")
+    return code

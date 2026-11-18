@@ -54,6 +54,10 @@ def report_data(results: RunResults) -> dict[str, Any]:
             "concentration": a.concentration,
             "treatment": a.treatment,
             "control_type": a.control_type,
+            "label": a.label(),
+            "cell_line": a.cell_line,
+            "role": a.role,
+            "replicate_group": a.replicate_group,
         }
         for w, a in results.layout.items()
     }

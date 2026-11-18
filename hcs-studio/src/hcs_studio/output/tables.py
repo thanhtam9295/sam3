@@ -334,6 +334,21 @@ def aggregate_run(
         unique_counts=unique_counts,
         coloc_rows=coloc_rows,
     )
+    from hcs_studio.model.layout import load_plate_layout, run_layout_file
+
+    layout_file = run_layout_file(folder)
+    if layout_file is not None and not summary.empty:
+        from hcs_studio.io.layout_io import annotation_rows
+
+        annotation = annotation_rows(load_plate_layout(layout_file))
+        if annotation:
+            # Annotation columns right after the well; only wells of this run.
+            extra = pd.DataFrame.from_dict(annotation, orient="index")
+            extra.index.name = "well"
+            extra = extra.reindex(summary["well"]).reset_index()
+            summary = summary.merge(extra, on="well", how="left")
+            front = ["well", *[c for c in extra.columns if c != "well"]]
+            summary = summary[front + [c for c in summary.columns if c not in front]]
     if flags is not None:
         well_flags = summary.set_index("well")["low_count"] if "low_count" in summary else None
         flags["low_count_well"] = flags.well.map(well_flags) if well_flags is not None else False

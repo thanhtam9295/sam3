@@ -27,6 +27,7 @@ from hcs_studio import __version__
 from hcs_studio.gui.browser import BrowserPanel
 from hcs_studio.gui.classify_panel import ClassifyPanel
 from hcs_studio.gui.jobs_panel import JobsPanel
+from hcs_studio.gui.layout_editor import LayoutEditor
 from hcs_studio.gui.measurements_panel import MeasurementsPanel
 from hcs_studio.gui.metadata_panel import MetadataPanel
 from hcs_studio.gui.pattern_dialog import PatternDialog
@@ -42,8 +43,10 @@ from hcs_studio.gui.viewer import ViewerPanel
 from hcs_studio.gui.workers import BackgroundTask, PlateLoader, PreviewWorker
 from hcs_studio.io.base import detect_reader
 from hcs_studio.io.generic import TiffFolderReader
+from hcs_studio.io.layout_io import load_layout
+from hcs_studio.io.layout_store import plate_key
 from hcs_studio.io.sidecar import load_overrides, save_overrides
-from hcs_studio.model.layout import WellAnnotation, read_plate_layout
+from hcs_studio.model.annotation import PlateLayout, WellAnnotation
 from hcs_studio.model.plate import Plate, parse_well_name, well_name
 from hcs_studio.pipeline.executor import PipelineRunner, ProcessResult
 from hcs_studio.pipeline.schema import Pipeline
@@ -72,6 +75,10 @@ class MainWindow(QMainWindow):
         self.plate: Plate | None = None
         self._file_plate: Plate | None = None
         self.layout_annotations: dict[tuple[int, int], WellAnnotation] = {}
+        #: The layout runs use (saved version or imported file) and its file.
+        self.layout_document: PlateLayout | None = None
+        #: The layout stored in ``layout_path``.
+        self._run_layout: PlateLayout | None = None
         #: (row, col, field position) of the field shown in the viewer.
         self.current_field: tuple[int, int, int] | None = None
         #: Last preview of the current field, and the raw field once loaded.
@@ -83,6 +90,8 @@ class MainWindow(QMainWindow):
         self.plate_panel = PlatePanel()
         self.tabs = QTabWidget()
         self.tabs.addTab(self.plate_panel, "Plate")
+        self.layout_editor = LayoutEditor(self.log)
+        self.tabs.addTab(self.layout_editor, "Layout")
         self.tabs.addTab(self.viewer_panel.widget, "Viewer")
         self.results_panel = ResultsPanel()
         self.tabs.addTab(self.results_panel, "Results")
@@ -176,8 +185,10 @@ class MainWindow(QMainWindow):
         self.jobs_panel.job_finished.connect(self._on_job_finished)
         self.jobs_panel.event_received.connect(self._on_job_event)
         self.plate_panel.plate_map.selection_changed.connect(self._on_selection_changed)
-        #: Plate layout CSV of the open plate (passed to runs).
+        #: Layout file of the open plate (passed to runs).
         self.layout_path: Path | None = None
+        self.layout_editor.layout_saved.connect(self._on_layout_saved)
+        self.tabs.currentChanged.connect(self._on_tab_changed)
 
         self._build_menus()
         self.log(f"HCS Studio {__version__} started. {self.gpu_status.summary}")
@@ -221,7 +232,7 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("&File")
         file_menu.addAction(self._action("Open plate &folder…", self._choose_folder, "Ctrl+O"))
         file_menu.addAction(self._action("Open &image file…", self._choose_file))
-        file_menu.addAction(self._action("Import plate &layout (CSV)…", self._choose_layout))
+        file_menu.addAction(self._action("Import plate &layout…", self._choose_layout))
         file_menu.addAction(self._action("Open &results…", self._choose_results))
         file_menu.addSeparator()
         file_menu.addAction(self._action("&Quit", self.close, "Ctrl+Q"))
@@ -261,7 +272,9 @@ class MainWindow(QMainWindow):
             self.open_path(Path(file))
 
     def _choose_layout(self) -> None:
-        file, _ = QFileDialog.getOpenFileName(self, "Import plate layout", "", "CSV (*.csv)")
+        file, _ = QFileDialog.getOpenFileName(
+            self, "Import plate layout", "", "Layouts (*.csv *.xlsx *.xlsm *.json)"
+        )
         if file:
             self.import_layout(Path(file))
 
@@ -311,9 +324,11 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError) as exc:
             self.log(f"Saved metadata overrides could not be applied: {exc}")
         self.layout_annotations = {}
+        self.layout_document = self._run_layout = None
         self.layout_path = None
         self.current_field = None
         self._fit_cache.clear()
+        self._restore_layout(plate)
         self._refresh_plate()
         self.tabs.setCurrentWidget(self.plate_panel)
         self.statusBar().showMessage(f"Opened {plate.name}", 5000)
@@ -329,6 +344,7 @@ class MainWindow(QMainWindow):
         self.log(f"Could not open {path}: {message}")
 
     def _refresh_plate(self) -> None:
+        self.plate_panel.layout_document = self.layout_document
         self.plate_panel.set_plate(self.plate, self.layout_annotations)
         self.metadata_panel.set_plate(
             self.plate, self._file_plate.metadata if self._file_plate else None
@@ -377,7 +393,7 @@ class MainWindow(QMainWindow):
             pipeline,
             current_field=self.current_field,
             selected_wells=self.plate_panel.plate_map.selected_wells(),
-            layout_path=self.layout_path,
+            layout_path=self.layout_for_run(),
             parent=self,
         )
         dialog.accepted.connect(lambda: self.queue_jobs(dialog.jobs))
@@ -656,22 +672,78 @@ class MainWindow(QMainWindow):
             self.log("Metadata reset to the values in the files.")
 
     def import_layout(self, path: Path) -> None:
-        """Attach a plate layout CSV to the open plate (tooltips and control colours)."""
+        """Attach a layout file (CSV, XLSX, plate map or JSON) to the open plate."""
         if self.plate is None:
             self.log("Open a plate before importing a layout.")
             return
         try:
-            layout = read_plate_layout(path)
-        except (OSError, ValueError) as exc:
+            imported = load_layout(Path(path))
+        except (OSError, ValueError, KeyError) as exc:
             self.log(f"Layout not imported: {exc}")
             return
-        self.layout_path = path
-        missing = sorted(well_name(*k) for k in layout if k not in self.plate.wells)
-        self.layout_annotations = layout
+        layout = imported.layout
+        outside = [k for k in layout.wells if k[0] >= self.plate.rows or k[1] >= self.plate.cols]
+        if outside:
+            self.log(
+                f"Layout not imported: it is for a {layout.rows}×{layout.cols} plate; "
+                f"this plate is {self.plate.rows}×{self.plate.cols}"
+            )
+            return
+        if (layout.rows, layout.cols) != (self.plate.rows, self.plate.cols):
+            layout = PlateLayout.from_dict(
+                {**layout.to_dict(), "rows": self.plate.rows, "cols": self.plate.cols}
+            )
+        self.layout_editor.set_layout(layout, f"Imported {Path(path).name}")
+        self._use_layout(layout, Path(path))
         self._refresh_plate()
-        self.log(f"Imported layout for {len(layout)} wells from {path.name}")
+        missing = sorted(well_name(*k) for k in layout.wells if k not in self.plate.wells)
+        self.log(f"Imported layout for {len(layout.wells)} wells from {Path(path).name}")
+        for note in imported.notes:
+            self.log(f"Layout note: {note}")
         if missing:
             self.log(f"Layout wells with no images on this plate: {', '.join(missing)}")
+
+    def _restore_layout(self, plate: Plate) -> None:
+        """Load the latest saved layout version of this plate into the editor and runs."""
+        try:
+            key = plate_key(plate.path, plate.barcode or "")
+            self.layout_editor.set_plate(plate.rows, plate.cols, key)
+        except (OSError, ValueError) as exc:
+            self.log(f"Saved layout not loaded: {exc}")
+            self.layout_editor.set_plate(plate.rows, plate.cols)
+            return
+        path = self.layout_editor.saved_path
+        if path is not None:
+            self._use_layout(self.layout_editor.doc, path)
+            self.log(f"Using layout version {self.layout_editor.doc.version} ({path})")
+
+    def _use_layout(self, layout: PlateLayout, path: Path) -> None:
+        self.layout_document = self._run_layout = layout
+        self.layout_annotations = dict(layout.wells)
+        self.layout_path = path
+
+    def _on_layout_saved(self, layout: PlateLayout, path: Path) -> None:
+        self._use_layout(layout, path)
+        self._refresh_plate()
+        self.log(f"Saved layout version {layout.version}; new runs use it ({path})")
+
+    def _on_tab_changed(self, index: int) -> None:
+        # show the editor's (possibly unsaved) annotation on the plate map
+        edited = dict(self.layout_editor.doc.wells) != self.layout_annotations
+        if self.tabs.widget(index) is self.plate_panel and self.plate is not None and edited:
+            self.layout_annotations = dict(self.layout_editor.doc.wells)
+            self.layout_document = self.layout_editor.doc
+            self._refresh_plate()
+
+    def layout_for_run(self) -> Path | None:
+        """The layout file a new run uses; unsaved edits are saved as a new version first."""
+        editor = self.layout_editor
+        if self.plate is None or not editor.doc.wells:
+            return self.layout_path
+        unsaved = self.layout_path is None or editor.doc != self._run_layout
+        if unsaved and editor.store is not None:
+            editor.save_version()
+        return self.layout_path
 
     # ------------------------------------------------------------------- misc
 

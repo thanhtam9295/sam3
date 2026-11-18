@@ -104,6 +104,11 @@ On the results plate these appear as `profile_distance_to_control`, `profile_dis
 
 ## Per-well summary (`tables/per_well_summary.csv`)
 
+Right after `well`, the plate layout's columns: `cell_line`, `role`, `compound_N`,
+`conc_N` (in `unit_N`), `unit_N`, `vehicle_N` for each treatment, `passage`,
+`seeding_density`, `replicate_group`, `time_point_h`, `notes` and custom fields. Object
+tables are not widened; join them to these columns by `well`.
+
 For each well: fields used and excluded (out of focus, saturated, edge), imaged area,
 `<label set>_count` and `<label set>_per_mm2` (excluded fields left out), `low_count`, and
 for every numeric feature `<label set>_<feature>_mean / _median / _std`, plus the median

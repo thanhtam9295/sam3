@@ -207,7 +207,7 @@ function draw() {
     b.style.background = colour;
     const rgb = colour ? colour.match(/\d+/g).map(Number) : null;  // label text readable on the fill
     b.style.color = rgb && 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] > 140 ? "#000" : "#fff";
-    const annotation = DATA.layout[w] ? " · " + [DATA.layout[w].compound, DATA.layout[w].concentration, DATA.layout[w].control_type].filter((x) => x !== "" && x !== null).join(" ") : "";
+    const annotation = DATA.layout[w] ? " · " + DATA.layout[w].label : "";
     b.title = `${w}: ${fmt(raw[w])}${isZ ? ` (Z ${fmt(v)})` : ""}${annotation}`;
     b.setAttribute("aria-label", b.title);
   }
@@ -348,7 +348,7 @@ function renderWell() {
   panel.innerHTML = "";
   panel.appendChild(el("h2", {}, `Well ${name}`));
   const a = DATA.layout[name];
-  if (a) panel.appendChild(el("p", {}, [a.compound, a.concentration !== null ? a.concentration : "", a.treatment, a.control_type ? `(${a.control_type} control)` : ""].filter((x) => x !== "").join(" ")));
+  if (a) panel.appendChild(el("p", {}, a.label));
   if (info.flags.length) panel.appendChild(el("p", { className: "flags" }, "QC: " + info.flags.join("; ")));
   const table = el("table", { className: "stats" });
   const key = $("readout").value;
