@@ -77,8 +77,8 @@ def test_compare_tab(window: MainWindow, qtbot: QtBot, tmp_path: Path) -> None:
     panel.crop_to_view()
     crop = panel.comparison.crop
     assert crop is not None
-    expected = (max(vy0, 0) * 0.5, max(vx0, 0) * 0.5, min(vy1, 64) * 0.5, min(vx1, 64) * 0.5)
-    assert crop == pytest.approx(expected)  # µm (0.5 µm per pixel)
+    in_um = (max(vy0, 0) * 0.5, max(vx0, 0) * 0.5, min(vy1, 64) * 0.5, min(vx1, 64) * 0.5)
+    assert crop == pytest.approx(in_um)  # µm (0.5 µm per pixel)
     assert crop[2] - crop[0] < 32  # smaller than the field
 
     out = panel.export_to(tmp_path / "figure.png")
