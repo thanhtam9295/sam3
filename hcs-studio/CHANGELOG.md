@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Phase 17b — normalization across plates and replicate concordance
+- `normalization/` (headless): % of control, % inhibition, robust Z and **B-score** (median
+  polish); a **guard rail** refuses B-score on dose–response series along rows/columns and on
+  combination matrices, with the reason; **uniformity maps** from vehicle-only plates
+  (robust polynomial surface + edge-ring step; edge effect, CV and trends before/after),
+  stored in the registry (`uniformity_map`, migration 0003) through a recorded service;
+  **day and plate effects** (R² of the vehicle wells raw / same-day / per plate);
+  **replicate concordance** (Pearson, Spearman, Bland–Altman, per-condition CV, IC50 fold,
+  discordant flags).
+- Experiments → **Normalization** tab (plate heat maps raw/normalized, save a uniformity map,
+  compare replicates, day and plate effects) and `hcs-studio db normalize | uniformity | maps
+  | batch | concordance`. Docs: registry.md, validation.md.
+
 ### Platform foundations (PROMPT_PLATFORM.md §2)
 - **Registry database** (`hcs_studio/db/`): SQLAlchemy 2 models with Alembic migrations
   shipped in the package; SQLite at `<settings>/registry.sqlite` (WAL, foreign keys) and a

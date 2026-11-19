@@ -224,6 +224,23 @@ nuclei are discs at least 3 px apart, so counts are exact.
 moves any of them by more than 2 % (regenerate deliberately with
 `HCS_UPDATE_BASELINE=1 pytest tests/test_regression.py`).
 
+## Normalization across plates (Phase 17b)
+
+| Check | Result | Test |
+|---|---|---|
+| Robust Z against a hand calculation | exact | `test_robust_z_matches_a_hand_calculation` |
+| Median polish of an additive row + column pattern | residuals 0, fitted effects exact | `test_median_polish_recovers_additive_row_and_column_effects` |
+| 384-well screen, 16 seeded hits (−45 %), row gradient −40 % and column gradient +25 %, noise 4 % | without correction fewer than half the hits are called (robust Z ≤ −3); with B-score ≥ 95 % are called and the artifact adds no false hit (same calls as the plate without the artifact) | `test_b_score_removes_a_row_column_artifact_and_keeps_seeded_hits` |
+| B-score on the Phase 13 dose–response/combination plate, and on a dilution series down one column | refused, with the reason | `test_b_score_is_blocked_on_dose_response_and_combination_layouts` |
+| Randomized library; one compound at 3 doses in scattered wells | allowed | `test_a_randomized_library_is_allowed` |
+| Uniformity map from a tilted + domed plate with a debris well | factors within 1 % of the true shading; later plate CV reduced > 60 % | `test_uniformity_map_recovers_a_known_gradient_and_flattens_later_plates` |
+| Sharp edge step (edge wells −10 %) | corrected to < 0.5 % with the edge-ring term; a polynomial alone leaves > 2 % | same test |
+| Three days with different vehicle levels | R² day > 0.9 raw, < 0.05 after same-day controls | `test_same_day_controls_remove_a_day_effect` |
+| Replicate statistics | identical plates r = 1, bias 0; a +5 shift gives bias 5 ± 0.6; a 5-fold IC50 difference is flagged | `test_replicate_concordance_statistics_and_flags` |
+
+Not yet checked: real uniformity plates (edge effects of your plates and instruments);
+B-score on a real randomized library screen.
+
 ## Comparison and figure export (Phase 14)
 
 | Check | Result |

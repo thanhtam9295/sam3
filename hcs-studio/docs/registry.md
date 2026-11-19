@@ -53,6 +53,56 @@ hcs-studio db potency --readout nuclei_count --export potency.xlsx
 hcs-studio db plate P00123
 ```
 
+## Normalization across plates (Experiments → Normalization)
+
+| Method | What it does | Use on |
+|---|---|---|
+| % of control | 100 × value / median of the plate's vehicle wells | any plate with vehicle wells |
+| % inhibition | 100 × (vehicle − value) / (vehicle − positive control), medians | plates with both controls |
+| Robust Z | (value − median of the sample wells) / (1.4826 × MAD of the sample wells) | screens; any layout |
+| B-score | two-way median polish of the sample wells (row and column effects removed), residuals ÷ 1.4826 × MAD (Brideau et al. 2003) | **randomized** screening plates only |
+| Uniformity map | divides each well by a correction map from a vehicle-only plate | any layout, including dose–response and combinations |
+
+**Guard rail.** B-score assumes compounds are placed at random with respect to rows and
+columns. On dose–response layouts (a compound diluted along a row or a column: ≥ 3
+concentrations in one row or column, monotonic) and on combination matrices, the row and
+column "effects" are the dose effect itself, and B-score would remove real signal. HCS
+Studio refuses it there and says why; use a uniformity map instead.
+
+**Uniformity maps.** Image a plate with vehicle in every well, analyse it, then **Save as
+uniformity map…** (or `hcs-studio db uniformity`). The map is a smooth surface (polynomial,
+degree 2 by default) plus a step for the outer ring of wells (edge evaporation is a step,
+not a smooth trend), fitted robustly so single bad wells do not bend it. The map reports
+the edge effect (% edge vs interior), the CV and row/column trends before and after.
+Apply it to later plates of the same instrument, plate type and assay (method
+*Uniformity map*). Maps are kept in the registry with who made them.
+
+**Day and plate effects.** For the plates listed, the share of the vehicle wells' variance
+explained by day and by plate (one-way R²), raw, normalized to same-day controls, and
+normalized per plate. A day effect that disappears after same-day normalization is a
+day-to-day shift; a plate effect that remains needs per-plate normalization.
+
+**Replicates.** Two runs of the same layout: Pearson and Spearman correlation of the sample
+wells, Bland–Altman bias and 95 % limits of agreement, the CV of each condition, and the
+fold difference of each IC50. The pair is flagged *discordant* when r < 0.8 or an IC50
+differs more than 3-fold (both adjustable).
+
+```bash
+hcs-studio db normalize SCREEN-1 --readout nuclei_count --method b_score --export bscores.csv
+```
+
+```bash
+hcs-studio db uniformity UNIF-1 --readout nuclei_count --name "Operetta 384 viability" --reason "monthly uniformity plate"
+```
+
+```bash
+hcs-studio db concordance P00123 P00124 --readout nuclei_count
+```
+
+```bash
+hcs-studio db batch --readout nuclei_count --experiment "DRC week 1"
+```
+
 ## Data roots: the same paths on every computer
 
 The same share is `\\labserver\screening` on Windows and `/mnt/screening` on Linux. Define

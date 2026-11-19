@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; step 17a built
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; steps 17a, 17b built
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -470,8 +470,17 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `<rooted raw>|t`, run = rooted folder; `fingerprint()` = manifest, per-well table, layout,
   pharmacology files); queries `db/queries.py` (DataFrames/dicts, shared by GUI/CLI/assistant);
   GUI `gui/experiments_panel.py` (Experiments tab; all queries in `BackgroundTask`); CLI
-  `hcs-studio db …`. Next: 17b (robust Z, B-score with the dose–response guard rail, uniformity
-  plates, day/batch effects, replicate concordance), then 17c (control charts, MSR, bridging).
+  `hcs-studio db …`.
+- **Phase 17b (built)**: `normalization/` is headless and works on `{well: value}` +
+  `WellInfo(well, role, compounds)`: `plate.normalize_plate` (methods, `positional_guard` →
+  `PositionalCorrectionBlocked` for B-score), `uniformity.build_map/apply_map` (degree +
+  `edge_rings`; robust refit never drops > half the wells), `batch.batch_effects`,
+  `concordance.replicate_concordance`. Registry glue in `db/normalization.py` (`find_run` by
+  id / folder name / barcode, `plate_values`, `normalize_run`, `concordance`, `day_effects`);
+  maps stored via `services.registry.save_uniformity_map` (`uniformity_map` table). Synthetic:
+  `synthetic.screening_plate` (seeded hits + positional artifact), `synthetic.write_values_run`
+  (a run folder from values). Next: 17c (control charts with rules and event annotations, MSR
+  verified against the NCATS Assay Guidance Manual, instrument bridging report).
 
 ## Commands
 
@@ -492,7 +501,7 @@ Run from this folder (`hcs-studio/`).
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
-- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`
+- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`

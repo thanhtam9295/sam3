@@ -69,3 +69,56 @@ def test_experiments_tab_scans_searches_and_shows_results(qtbot: QtBot, home: Pa
     panel._apply_saved()
     qtbot.waitUntil(lambda: panel.plate_table.rowCount() == 1, timeout=20000)
     assert panel.text.text() == "REG-002"
+
+
+def test_normalization_tab_blocks_b_score_on_dose_response_and_compares_replicates(
+    qtbot: QtBot, home: Path
+) -> None:
+    from hcs_studio.model.plate import well_name
+    from hcs_studio.normalization.plate import WellInfo
+    from hcs_studio.services import context
+    from hcs_studio.services.registry import scan_folders
+    from hcs_studio.synthetic import screening_plate, write_values_run
+
+    registry_runs(home / "drc", n_runs=2, pharmacology=True)
+    values, wells, _ = screening_plate(row_effect=-40, hits=8, seed=3)
+    write_values_run(home / "runs" / "SCREEN-1__run", values, wells, barcode="SCREEN-1")
+    vehicle = {well_name(r, c): 1000.0 - 80 * (r in (0, 15)) for r in range(16) for c in range(24)}
+    write_values_run(
+        home / "runs" / "UNIF-1__run",
+        vehicle,
+        [WellInfo(w, "negative_control") for w in vehicle],
+        barcode="UNIF-1",
+    )
+    scan_folders(context(), [home / "drc", home / "runs"])
+    panel = ExperimentsPanel()
+    qtbot.addWidget(panel)
+    panel.refresh()
+    qtbot.waitUntil(lambda: panel.norm_run.count() == 4, timeout=30000)
+
+    panel.norm_run.setCurrentText("SCREEN-1__run")
+    panel.norm_readout.setCurrentText("nuclei_count")
+    panel.norm_method.setCurrentText("b_score")
+    panel.normalize()
+    qtbot.waitUntil(lambda: len(panel.normalized) == 384, timeout=20000)
+    assert "B-scores are computed for sample wells" in panel.norm_text.toHtml()
+
+    panel.norm_run.setCurrentText("REG-001__regression__run")
+    panel.normalize()
+    qtbot.waitUntil(lambda: "Not applied" in panel.norm_text.toHtml(), timeout=20000)
+    assert "uniformity-plate correction" in panel.norm_text.toHtml()
+
+    panel.norm_run_b.setCurrentText("REG-002__regression__run")
+    panel.compare_replicates()
+    qtbot.waitUntil(lambda: panel.agreement is not None, timeout=20000)
+    assert panel.agreement.pearson > 0.95 and "concordant" in panel.norm_text.toHtml()
+
+    panel.norm_run.setCurrentText("UNIF-1__run")
+    panel.save_map("edge map")
+    qtbot.waitUntil(lambda: panel.norm_map.count() == 1, timeout=20000)
+    assert "Edge effect" in panel.norm_text.toHtml()
+
+    panel.search()
+    qtbot.waitUntil(lambda: panel.plate_table.rowCount() == 4, timeout=20000)
+    panel.day_effects()
+    qtbot.waitUntil(lambda: "R² day" in panel.norm_text.toHtml(), timeout=20000)

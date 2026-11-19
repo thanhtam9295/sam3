@@ -482,6 +482,12 @@ def names(session: Session, kind: str) -> list[str]:
     return sorted(n for (n,) in session.execute(select(model.name)).all())  # type: ignore[attr-defined]
 
 
+def run_names(session: Session) -> list[str]:
+    """Run folder names, newest first."""
+    runs = session.scalars(select(Run)).all()
+    return [r.name for r in sorted(runs, key=_started_key, reverse=True)]
+
+
 def saved_searches(session: Session) -> dict[str, PlateQuery]:
     return {
         s.name: PlateQuery.from_dict(s.query)

@@ -328,3 +328,26 @@ class SavedSearch(Base):
     owner: Mapped[str] = mapped_column(String(256), default="")
     query: Mapped[dict[str, Any]] = mapped_column(default=dict)
     created: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class UniformityMapRecord(Base):
+    """A spatial correction map from a uniformity plate (Phase 17b), for later plates of
+    the same instrument, plate type and assay."""
+
+    __tablename__ = "uniformity_map"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(256), unique=True)
+    instrument: Mapped[str] = mapped_column(String(256), default="")
+    assay: Mapped[str] = mapped_column(String(256), default="")
+    readout_id: Mapped[str] = mapped_column(String(256))
+    rows: Mapped[int] = mapped_column(Integer)
+    cols: Mapped[int] = mapped_column(Integer)
+    degree: Mapped[int] = mapped_column(Integer, default=2)
+    factors: Mapped[list[Any]] = mapped_column(default=list)
+    stats: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    source_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("run.id", ondelete="SET NULL"), default=None
+    )
+    actor: Mapped[str] = mapped_column(String(256), default="")
+    created: Mapped[datetime] = mapped_column(default=utcnow)

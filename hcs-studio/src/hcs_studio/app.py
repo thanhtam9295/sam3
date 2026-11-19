@@ -94,7 +94,39 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--readout", default="")
     db_plate = db_sub.add_parser("plate", help="one plate: acquisitions, runs, QC")
     db_plate.add_argument("barcode")
-    for command in (db_search, db_potency, db_ic50):
+    db_norm = db_sub.add_parser("normalize", help="normalize one run's readout on its plate")
+    db_norm.add_argument("run", help="run id, run folder name or plate barcode")
+    db_norm.add_argument("--readout", required=True)
+    db_norm.add_argument(
+        "--method",
+        required=True,
+        choices=["percent_of_control", "percent_inhibition", "robust_z", "b_score", "uniformity"],
+    )
+    db_norm.add_argument("--map", default="", help="uniformity map name (method uniformity)")
+    db_unif = db_sub.add_parser("uniformity", help="store a correction map from a uniformity plate")
+    db_unif.add_argument("run", help="the run of a vehicle-only plate")
+    db_unif.add_argument("--readout", required=True)
+    db_unif.add_argument("--name", required=True)
+    db_unif.add_argument("--degree", type=int, default=2, help="surface degree (default 2)")
+    db_unif.add_argument(
+        "--edge-rings", type=int, default=1, help="outer well rings with their own step (0–3)"
+    )
+    db_unif.add_argument("--instrument", default="")
+    db_unif.add_argument("--assay", default="")
+    db_unif.add_argument("--replace", action="store_true", help="replace a map of that name")
+    reason_commands.append(db_unif)
+    db_sub.add_parser("maps", help="list the uniformity maps")
+    db_batch = db_sub.add_parser("batch", help="day and plate effects of the vehicle wells")
+    db_batch.add_argument("--readout", required=True)
+    db_batch.add_argument("--runs", nargs="*", default=[], help="runs (default: an experiment)")
+    db_batch.add_argument("--experiment", default="")
+    db_conc = db_sub.add_parser("concordance", help="agreement of two replicate runs")
+    db_conc.add_argument("run_a")
+    db_conc.add_argument("run_b")
+    db_conc.add_argument("--readout", required=True)
+    db_conc.add_argument("--r-min", type=float, default=0.8)
+    db_conc.add_argument("--fold-max", type=float, default=3.0)
+    for command in (db_search, db_potency, db_ic50, db_norm, db_batch, db_conc):
         command.add_argument("--export", type=Path, help="write the table as .csv or .xlsx")
     ilastik_cmd = sub.add_parser(
         "ilastik", help="ilastik backend: find ilastik and Fiji, check versions, save settings"
@@ -873,6 +905,23 @@ def _db(args: argparse.Namespace) -> int:
                     n = session.scalar(select(func.count()).select_from(model))
                     print(f"  {model.__tablename__}: {n}")
             return 0
+        if args.db_command == "uniformity":
+            from hcs_studio.services.registry import save_uniformity_map
+
+            stats = save_uniformity_map(
+                _ctx(args),
+                args.name,
+                args.run,
+                args.readout,
+                degree=args.degree,
+                instrument=args.instrument,
+                assay=args.assay,
+                replace=args.replace,
+            )
+            print(f"Uniformity map {args.name!r} saved")
+            for key in ("edge_effect_pct", "cv_pct", "row_trend_pct", "col_trend_pct"):
+                print(f"  {key}: {stats[f'before_{key}']:.2f} → {stats[f'after_{key}']:.2f}")
+            return 0
         if args.db_command == "scan":
             from hcs_studio.services.registry import scan_folders
 
@@ -896,6 +945,8 @@ def _db(args: argparse.Namespace) -> int:
                 show(queries.potency_table(session, args.compound, args.cell_line, args.readout))
             elif args.db_command == "ic50s":
                 show(queries.ic50s(session, args.compound, args.cell_line, args.readout))
+            elif args.db_command in ("normalize", "maps", "batch", "concordance"):
+                return _db_normalization(args, session, show)
             elif args.db_command == "plate":
                 found = queries.search_plates(session, queries.PlateQuery(barcode=args.barcode))
                 if found.empty:
@@ -919,6 +970,49 @@ def _db(args: argparse.Namespace) -> int:
         print(f"Error: {exc}")
         return 2
     return 0
+
+
+def _db_normalization(args: argparse.Namespace, session: Any, show: Any) -> int:
+    import pandas as pd
+
+    from hcs_studio.db import normalization as dbn
+    from hcs_studio.normalization.plate import PositionalCorrectionBlocked
+
+    if args.db_command == "maps":
+        show(dbn.uniformity_maps(session))
+        return 0
+    if args.db_command == "normalize":
+        try:
+            data, result = dbn.normalize_run(session, args.run, args.readout, args.method, args.map)
+        except PositionalCorrectionBlocked as exc:
+            print(f"Blocked: {exc}")
+            return 1
+        print(f"{data.barcode} ({data.run}): {args.readout}, {args.method}")
+        for note in result.notes:
+            print(f"Note: {note}")
+        show(result.frame)
+        return 0
+    if args.db_command == "batch":
+        effects = dbn.day_effects(
+            session, args.readout, runs=args.runs or None, experiment=args.experiment
+        )
+        print("Share of the vehicle wells' variance explained by day and by plate:")
+        print(effects.summary.to_string(index=False))
+        for note in effects.notes:
+            print(f"Note: {note}")
+        show(effects.per_plate)
+        return 0
+    a, b, agreement = dbn.concordance(
+        session, args.run_a, args.run_b, args.readout, r_min=args.r_min, fold_max=args.fold_max
+    )
+    summary = agreement.summary()
+    print(f"{a.barcode} vs {b.barcode}, {args.readout}: {summary['n']} sample wells")
+    print(f"  Pearson r {agreement.pearson:.3f}, Spearman ρ {agreement.spearman:.3f}")
+    low, high = agreement.loa_low, agreement.loa_high
+    print(f"  Bland–Altman bias {agreement.bias:.4g}, 95 % limits {low:.4g} … {high:.4g}")
+    print("  " + ("DISCORDANT: " + "; ".join(agreement.flags) if agreement.flags else "concordant"))
+    show(agreement.ic50 if not agreement.ic50.empty else pd.DataFrame(agreement.conditions))
+    return 1 if agreement.discordant else 0
 
 
 def _ilastik(args: argparse.Namespace) -> int:

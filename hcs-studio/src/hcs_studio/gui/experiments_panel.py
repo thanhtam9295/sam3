@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pyqtgraph as pg
 from PySide6.QtCore import Signal
@@ -186,6 +187,7 @@ class ExperimentsPanel(QWidget):
         self.views.addTab(potency, "Potency")
         self.views.addTab(trend, "Readout over time")
         self.views.addTab(reference, "Compounds and cell lines")
+        self.views.addTab(self._build_normalization(), "Normalization")
         layout = QVBoxLayout(self)
         layout.addLayout(bar)
         layout.addWidget(self.views, 1)
@@ -223,6 +225,7 @@ class ExperimentsPanel(QWidget):
         query = self._query()
 
         def work() -> dict[str, Any]:
+            from hcs_studio.db import normalization as dbn
             from hcs_studio.db import queries, session_scope
 
             with session_scope() as s:
@@ -232,6 +235,8 @@ class ExperimentsPanel(QWidget):
                     "compounds": queries.names(s, "compound"),
                     "cell_lines": queries.names(s, "cell_line"),
                     "readouts": sorted(queries.readouts_in_registry(s)),
+                    "runs": queries.run_names(s),
+                    "maps": list(dbn.uniformity_maps(s).get("name", [])),
                 }
 
         self._run(work, self._show_all, "Reading the registry…")
@@ -244,11 +249,18 @@ class ExperimentsPanel(QWidget):
         self.compound_list.addItems(data["compounds"])
         self.line_list.clear()
         self.line_list.addItems(data["cell_lines"])
-        keep = self.trend_readout.currentText()
-        self.trend_readout.clear()
-        self.trend_readout.addItems(data["readouts"])
-        if keep:
-            self.trend_readout.setCurrentText(keep)
+        for combo, items in (
+            (self.trend_readout, data["readouts"]),
+            (self.norm_readout, data["readouts"]),
+            (self.norm_run, data["runs"]),
+            (self.norm_run_b, data["runs"]),
+            (self.norm_map, data["maps"]),
+        ):
+            keep = combo.currentText()
+            combo.clear()
+            combo.addItems(items)
+            if keep:
+                combo.setCurrentText(keep)
 
     def search(self) -> None:
         query = self._query()
@@ -423,6 +435,208 @@ class ExperimentsPanel(QWidget):
             self.status.setText("")
 
         self._run(work, done, f"Reading {name}…")
+
+    # --------------------------------------------------------------- normalization
+
+    def _build_normalization(self) -> QWidget:
+        self.norm_run = QComboBox()
+        self.norm_run.setEditable(True)
+        self.norm_readout = QComboBox()
+        self.norm_readout.setEditable(True)
+        self.norm_method = QComboBox()
+        self.norm_method.addItems(
+            ["robust_z", "b_score", "percent_of_control", "percent_inhibition", "uniformity"]
+        )
+        self.norm_map = QComboBox()
+        self.norm_map.setToolTip("Uniformity map (method uniformity)")
+        self.norm_run_b = QComboBox()
+        self.norm_run_b.setEditable(True)
+        apply = QPushButton("Normalize")
+        apply.clicked.connect(self.normalize)
+        save_map = QPushButton("Save as uniformity map…")
+        save_map.setToolTip("Fit a correction map on this run (a vehicle-only plate)")
+        save_map.clicked.connect(self._save_map)
+        compare = QPushButton("Compare replicates")
+        compare.clicked.connect(self.compare_replicates)
+        days = QPushButton("Day and plate effects of the plates listed")
+        days.clicked.connect(self.day_effects)
+        form = QFormLayout()
+        form.addRow("Run", self.norm_run)
+        form.addRow("Readout", self.norm_readout)
+        form.addRow("Method", self.norm_method)
+        form.addRow("Uniformity map", self.norm_map)
+        form.addRow("", apply)
+        form.addRow("", save_map)
+        form.addRow("Replicate run", self.norm_run_b)
+        form.addRow("", compare)
+        form.addRow("", days)
+        controls = QWidget()
+        controls.setLayout(form)
+        self.raw_plot = pg.PlotWidget(title="raw")
+        self.norm_plot = pg.PlotWidget(title="normalized")
+        self.scatter_plot = pg.PlotWidget(title="replicates")
+        for plot in (self.raw_plot, self.norm_plot):
+            plot.invertY(True)
+            plot.setAspectLocked(True)
+        self.norm_text = QTextBrowser()
+        self.normalized = pd.DataFrame()
+        self.agreement: Any = None
+        plots = QHBoxLayout()
+        for plot in (self.raw_plot, self.norm_plot, self.scatter_plot):
+            plots.addWidget(plot)
+        right = QVBoxLayout()
+        right.addLayout(plots, 3)
+        right.addWidget(self.norm_text, 2)
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.addWidget(controls, 1)
+        right_widget = QWidget()
+        right_widget.setLayout(right)
+        layout.addWidget(right_widget, 4)
+        return widget
+
+    def _heatmap(self, plot: pg.PlotWidget, frame: pd.DataFrame, column: str) -> None:
+        from hcs_studio.model.plate import parse_well_name
+
+        plot.clear()
+        positions = [parse_well_name(w) for w in frame["well"]]
+        rows = max(r for r, _ in positions) + 1
+        cols = max(c for _, c in positions) + 1
+        grid = np.full((rows, cols), np.nan)
+        for (r, c), v in zip(positions, frame[column], strict=True):
+            grid[r, c] = v
+        finite = grid[np.isfinite(grid)]
+        if not finite.size:
+            return
+        image = pg.ImageItem(np.nan_to_num(grid.T, nan=float(np.median(finite))))
+        image.setLookupTable(pg.colormap.get("viridis").getLookupTable())
+        low, high = np.percentile(finite, [2, 98])
+        image.setLevels((float(low), float(high) if high > low else float(low) + 1))
+        plot.addItem(image)
+
+    def normalize(self) -> None:
+        run, readout = self.norm_run.currentText().strip(), self.norm_readout.currentText().strip()
+        method, map_name = self.norm_method.currentText(), self.norm_map.currentText()
+        if not run or not readout:
+            self.status.setText("Choose a run and a readout")
+            return
+
+        def work() -> Any:
+            from hcs_studio.db import normalization as dbn
+            from hcs_studio.db import session_scope
+            from hcs_studio.normalization.plate import PositionalCorrectionBlocked
+
+            with session_scope() as s:
+                try:
+                    return dbn.normalize_run(s, run, readout, method, map_name)
+                except PositionalCorrectionBlocked as exc:
+                    return str(exc)
+
+        def done(result: Any) -> None:
+            if isinstance(result, str):  # blocked by the guard rail
+                self.norm_text.setHtml(f"<p><b>Not applied.</b> {result}</p>")
+                self.status.setText("Row/column correction blocked on this layout")
+                return
+            data, normalized = result
+            self.normalized = normalized.frame
+            self._heatmap(self.raw_plot, normalized.frame, "raw")
+            self._heatmap(self.norm_plot, normalized.frame, "normalized")
+            notes = "".join(f"<li>{n}</li>" for n in normalized.notes)
+            guard = "" if normalized.guard.allowed else f"<p>Layout: {normalized.guard.reason}</p>"
+            self.norm_text.setHtml(
+                f"<p>{data.barcode} ({data.run}), {readout}: {method}</p><ul>{notes}</ul>{guard}"
+            )
+            self.status.setText(f"Normalized {len(normalized.frame)} wells")
+
+        self._run(work, done, "Normalizing…")
+
+    def _save_map(self) -> None:
+        name, ok = QInputDialog.getText(self, "Save uniformity map", "Name of the map:")
+        if ok and name.strip():
+            self.save_map(name.strip())
+
+    def save_map(self, name: str, reason: str = "") -> None:
+        from hcs_studio.services import context
+        from hcs_studio.services.registry import save_uniformity_map
+
+        run, readout = self.norm_run.currentText().strip(), self.norm_readout.currentText().strip()
+        ctx = context(reason)
+
+        def done(stats: dict[str, Any]) -> None:
+            edge = (
+                f"{stats['before_edge_effect_pct']:.1f} % → {stats['after_edge_effect_pct']:.1f} %"
+            )
+            cv = f"{stats['before_cv_pct']:.1f} % → {stats['after_cv_pct']:.1f} %"
+            self.norm_text.setHtml(
+                f"<p>Uniformity map <b>{name}</b> saved. Edge effect {edge}, CV {cv}.</p>"
+            )
+            self.refresh()
+
+        self._run(lambda: save_uniformity_map(ctx, name, run, readout), done, "Fitting the map…")
+
+    def compare_replicates(self) -> None:
+        run_a, run_b = self.norm_run.currentText().strip(), self.norm_run_b.currentText().strip()
+        readout = self.norm_readout.currentText().strip()
+
+        def work() -> Any:
+            from hcs_studio.db import normalization as dbn
+            from hcs_studio.db import session_scope
+
+            with session_scope() as s:
+                return dbn.concordance(s, run_a, run_b, readout)
+
+        def done(result: Any) -> None:
+            a, b, agreement = result
+            self.agreement = agreement
+            self.scatter_plot.clear()
+            wells = [w for w in a.values if w in b.values]
+            self.scatter_plot.plot(
+                [a.values[w] for w in wells],
+                [b.values[w] for w in wells],
+                pen=None,
+                symbol="o",
+                symbolSize=4,
+            )
+            verdict = "; ".join(agreement.flags) if agreement.flags else "concordant"
+            self.norm_text.setHtml(
+                f"<p>{a.barcode} vs {b.barcode}: n = {agreement.n}, Pearson r "
+                f"{agreement.pearson:.3f}, Spearman ρ {agreement.spearman:.3f}; Bland–Altman bias "
+                f"{agreement.bias:.4g} (95 % limits {agreement.loa_low:.4g} … "
+                f"{agreement.loa_high:.4g}). <b>{verdict}</b></p>"
+            )
+            self.status.setText("Replicates compared")
+
+        self._run(work, done, "Comparing replicates…")
+
+    def day_effects(self) -> None:
+        readout = self.norm_readout.currentText().strip()
+        runs = [r for r in self.plates.get("latest_run", pd.Series(dtype=str)) if r]
+        if not readout or len(runs) < 2:
+            self.status.setText("Choose a readout and list at least two plates with runs")
+            return
+
+        def work() -> Any:
+            from hcs_studio.db import normalization as dbn
+            from hcs_studio.db import session_scope
+
+            with session_scope() as s:
+                return dbn.day_effects(s, readout, runs=runs)
+
+        def done(effects: Any) -> None:
+            rows = "".join(
+                f"<tr><td>{r['normalization']}</td><td>{_text(r['r2_day'])}</td>"
+                f"<td>{_text(r['r2_plate'])}</td><td>{_text(r['vehicle_cv_pct'])}</td></tr>"
+                for r in effects.summary.to_dict("records")
+            )
+            notes = "".join(f"<li>{n}</li>" for n in effects.notes)
+            self.norm_text.setHtml(
+                "<p>Share of the vehicle wells' variance explained by day and by plate</p>"
+                "<table><tr><th>normalization</th><th>R² day</th><th>R² plate</th>"
+                f"<th>vehicle CV %</th></tr>{rows}</table><ul>{notes}</ul>"
+            )
+            self.status.setText(f"{len(runs)} plates")
+
+        self._run(work, done, "Collecting day and plate effects…")
 
     # ----------------------------------------------------------- searches, files
 

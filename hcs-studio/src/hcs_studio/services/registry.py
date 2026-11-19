@@ -198,3 +198,56 @@ def delete_search(ctx: ServiceContext, name: str) -> None:
             raise KeyError(f"No saved search {name!r}")
         ctx.note(object_id=name, before=dict(row.query))
         session.delete(row)
+
+
+@service("registry.uniformity_map", object_type="uniformity_map")
+def save_uniformity_map(
+    ctx: ServiceContext,
+    name: str,
+    run: str,
+    readout: str,
+    *,
+    degree: int = 2,
+    edge_rings: int = 1,
+    instrument: str = "",
+    assay: str = "",
+    replace: bool = False,
+) -> dict[str, Any]:
+    """Fit a correction map on a uniformity plate (a run of a vehicle-only plate) and store it.
+    Replacing an existing map needs ``replace`` (and is recorded with the old statistics)."""
+    from hcs_studio.db.catalog import UniformityMapRecord
+    from hcs_studio.db.normalization import find_run, plate_values
+    from hcs_studio.normalization.uniformity import build_map
+
+    with session_scope() as session:
+        source = find_run(session, run)
+        data = plate_values(session, source, readout)
+        roles = set(data.roles().values())
+        if roles - {"negative_control", "untreated", "sample"} or any(
+            w.compounds for w in data.wells
+        ):
+            raise ValueError(
+                f"Run {source.name} is not a uniformity plate: its wells hold "
+                f"{', '.join(sorted(roles))} or compounds; use a vehicle-only plate"
+            )
+        mapped = build_map(data.grid, degree, edge_rings)
+        record = session.scalars(
+            select(UniformityMapRecord).where(UniformityMapRecord.name == name)
+        ).first()
+        before = dict(record.stats) if record else None
+        if record is not None and not replace:
+            raise ValueError(f"A uniformity map {name!r} exists; replace it explicitly")
+        if record is None:
+            record = UniformityMapRecord(name=name)
+            session.add(record)
+        record.instrument = instrument or data.instrument
+        record.assay = assay or (source.plate.assay if source.plate else "")
+        record.readout_id = readout
+        record.rows, record.cols = data.rows, data.cols
+        record.degree = degree
+        record.factors = mapped.factors.tolist()
+        record.stats = {**mapped.stats, "edge_rings": edge_rings}
+        record.source_run_id = source.id
+        record.actor = ctx.actor.id
+        ctx.note(object_id=name, before=before, after={"run": source.name, **mapped.stats})
+        return dict(mapped.stats)

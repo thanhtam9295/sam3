@@ -45,11 +45,13 @@ __all__ = [
     "make_cell_field",
     "read_truth",
     "registry_runs",
+    "screening_plate",
     "write_image_plate",
     "write_imagexpress_plate",
     "write_ome_zarr_plate",
     "write_run",
     "write_truth",
+    "write_values_run",
 ]
 
 TRUTH_FILE = "truth.json"
@@ -200,6 +202,119 @@ class SyntheticPlate:
             well["counts"] = totals
         write_truth(root, truth)
         return plate, read_truth(root)  # as stored (JSON types)
+
+
+# ------------------------------------------------------------- screening plates
+
+
+def screening_plate(
+    rows: int = 16,
+    cols: int = 24,
+    *,
+    hits: int = 12,
+    hit_effect: float = -45.0,
+    row_effect: float = 0.0,
+    col_effect: float = 0.0,
+    edge_effect: float = 0.0,
+    noise: float = 4.0,
+    baseline: float = 100.0,
+    seed: int = 0,
+) -> tuple[dict[str, float], list[Any], dict[str, Any]]:
+    """A single-concentration screening plate: vehicle in columns 1–2, positive control in the
+    last two columns, one random library compound per sample well. Values are
+    ``baseline + positional artifact + hit effect + noise``; the artifact is a row gradient
+    (``row_effect`` from first to last row), a column gradient and an edge offset. Returns
+    (values by well, ``WellInfo`` list, truth with the hit wells and the artifact grid)."""
+    from hcs_studio.normalization.plate import WellInfo
+
+    rng = np.random.default_rng(seed)
+    r_idx, c_idx = np.mgrid[0:rows, 0:cols]
+    artifact = row_effect * r_idx / max(rows - 1, 1) + col_effect * c_idx / max(cols - 1, 1)
+    edge = (r_idx == 0) | (r_idx == rows - 1) | (c_idx == 0) | (c_idx == cols - 1)
+    artifact = artifact + edge_effect * edge
+    sample_cells = [(r, c) for r in range(rows) for c in range(2, cols - 2)]
+    chosen = rng.choice(len(sample_cells), size=hits, replace=False)
+    hit_wells = {well_name(*sample_cells[int(i)]) for i in chosen}
+    values: dict[str, float] = {}
+    wells: list[Any] = []
+    for r in range(rows):
+        for c in range(cols):
+            w = well_name(r, c)
+            compounds: tuple[tuple[str, float], ...]
+            if c < 2:
+                role, compounds, effect = "negative_control", (), 0.0
+            elif c >= cols - 2:
+                role, compounds, effect = "positive_control", (), -90.0
+            else:
+                role = "sample"
+                compounds = ((f"CPD-{r * cols + c:05d}", 1e-5),)
+                effect = hit_effect if w in hit_wells else 0.0
+            values[w] = float(baseline + artifact[r, c] + effect + rng.normal(0, noise))
+            wells.append(WellInfo(w, role, compounds))
+    truth = {"hits": sorted(hit_wells), "artifact": artifact.tolist(), "noise": noise}
+    return values, wells, truth
+
+
+def write_values_run(
+    folder: Path,
+    values: dict[str, float],
+    wells: Sequence[Any],
+    *,
+    barcode: str,
+    rows: int = 16,
+    cols: int = 24,
+    readout: str = "nuclei_count",
+    started: datetime | None = None,
+    instrument: str = "Synthetic",
+    cell_line: str = "LINE-1",
+) -> Path:
+    """A finished-run folder holding given per-well values (``tables/per_well_summary.csv``),
+    a layout made from ``wells`` (``WellInfo``: role and drugs) and a manifest — enough for the
+    registry, normalization and pharmacology."""
+    import pandas as pd
+
+    from hcs_studio.io.layout_io import save_layout
+    from hcs_studio.model.annotation import PlateLayout, Treatment, WellAnnotation
+    from hcs_studio.model.plate import parse_well_name
+
+    folder = Path(folder)
+    (folder / "tables").mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"well": list(values), readout: list(values.values())}).to_csv(
+        folder / "tables" / "per_well_summary.csv", index=False
+    )
+    annotations = {
+        parse_well_name(w.well): WellAnnotation(
+            cell_line,
+            tuple(Treatment(name, conc, "µM") for name, conc in w.compounds),
+            w.role,
+        )
+        for w in wells
+    }
+    save_layout(
+        PlateLayout(rows=rows, cols=cols, wells=annotations, barcode=barcode),
+        folder / "plate_layout.json",
+    )
+    started = started or datetime(2026, 1, 5, 9, 0, tzinfo=UTC)
+    raw = folder.parent / "raw" / barcode
+    manifest = {
+        "software": {"name": "hcs-studio", "version": "synthetic"},
+        "status": "completed",
+        "started": started.isoformat(),
+        "finished": (started + timedelta(minutes=10)).isoformat(),
+        "pipeline": {"name": "synthetic"},
+        "pipeline_hash": "synthetic",
+        "plate": {
+            "name": barcode,
+            "barcode": barcode,
+            "rows": rows,
+            "cols": cols,
+            "vendor": instrument,
+            "path": str(raw),
+            "rooted_path": f"ABSOLUTE:{raw}",
+        },
+    }
+    (folder / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return folder
 
 
 # --------------------------------------------------------------- registry runs
