@@ -245,7 +245,10 @@ PlateLayout (model/annotation.py)
 
 Not added: lmfit (`scipy.optimize.least_squares` covers bounds, robust loss, covariance CIs), weasyprint (needs system Pango/Cairo; hard on Windows).
 
-## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; step (a) built
+## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; step (a) built; PAUSED
+
+**Paused 2026-11-19** at the user's request after step (a); resume with step (b) once sample `.ilp`
+projects and images arrive. Phases 21, 22 and 25 use ilastik only as one option (see below).
 
 Build order (stop for review after each): (a) settings, detection, HDF5/axis utilities — built;
 (b) HeadlessRunner + Pixel Classification/Autocontext + Probabilities → Objects; (c) Object
@@ -344,6 +347,91 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   known-answer outputs), like the fake SAM worker. Real-ilastik and Fiji parity tests run only when
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
+
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture PROPOSED, awaiting approval
+
+Nothing in this section is built yet. Proposed 2026-11-19 after checking the code.
+
+### Status and build order
+
+Phases 0–15 are built (verified on synthetic data only, see docs/qc_review.md); Phase 16 is at
+step (a) and paused. Proposed order: **17 → 18 → 19 → 20 → 22 → 21 → 23 → 24 → 25 → 26 → 27 → 28**.
+Changes against PROMPT_PLATFORM.md §1: 22 before 21 (spheroid growth curves use kinetics); 21's
+ilastik detection mode, 22's ilastik confluence/tracking and 25's ilastik registration wait for
+Phase 16 (b–e), while their other modes do not. 20 needs only Phases 5–13 and can be pulled
+forward whenever 19 is blocked on scheduler or instrument details.
+
+### Architecture (§2), concrete changes
+
+1. **Database** — package `hcs_studio/db/`: SQLAlchemy 2.x typed models (`models.py`), engine and
+   sessions (`engine.py`; `sqlite:///<settings>/registry.sqlite` local, `postgresql+psycopg://…`
+   server), Alembic migrations shipped *inside* the package (`db/migrations/`, run with Alembic's
+   API at start-up, bundled as PyInstaller data). SQLite: WAL, `foreign_keys=ON`, and a hard refusal
+   to open a database on a network filesystem (UNC/mapped network drive on Windows; nfs/cifs/smb/
+   fuse mounts on Linux/macOS) with a message pointing to server mode. First migration: `data_root`,
+   `event` (service events) and `job`; Phase 17 adds the catalog. Postgres tests opt-in
+   (`HCS_TEST_POSTGRES_URL`).
+2. **Large data in files** — per-object Parquet stays in run folders; `db/parquet.py` (Phase 17)
+   queries it across runs with DuckDB, run folders resolved through data roots.
+3. **Data roots** — `hcs_studio/paths.py`: `DataRoot(name, windows, linux, macos)` from settings
+   (mirrored in the `data_root` table); `RootedPath(root, rel)` with POSIX `rel`;
+   `to_rooted(path)` = longest matching root (case-insensitive on Windows), `resolve(rooted)` for
+   this OS; paths outside every root become root `"ABSOLUTE"` with a warning. Manifests gain
+   rooted copies of every path (absolute paths kept for old readers).
+4. **Service layer** — `hcs_studio/services/`: `Actor(id, name, kind: os|account|scheduler|system)`,
+   `ServiceContext(actor, reason, client, app_version)`; `@service("layout.save",
+   reason_required=False, object_type=…)` validates the reason, runs the change, and emits
+   `Event(type, utc, actor, reason, object_type, object_id, before, after, client, app_version)`
+   to an `EventBus` (sinks: DB `event` table, log). Retrofit: layout version save, layout applied to
+   a run (`annotate`), pharmacology exclusions/inclusions and report writes, run start / resume /
+   retry / cancel, table steps on a finished run, classifier / Cellpose training outputs, settings
+   changes. Core functions stay pure; GUI and CLI call services (an AST test forbids calling the
+   wrapped functions from `gui/` and `app.py`, like the headless-core test). CLI: `--reason`.
+   Phase 26 adds a hash-chain sink without touching callers.
+5. **Job queue** — `pipeline/queue.py`: `JobQueue` protocol (`submit(JobSpec) → id`, `status`,
+   `events(id, since)`, `cancel`, `retry(failed_only)`, `list`); `JobSpec(kind, payload,
+   priority: interactive > auto > batch, owner: Actor, resources: Resources(cpu_workers, gpu,
+   ram_gb))`. `LocalJobQueue` moves the scheduling now in `gui/jobs_panel.py` into headless core,
+   persists jobs in the `job` table (survives restarts; interrupted jobs detected as today), runs
+   each job in its own process as now, orders by priority (no pre-emption of running jobs),
+   serialises GPU jobs. The Jobs dock becomes a view of the queue. Phase 27 adds `RemoteJobQueue`.
+6. **Readout registry** — `hcs_studio/readouts.py`: `ReadoutSpec(pattern, display, unit, level:
+   object|field|well|fit, direction: up|down|either|none, default_normalization, description,
+   module)`. Patterns cover today's generated names (`{labels}_count`, `{labels}_per_mm2`,
+   `{labels}_{feature}_{stat}`, `{channel}_…`, coloc pairs, `gate_{name}_fraction`,
+   `class_{name}_{cls}_fraction`, `cluster_…`, `spatial_…`, `profile_…`, pharmacology normalized
+   readouts and fit parameters); `resolve(column) → Readout` fills unit/display from the matched
+   feature. Retrofit Phases 5–15 (+16 placeholders). A regression-run test asserts **every numeric
+   column of `per_well_summary.csv` resolves**. Consumers moved to the registry: `RunResults`
+   (ordering, names, units), Results tab, `index.html`, pharmacology `default_readouts`.
+   `level: fit` is an addition to §2 for EC50/AUC/synergy values.
+7. **`lab_events`** — its own distribution at the repo root, `sam3/lab_events/` (`pyproject.toml`,
+   `src/lab_events/schemas/v1/*.schema.json`, `validate()`, `make_event()`), depending only on
+   `jsonschema`. Envelope: `schema_version "1.0"`, `event_id` (UUID), `type`, `emitted_at` (UTC
+   RFC 3339), `source {system, host, version}`, `correlation_id?`, `payload`. Types: `plate.imaged`,
+   `plate.dispensed`, `analysis.started|completed|failed`, `reimage.request`, `cherrypick.request`.
+   Unknown major version → `UnsupportedVersion`; minors are additive. The JSON Schema files are the
+   language-neutral contract if the scheduler is not Python. HCS Studio depends on it by path
+   (bundled in the installer).
+8. **Settings and secrets** — `hcs_studio/config.py`: one versioned `settings.json`
+   (`config_version`, pydantic `AppSettings`: data_roots, database, sam3, ilastik, later
+   notifications/assistant) with step-wise migrations; existing `sam3.json` / `ilastik.json` are
+   imported once. `hcs_studio/secrets.py` wraps `keyring` (service `hcs-studio`); settings hold only
+   references (`secret:smtp/password`); a logging filter redacts known secret values; headless
+   servers without a keyring backend read `HCS_SECRET_<NAME>`; tests use an in-memory backend.
+9. **Synthetic data** — package `hcs_studio/synthetic/`: one `SyntheticPlate` builder (vendor
+   layout, wells, fields, channels, Z, T) with composable features that each write their truth to
+   `truth.json`; the existing generators (`utils/synthetic.py`, `pharmacology/synthetic.py`,
+   `scripts/make_test_plate.py`) become thin wrappers. Features arrive with their phases
+   (artifacts 18, time courses 22, spheroids 21, screens with seeded hits 23, profiling phenotypes
+   24, cell cycle/foci/N:C 20); plus `synthetic.registry()` for Phase 17's multi-run tests.
+
+### Dependencies to approve now (pins checked on PyPI 2026-11-19)
+
+`sqlalchemy>=2.1,<2.2`, `alembic>=1.20,<2`, `jsonschema>=4.26,<5`, `keyring>=25.7,<26`.
+Later, with their phases: `duckdb` (17; 2.0.0 is a new major — pin after testing), `watchdog`,
+`httpx` (19), `statsmodels` only if a phase needs LOESS/mixed models (17's uniformity maps can use
+the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
 
 ## Commands
 
