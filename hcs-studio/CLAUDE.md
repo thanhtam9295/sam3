@@ -241,12 +241,16 @@ PlateLayout (model/annotation.py)
 | reportlab | 13/15 | PDF reports (pure-Python wheels; bundles with PyInstaller) |
 | imageio-ffmpeg | 14 | MP4 export (GIF needs only Pillow) |
 | synergy | 13 | MuSyC, optional; ask first |
+| h5py | 16 | ilastik HDF5 files and `.ilp` reading (approved 2026-11-19) |
 
 Not added: lmfit (`scipy.optimize.least_squares` covers bounds, robust loss, covariance CIs), weasyprint (needs system Pango/Cairo; hard on Windows).
 
-## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — PROPOSED, awaiting approval
+## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; step (a) built
 
-Nothing below is built yet. Facts checked 2026-11-19 against ilastik's source and docs on GitHub
+Build order (stop for review after each): (a) settings, detection, HDF5/axis utilities — built;
+(b) HeadlessRunner + Pixel Classification/Autocontext + Probabilities → Objects; (c) Object
+Classification (incl. on Cellpose masks); (d) Multicut + Tracking; (e) FijiRunner, macro export,
+parity test. Ask for sample `.ilp` projects + images before (b). Facts checked 2026-11-19 against ilastik's source and docs on GitHub
 (www.ilastik.org is not reachable from the cloud container) and the ilastik4ij README/examples.
 Re-check every flag with `--help` / `--version` on the installed ilastik before relying on it.
 
@@ -321,6 +325,19 @@ micromamba create -y -p <env> --channel-priority flexible -c ilastik-forge -c co
 The environment is ~3.4 GB; run as `<env>/bin/python -m ilastik --headless …`. Tracking uses the
 DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as in most installs).
 
+### Conventions (step a)
+
+- `axes.py` is the only TCZYX ⇄ ilastik conversion (`ilastik_axes`, `to_ilastik`, `from_ilastik`);
+  axes missing from a string must have length 1; the channel axis is kept by default.
+- `h5io.write_h5` writes `/data` (gzip, chunks 1 t × ≤32 z × ≤256² × all c) with vigra `axistags`
+  JSON exactly as ilastik writes it, via a `.partial` file + rename; `read_h5` prefers
+  `exported_data`. ilastik input spec: `<file>/data` (`input_spec`).
+- `settings.py`: `IlastikSettings` in `<settings>/ilastik.json`; `detect()` order = settings,
+  `HCS_ILASTIK`, install folders (newest first); `check_version` blocks `INCOMPATIBLE` and
+  < 1.3.3post3, warns on pre-releases. `environment()` sets `LAZYFLOW_*` only when not default.
+  Starting ilastik for `--version` takes seconds: the GUI runs detection in a `BackgroundTask`.
+- GUI: `gui/ilastik_settings.py` (Tools → ilastik settings…). CLI: `hcs-studio ilastik`.
+
 ### Testing plan
 
 - CI uses a fake ilastik executable (a Python script that parses the real flag set and writes
@@ -346,6 +363,7 @@ Run from this folder (`hcs-studio/`).
 - Layouts: `hcs-studio layout <file> --validate [--export out.xlsx [--plate-map]]`; re-annotate a run: `hcs-studio annotate <run> --layout <file>`
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
+- ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`

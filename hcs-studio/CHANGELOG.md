@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Phase 16 (a) — ilastik: settings, detection, HDF5 and axis order
+- Tools → **ilastik settings…** and `hcs-studio ilastik --detect / --save`: finds ilastik
+  (install folders, settings, `HCS_ILASTIK`; also the Python of an ilastik conda environment)
+  and Fiji with the ilastik4ij plugin, reads ilastik's version, blocks incompatible releases
+  (1.3.3b2 … 1.3.3post2, 1.4.0b27, older than 1.3.3post3), warns on pre-releases; threads,
+  RAM limit (≥ 500 MB), processes at once, default runner.
+- `segmentation/ilastik_backend/axes.py` (TCZYX ⇄ ilastik axis strings) and `h5io.py`
+  (ilastik-ready HDF5 with vigra `axistags`), checked against ilastik 1.4.2 itself.
+- New dependency: `h5py`. Docs: `docs/ilastik.md`.
+
 ### QC review of Phases 0–15
 - `docs/qc_review.md`: per-phase QC results (tests and every command-line tool run end to
   end on synthetic data), open issues, the real data needed per phase and how to send it.

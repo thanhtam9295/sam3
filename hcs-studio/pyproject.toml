@@ -32,6 +32,7 @@ dependencies = [
     "reportlab>=4.0",
     "imageio>=2.30",
     "imageio-ffmpeg>=0.5",
+    "h5py>=3.10",
 ]
 
 [project.optional-dependencies]
@@ -102,6 +103,6 @@ strict = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*", "sklearn.*", "joblib.*", "igraph.*", "leidenalg.*", "umap", "umap.*", "matplotlib", "matplotlib.*", "openpyxl", "reportlab", "reportlab.*", "imageio_ffmpeg", "imageio_ffmpeg.*", "openpyxl.*"]
+module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*", "sklearn.*", "joblib.*", "igraph.*", "leidenalg.*", "umap", "umap.*", "matplotlib", "matplotlib.*", "openpyxl", "reportlab", "reportlab.*", "imageio_ffmpeg", "imageio_ffmpeg.*", "openpyxl.*", "h5py", "h5py.*"]
 ignore_missing_imports = true
 follow_imports = "skip"

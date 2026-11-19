@@ -627,6 +627,13 @@ figure per compound. Every export writes a JSON sidecar from which
 `hcs-studio figure --regenerate` re-creates it exactly. Details:
 [figures.md](figures.md).
 
+## ilastik
+
+Projects trained in ilastik (`.ilp`) will run as pipeline steps, like Cellpose and SAM 3.
+Set up ilastik under **Tools → ilastik settings…** (or `hcs-studio ilastik --detect`): HCS
+Studio finds the installation, checks its version and blocks releases known not to work.
+Running projects follows in the next build steps. Details: [ilastik.md](ilastik.md).
+
 ## Limitations in this phase
 
 - Readers have been tested on synthetic plates only, not yet on real instrument exports.

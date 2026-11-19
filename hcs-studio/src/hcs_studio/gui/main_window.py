@@ -27,6 +27,7 @@ from hcs_studio import __version__
 from hcs_studio.gui.browser import BrowserPanel
 from hcs_studio.gui.classify_panel import ClassifyPanel
 from hcs_studio.gui.compare_panel import ComparePanel
+from hcs_studio.gui.ilastik_settings import IlastikSettingsDialog
 from hcs_studio.gui.jobs_panel import JobsPanel
 from hcs_studio.gui.layout_editor import LayoutEditor
 from hcs_studio.gui.measurements_panel import MeasurementsPanel
@@ -256,6 +257,7 @@ class MainWindow(QMainWindow):
         tools_menu = self.menuBar().addMenu("&Tools")
         tools_menu.addAction(self._action("&PSF tool…", self.open_psf_tool))
         tools_menu.addAction(self._action("&SAM 3 settings…", self.open_sam_settings))
+        tools_menu.addAction(self._action("&ilastik settings…", self.open_ilastik_settings))
         tools_menu.addAction(
             self._action("&Experiment report for the run in Results", self.experiment_report)
         )
@@ -624,6 +626,12 @@ class MainWindow(QMainWindow):
     def _on_selection_changed(self, wells: list[tuple[int, int]]) -> None:
         if len(wells) > 1:
             self.statusBar().showMessage(f"{len(wells)} wells selected", 4000)
+
+    def open_ilastik_settings(self) -> IlastikSettingsDialog:
+        dialog = IlastikSettingsDialog(self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.show()
+        return dialog
 
     def open_sam_settings(self) -> Sam3SettingsDialog:
         dialog = Sam3SettingsDialog(self)

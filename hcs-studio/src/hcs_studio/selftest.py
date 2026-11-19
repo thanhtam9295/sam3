@@ -51,6 +51,7 @@ REQUIRED = (
     "openpyxl",
     "reportlab",
     "imageio_ffmpeg",
+    "h5py",
     "umap",
     "numba",
     "mahotas",

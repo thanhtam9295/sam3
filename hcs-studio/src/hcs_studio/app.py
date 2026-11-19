@@ -69,6 +69,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     layout_cmd.add_argument("--plate-map", action="store_true", help="export as a plate-map XLSX")
     layout_cmd.add_argument("--layer", default="compound", help="figure colouring")
+    ilastik_cmd = sub.add_parser(
+        "ilastik", help="ilastik backend: find ilastik and Fiji, check versions, save settings"
+    )
+    ilastik_cmd.add_argument(
+        "--detect", action="store_true", help="report the ilastik / Fiji installation found"
+    )
+    ilastik_cmd.add_argument("--set-ilastik", type=Path, help="ilastik executable (or its Python)")
+    ilastik_cmd.add_argument("--set-fiji", type=Path, help="Fiji folder or launcher")
+    ilastik_cmd.add_argument("--threads", type=int, help="ilastik threads (-1 = no limit)")
+    ilastik_cmd.add_argument("--ram-mb", type=int, help="ilastik RAM limit in MB (0 = no limit)")
+    ilastik_cmd.add_argument(
+        "--max-processes", type=int, help="ilastik processes allowed at once (default 1)"
+    )
+    ilastik_cmd.add_argument(
+        "--save", action="store_true", help="save the given settings (and the paths found)"
+    )
     selftest = sub.add_parser(
         "selftest", help="check this installation on a small synthetic plate (about a minute)"
     )
@@ -322,6 +338,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _annotate(args)
     if args.command == "layout":
         return _layout(args)
+    if args.command == "ilastik":
+        return _ilastik(args)
     if args.command == "selftest":
         from hcs_studio.selftest import run_selftest
 
@@ -775,6 +793,40 @@ def _annotate(args: argparse.Namespace) -> int:
         "tables and report rebuilt"
     )
     return 0
+
+
+def _ilastik(args: argparse.Namespace) -> int:
+    """Exit code 0: ilastik usable; 1: found but blocked; 2: not found."""
+    from dataclasses import replace
+
+    from hcs_studio.segmentation.ilastik_backend.settings import IlastikSettings, detect
+
+    settings = IlastikSettings.load()
+    changes: dict[str, object] = {}
+    if args.set_ilastik:
+        changes["ilastik"] = str(args.set_ilastik.expanduser().absolute())
+    if args.set_fiji:
+        changes["fiji"] = str(args.set_fiji.expanduser().absolute())
+    for name in ("threads", "ram_mb", "max_processes"):
+        if getattr(args, name) is not None:
+            changes[name] = getattr(args, name)
+    try:
+        settings = replace(settings, **changes)  # type: ignore[arg-type]
+        settings.validate()
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 2
+    found = detect(settings)
+    print(found.text())
+    if args.save:
+        if found.ilastik and not settings.ilastik:
+            settings = replace(settings, ilastik=found.ilastik)
+        if found.fiji and not settings.fiji:
+            settings = replace(settings, fiji=found.fiji)
+        print(f"Saved {settings.save()}")
+    if not found.ilastik:
+        return 2
+    return 0 if found.ilastik_ok else 1
 
 
 def _layout(args: argparse.Namespace) -> int:

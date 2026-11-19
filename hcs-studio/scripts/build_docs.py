@@ -24,6 +24,7 @@ PAGES = [
     ("annotation.md", "Plate annotation"),
     ("pharmacology.md", "Pharmacology methods"),
     ("figures.md", "Comparison and figures"),
+    ("ilastik.md", "ilastik"),
     ("validation.md", "Validation"),
 ]
 TEMPLATE = """<!doctype html>
