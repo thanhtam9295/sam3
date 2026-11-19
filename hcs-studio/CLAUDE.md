@@ -244,6 +244,63 @@ PlateLayout (model/annotation.py)
 
 Not added: lmfit (`scipy.optimize.least_squares` covers bounds, robust loss, covariance CIs), weasyprint (needs system Pango/Cairo; hard on Windows).
 
+## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — PROPOSED, awaiting approval
+
+Nothing below is built yet. Facts checked 2026-11-19 against ilastik's source and docs on GitHub
+(www.ilastik.org is not reachable from the cloud container) and the ilastik4ij README/examples.
+Re-check every flag with `--help` / `--version` on the installed ilastik before relying on it.
+
+### Architecture
+
+```
+segmentation/ilastik_backend/
+ ├─ settings.py    detection (ilastik + Fiji/ilastik4ij), version check, threads/RAM, max processes
+ ├─ axes.py        TCZYX ⇄ ilastik axis strings (yxc, zyxc, tyxc, tzyxc); one tested utility
+ ├─ h5io.py        ilastik-ready HDF5 (/data, gzip, chunked, axistags JSON) read/write
+ ├─ project.py     .ilp reader (h5py, read-only): workflow, dims, channels, classes, version, sha256
+ ├─ job.py         IlastikJob / IlastikResult (pydantic, picklable)
+ ├─ runners/       HeadlessRunner (default), FijiRunner (ilastik4ij macro), [PythonApiRunner: deferred]
+ └─ steps.py       pipeline modules: ilastik_pixel, ilastik_autocontext, ilastik_objects,
+                   ilastik_multicut, ilastik_tracking, probabilities_to_objects, export_ilastik_h5
+```
+
+- Runners never import ilastik: HeadlessRunner and FijiRunner are subprocesses; ilastik's pinned
+  dependencies stay out of the app environment (same rule as SAM 3).
+- All runners take the same `IlastikJob` and return the same `IlastikResult`; steps do not know the runner.
+- ilastik steps are `exclusive` (one ilastik process at a time; ilastik is multithreaded) and call
+  ilastik once per **well** with all its fields (`--raw_data` takes several files; other roles pair
+  by position). Needs a small executor hook so a step can process a well's fields as one batch.
+- Outputs per PROMPT_ILASTIK.md §8 (`<run>/ilastik/…`, `wells/<W>/ilastik/…`); manifest records
+  `.ilp` SHA-256, ilastik version, runner and the exact command line.
+
+### Verified ilastik facts (headless)
+
+- Flags: `--headless --project=<ilp> --export_source=<name> --output_format=<fmt>
+  --output_filename_format=<pattern> [--output_internal_path] [--export_dtype] [--output_axis_order]
+  [--input_axes] --raw_data <files…> [--prediction_maps <files…>] [--segmentation_image <files…>]`.
+  `--readonly` is on by default in headless mode (the .ilp is never written). `--version` exists.
+- Export sources: pixel "Probabilities", "Simple Segmentation" (not "Segmentation"), "Uncertainty",
+  "Features", "Labels"; autocontext "Probabilities Stage 2" etc.; objects "Object Predictions",
+  "Object Probabilities", "Object Identities" (+ `--table_filename` CSV); multicut role
+  `--probabilities`, source "Multicut Segmentation"; tracking "Tracking-Result", "Object-Identities",
+  "Plugin" + `--export_plugin` (e.g. "CSV-Table").
+- Env: `LAZYFLOW_THREADS` (-1 = auto), `LAZYFLOW_TOTAL_RAM_MB` (≥ 500, else ilastik errors).
+- Avoid `--cutout_subregion` (source and docs disagree on its axis order); tile in HCS Studio.
+- ilastik4ij macro keys (examples/): pixel `projectfilename= inputimage= pixelclassificationtype=
+  saveonly=false`; objects `inputproborsegimage= secondinputtype=`; multicut
+  `boundarypredictionimage=`; tracking `input= inputproborsegimage= secondinputtype=`; HDF5 import
+  `select= datasetname= axisorder=`, export `input= exportpath= datasetname= compressionlevel=`.
+  The Configure command's keys are unconfirmed. Two published example macros have variable bugs.
+- Incompatible with ilastik4ij: 1.3.3b2, 1.3.3rc2, 1.3.3, 1.3.3post1, 1.3.3post2, 1.4.0b27.
+  Latest stable ilastik: 1.4.2 (May 2026); 1.5.0b1 (Nov 2026) is a beta.
+
+### Testing plan
+
+- CI uses a fake ilastik executable (a Python script that parses the real flag set and writes
+  known-answer outputs), like the fake SAM worker. Real-ilastik and Fiji parity tests run only when
+  `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
+- The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).
