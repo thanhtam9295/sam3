@@ -273,18 +273,32 @@ segmentation/ilastik_backend/
 - Outputs per PROMPT_ILASTIK.md §8 (`<run>/ilastik/…`, `wells/<W>/ilastik/…`); manifest records
   `.ilp` SHA-256, ilastik version, runner and the exact command line.
 
-### Verified ilastik facts (headless)
+### Verified ilastik facts (ilastik 1.4.2 installed in the cloud container, 2026-11-19)
 
-- Flags: `--headless --project=<ilp> --export_source=<name> --output_format=<fmt>
-  --output_filename_format=<pattern> [--output_internal_path] [--export_dtype] [--output_axis_order]
-  [--input_axes] --raw_data <files…> [--prediction_maps <files…>] [--segmentation_image <files…>]`.
-  `--readonly` is on by default in headless mode (the .ilp is never written). `--version` exists.
-- Export sources: pixel "Probabilities", "Simple Segmentation" (not "Segmentation"), "Uncertainty",
-  "Features", "Labels"; autocontext "Probabilities Stage 2" etc.; objects "Object Predictions",
-  "Object Probabilities", "Object Identities" (+ `--table_filename` CSV); multicut role
-  `--probabilities`, source "Multicut Segmentation"; tracking "Tracking-Result", "Object-Identities",
-  "Plugin" + `--export_plugin` (e.g. "CSV-Table").
-- Env: `LAZYFLOW_THREADS` (-1 = auto), `LAZYFLOW_TOTAL_RAM_MB` (≥ 500, else ilastik errors).
+- `python -m ilastik --version` → 1.4.2 (Python 3.11). Top-level flags as in `--help`: `--headless
+  --project --readonly --new_project --workflow --configfile --logfile --redirect_output --debug
+  --exit_on_failure --nn_device` (+ GUI-only ones). `--new_project` needs an absolute path.
+- Workflow input flags come from the role names (lower case, `_`); confirmed per workflow:
+  pixel / autocontext `--raw_data [--prediction_mask]`; object classification from label image
+  `--raw_data --label_image` (keeps instance IDs: use it for Cellpose/SAM masks), from binary
+  `--raw_data --segmentation_image`, from prediction `--raw_data --prediction_maps`; multicut
+  `--raw_data --probabilities [--superpixels]`; tracking from binary `--raw_data
+  --segmentation_image`, from prediction `--raw_data --prediction_maps`.
+- `--export_source` names: pixel "Probabilities", "Simple Segmentation", "Uncertainty", "Features",
+  "Labels"; autocontext "Probabilities Stage 2", "Simple Segmentation Stage 2", … "Probabilities
+  All Stages"; objects "Object Predictions", "Object Probabilities", "Blockwise Object …",
+  "Object Identities" (+ `--table_filename`); multicut "Multicut Segmentation"; tracking
+  "Tracking-Result", "Merger-Result", "Object-Identities" (+ "Plugin" / `--export_plugin` from the
+  tracking export applet, e.g. "CSV-Table").
+- `--output_format`: … "hdf5", "compressed hdf5", "n5", "compressed n5", "single-scale OME-Zarr",
+  "multi-scale OME-Zarr", "numpy", "tif", "multipage tiff", "blockwise hdf5" (+ image sequences).
+- Role flags take several files (`nargs="+"`), paired by position across roles.
+- Env: `LAZYFLOW_THREADS` (-1 = auto), `LAZYFLOW_TOTAL_RAM_MB` (≥ 500). Headless defaults to
+  read-only projects (to be confirmed by hashing the .ilp before/after a run).
+- `.ilp` (HDF5): root datasets `workflowName`, `ilastikVersion`, `time`; groups `Input Data`,
+  `FeatureSelections`, `PixelClassification` (`LabelNames`, `LabelColors`, `PmapColors`), export
+  settings. The classifier is a **pickle**: never unpickle .ilp content in HCS Studio; read only
+  plain datasets/attributes. Where trained-data axistags/channels live: confirm on a trained project.
 - Avoid `--cutout_subregion` (source and docs disagree on its axis order); tile in HCS Studio.
 - ilastik4ij macro keys (examples/): pixel `projectfilename= inputimage= pixelclassificationtype=
   saveonly=false`; objects `inputproborsegimage= secondinputtype=`; multicut
@@ -293,6 +307,19 @@ segmentation/ilastik_backend/
   The Configure command's keys are unconfirmed. Two published example macros have variable bugs.
 - Incompatible with ilastik4ij: 1.3.3b2, 1.3.3rc2, 1.3.3, 1.3.3post1, 1.3.3post2, 1.4.0b27.
   Latest stable ilastik: 1.4.2 (May 2026); 1.5.0b1 (Nov 2026) is a beta.
+
+### Installing ilastik for tests (Linux, conda packages)
+
+ilastik is not on conda-forge; it is on the `ilastik-forge` channel (deps from conda-forge, flexible
+priority; strict priority does not solve). 1.4.2's package misses `yapsy` and pulls a `hytra` without
+`pluginsystem` (tracking then fails to load): pin both.
+
+```bash
+micromamba create -y -p <env> --channel-priority flexible -c ilastik-forge -c conda-forge "ilastik=1.4.2" yapsy "hytra=1.1.5"
+```
+
+The environment is ~3.4 GB; run as `<env>/bin/python -m ilastik --headless …`. Tracking uses the
+DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as in most installs).
 
 ### Testing plan
 
