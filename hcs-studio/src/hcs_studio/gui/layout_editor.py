@@ -910,7 +910,10 @@ class LayoutEditor(QWidget):
                 "Open a plate to save versions of its layout (or export the layout)."
             )
             return None
-        saved = self.store.save(self.doc)
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import save_layout_version
+
+        saved = save_layout_version(context(), self.store, self.doc)
         self.doc = saved
         self.history[self.position] = saved
         self.saved_path = self.store.path(saved.version)

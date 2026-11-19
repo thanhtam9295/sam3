@@ -348,9 +348,10 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture PROPOSED, awaiting approval
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; step 17a built
 
-Nothing in this section is built yet. Proposed 2026-11-19 after checking the code.
+Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
+Python package sits beside them); one PC uses the local registry before server mode.
 
 ### Status and build order
 
@@ -426,12 +427,51 @@ forward whenever 19 is blocked on scheduler or instrument details.
    (artifacts 18, time courses 22, spheroids 21, screens with seeded hits 23, profiling phenotypes
    24, cell cycle/foci/N:C 20); plus `synthetic.registry()` for Phase 17's multi-run tests.
 
-### Dependencies to approve now (pins checked on PyPI 2026-11-19)
+### Dependencies (approved 2026-11-19)
 
-`sqlalchemy>=2.1,<2.2`, `alembic>=1.20,<2`, `jsonschema>=4.26,<5`, `keyring>=25.7,<26`.
-Later, with their phases: `duckdb` (17; 2.0.0 is a new major — pin after testing), `watchdog`,
+`sqlalchemy>=2.1,<2.2`, `alembic>=1.20,<2`, `jsonschema>=4.26,<5`, `keyring>=25.7,<26`,
+`lab-events` (path dependency `../lab_events`, `[tool.uv.sources]`). Ask before the later ones: with their phases: `duckdb` (17; 2.0.0 is a new major — pin after testing), `watchdog`,
 `httpx` (19), `statsmodels` only if a phase needs LOESS/mixed models (17's uniformity maps can use
 the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
+
+### Platform conventions (built)
+
+- **Database**: models in `db/models.py` (foundation) and `db/catalog.py` (Phase 17); import new
+  model modules in `db/schema.py`. Every schema change needs an Alembic revision in
+  `db/migrations/versions/` (autogenerate with `alembic_config(engine)` + `command.revision`, then
+  review); `tests/test_db.py` fails when models and migrations differ. `get_engine()` migrates on
+  first use; `session_scope()` commits/rolls back. `HCS_DATABASE_URL` overrides the URL (tests
+  run against a registry in their `HCS_STUDIO_HOME`; `tests/conftest.py` gives every test session a
+  temporary home). SQLite returns naive datetimes; compare via timestamps.
+- **Services**: a state change is a function `@service("domain.action", object_type=…,
+  reason_required=…)` taking `ServiceContext` first and calling `ctx.note(object_id=…,
+  before=…, after=…)`; existing ones in `services/operations.py` and `services/registry.py`.
+  GUI/CLI build the context with `services.context(reason)` *before* starting a background task.
+  `tests/test_services.py` lists core functions the GUI/CLI must not import (`WRAPPED`): add new
+  state-changing core functions there. Read-only work (previews, write=False) stays direct.
+- **Job queue**: `pipeline/queue.LocalJobQueue` (headless; `poll()` drives it); submit/cancel/
+  retry/resume through `services.operations.*_job`. The Jobs dock is a view (`panel.queue`).
+- **Readouts**: register new readouts with `READOUTS.register(ReadoutSpec(...))` next to the
+  module that produces them; placeholders `{name}` (lazy tokens), `{x:a|b}` (choices),
+  `{n:int}`, `{x:any}` (free text); resolution prefers the most specific pattern, ties → well
+  level. `tests/test_readouts.py` runs a full pipeline and requires every numeric per-well and
+  per-object column to resolve. Store values even when unregistered (the scanner reports them).
+- **Data roots**: store paths with `output.manifest.rooted_text()` / `paths.to_rooted()`; resolve
+  with `paths.resolve()`. Root names ≥ 2 characters (never drive letters); `ABSOLUTE` reserved.
+- **Settings/secrets**: `config.AppSettings` (`settings.json`, `config_version`, `MIGRATIONS`);
+  `config.check_no_secrets` refuses plain secrets (keys containing password/token/api_key/secret/
+  webhook must be `secret:<name>`); `secrets.get_secret` (env `HCS_SECRET_<NAME>` first, then
+  keyring), values redacted in logs.
+- **lab_events**: `sam3/lab_events` (schemas in `src/lab_events/schemas/v1/`); `validate()` /
+  `make_event()`; new optional fields = minor version, breaking = new major folder.
+- **Synthetic**: `hcs_studio.synthetic` (`SyntheticPlate` + features writing `truth.json`;
+  `registry_runs`). Do not change the Phase 13/15 generators (regression baseline).
+- **Phase 17a**: scanner `db/scanner.py` (keys: plate `barcode:` / `name:…|raw`, acquisition
+  `<rooted raw>|t`, run = rooted folder; `fingerprint()` = manifest, per-well table, layout,
+  pharmacology files); queries `db/queries.py` (DataFrames/dicts, shared by GUI/CLI/assistant);
+  GUI `gui/experiments_panel.py` (Experiments tab; all queries in `BackgroundTask`); CLI
+  `hcs-studio db …`. Next: 17b (robust Z, B-score with the dose–response guard rail, uniformity
+  plates, day/batch effects, replicate concordance), then 17c (control charts, MSR, bridging).
 
 ## Commands
 
@@ -452,6 +492,7 @@ Run from this folder (`hcs-studio/`).
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
+- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`

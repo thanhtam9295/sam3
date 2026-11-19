@@ -390,7 +390,7 @@ the step refuses).
 | Memory limit caps the worker count and the deconvolution budget | yes | `test_memory_limit_caps_workers`, `test_memory_limit_reaches_deconvolution` |
 | Timings per well and per run recorded | yes | `test_run_records_timing_and_performance` |
 | Unexpected GUI errors are logged and shown; the app keeps running | yes | `test_gui_error_handler_logs_and_keeps_running` |
-| `hcs-studio selftest` in the development environment | 9 of 9 checks | `test_selftest_passes` |
+| `hcs-studio selftest` in the development environment | 10 of 10 checks (registry added in Phase 17a) | `test_selftest_passes` |
 | **Frozen bundle (PyInstaller, Linux, without PyTorch)**: `info`, `selftest` (worker processes, numba, figures inside the bundle), GUI smoke test | all pass, after fixing two bundling gaps the self-test found (matplotlib backends loaded by name; napari's resources package) | manual, `packaging/hcs_studio.spec` |
 
 Not yet done: the Windows installer itself (built and self-tested by the

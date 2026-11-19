@@ -559,3 +559,15 @@ def test_run_with_stitching_and_table_steps(tmp_path: Path) -> None:
     report = (folder / "index.html").read_text(encoding="utf-8")
     assert "Analysis of the object tables" in report and "CV accuracy" in report
     assert "wells/A01/previews/mosaic.png" in report
+
+
+def test_nearest_neighbour_histogram_of_a_regular_grid() -> None:
+    """All distances (almost) equal: numpy cannot make 30 bins of that range by itself."""
+    from hcs_studio.analysis.spatial import nn_histogram
+
+    distances = np.full(20, 7.000000000000001) + np.arange(20) * 1e-15
+    counts, edges = nn_histogram(distances)
+    assert counts.sum() == 20 and edges[0] < 7 < edges[-1]
+    counts, _ = nn_histogram([1.0, 2.0, float("nan")])
+    assert counts.sum() == 2
+    assert nn_histogram([])[0].size == 0

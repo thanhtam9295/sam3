@@ -52,6 +52,11 @@ REQUIRED = (
     "reportlab",
     "imageio_ffmpeg",
     "h5py",
+    "sqlalchemy",
+    "alembic",
+    "jsonschema",
+    "keyring",
+    "lab_events",
     "umap",
     "numba",
     "mahotas",
@@ -131,8 +136,44 @@ def run_selftest(workers: int = 2, keep: Path | None = None) -> list[Check]:
 
         return detect_gpu().summary
 
+    def registry() -> str:
+        import tempfile
+
+        from lab_events import make_event
+
+        from hcs_studio.db.engine import current_revision, head_revision, make_engine
+        from hcs_studio.db.models import EventRecord
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = make_engine(f"sqlite:///{Path(tmp) / 'selftest.sqlite'}")
+            try:
+                revision = current_revision(engine)
+                if revision != head_revision():
+                    raise RuntimeError(f"schema {revision}, expected {head_revision()}")
+                from sqlalchemy.orm import Session
+
+                with Session(engine) as session:
+                    session.add(
+                        EventRecord(type="selftest", actor_id="selftest", actor_kind="system")
+                    )
+                    session.commit()
+            finally:
+                engine.dispose()
+        make_event(
+            "analysis.failed",
+            {
+                "barcode": "SELFTEST",
+                "stage": "qc",
+                "error": "none",
+                "finished_at": "2026-01-01T00:00:00Z",
+            },
+            source={"system": "hcs-studio selftest"},
+        )
+        return f"migrations to {revision}; lab event schemas valid"
+
     check("Python packages", imports)
     check("GPU detection", gpu)
+    check("Registry database", registry)
 
     temporary = tempfile.TemporaryDirectory(prefix="hcs-selftest-")
     root = Path(keep) if keep is not None else Path(temporary.name)

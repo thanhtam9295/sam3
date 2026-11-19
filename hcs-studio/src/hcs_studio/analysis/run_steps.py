@@ -116,11 +116,13 @@ def default_readouts(folder: Path) -> list[str]:
     table = Path(folder) / "tables" / "per_well_summary.csv"
     if not table.exists():
         raise ValueError("the run has no per-well summary")
+    from hcs_studio.readouts import resolve
+
     columns = list(pd.read_csv(table, nrows=1).columns)
-    counts = [
+    counts = [  # object counts per well, from the readout registry
         c
         for c in columns
-        if c.endswith("_count") and not c.startswith(("gate_", "class_", "cluster_"))
+        if (found := resolve(c, "well")) is not None and found.spec.pattern == "{labels}_count"
     ]
     if not counts:
         raise ValueError("no *_count readout in the per-well summary; give 'readouts'")

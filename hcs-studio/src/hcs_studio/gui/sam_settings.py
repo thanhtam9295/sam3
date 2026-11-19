@@ -107,9 +107,13 @@ class Sam3SettingsDialog(QDialog):
         return True
 
     def save(self) -> None:
-        Sam3Settings(
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import save_sam3_settings
+
+        settings = Sam3Settings(
             python=self.python.text().strip(),
             checkpoint=self.checkpoint.text().strip(),
             device=self.device.currentText(),
-        ).save()
+        )
+        save_sam3_settings(context(), settings)
         self.accept()

@@ -115,6 +115,19 @@ class Window:
         )
 
 
+def nn_histogram(nn: Any, bins: int = 30) -> tuple[Any, Any]:
+    """Histogram of nearest-neighbour distances. Distances that are all (almost) equal (a
+    regular arrangement) get a 1 µm wide range instead of failing in numpy."""
+    values = np.asarray(nn, dtype=float)
+    values = values[np.isfinite(values)]
+    if not len(values):
+        return np.zeros(0), np.zeros(0)
+    lo, hi = float(values.min()), float(values.max())
+    if hi - lo <= 1e-9 * max(1.0, abs(hi)):
+        return np.histogram(values, bins=bins, range=(lo - 0.5, hi + 0.5))
+    return np.histogram(values, bins=bins)
+
+
 def neighbour_counts(points: NDArray[Any], radii: NDArray[Any]) -> NDArray[np.float64]:
     """``counts[i, k]`` = number of other points within ``radii[k]`` of point i."""
     from scipy.spatial import cKDTree
@@ -447,7 +460,7 @@ class SpatialClusters(TableModule):
                     pattern = 1.0 if h > high else (-1.0 if h < low else 0.0)
                     row[f"spatial_pattern_{tag}"] = pattern if math.isfinite(h) else math.nan
             rows.append(row)
-            histogram, edges = np.histogram(nn, bins=30) if len(nn) else (np.zeros(0), np.zeros(0))
+            histogram, edges = nn_histogram(nn)
             details.append(
                 {
                     "group": group["group"],

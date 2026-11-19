@@ -25,6 +25,7 @@ PAGES = [
     ("pharmacology.md", "Pharmacology methods"),
     ("figures.md", "Comparison and figures"),
     ("ilastik.md", "ilastik"),
+    ("registry.md", "Experiment registry"),
     ("validation.md", "Validation"),
 ]
 TEMPLATE = """<!doctype html>

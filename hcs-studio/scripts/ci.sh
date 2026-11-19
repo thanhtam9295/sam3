@@ -3,8 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ruff check .
-ruff format --check .
+ruff check . ../lab_events
+ruff format --check . ../lab_events
 mypy
 
 # napari needs a real OpenGL context; on a headless Linux machine use a virtual display.

@@ -333,16 +333,39 @@ class PharmacologyPanel(QWidget):
             self.status.setText("Tick at least one readout.")
             return
         runs = list(self.runs)
+        reason = ""
+        if write and options.excluded_wells:  # written exclusions are recorded with a reason
+            asked = self.ask_reason(
+                f"Reason for excluding {len(options.excluded_wells)} well(s) from the report:"
+            )
+            if not asked:
+                self.status.setText("Not written: a reason is needed for the exclusions.")
+                return
+            reason = asked
         self._write_next = write
         self.analyse_button.setEnabled(False)
         self.status.setText("Analysing…" + (" and writing the report…" if write else ""))
+        from hcs_studio.services import context
+
+        ctx = context(reason)
 
         def work() -> PharmResult:
-            from hcs_studio.pharmacology.analysis import run_pharmacology
+            if not write:  # exploring exclusions: nothing is written, nothing to record
+                from hcs_studio.pharmacology.analysis import run_pharmacology as explore
 
-            return run_pharmacology(runs, options, write=write)
+                return explore(runs, options, write=False)
+            from hcs_studio.services.operations import run_pharmacology
+
+            return run_pharmacology(ctx, runs, options, write=True)
 
         self.task.request(work)
+
+    def ask_reason(self, prompt: str) -> str:
+        """Ask for a reason (tests replace this method)."""
+        from PySide6.QtWidgets import QInputDialog
+
+        text, ok = QInputDialog.getText(self, "Reason", prompt)
+        return text.strip() if ok else ""
 
     def _on_failed(self, message: str) -> None:
         self.analyse_button.setEnabled(True)

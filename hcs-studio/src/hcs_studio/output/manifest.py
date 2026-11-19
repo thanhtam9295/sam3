@@ -84,6 +84,7 @@ def build_manifest(
         "plate": {
             "name": plate.name,
             "path": str(plate.path),
+            "rooted_path": rooted_text(plate.path),
             "vendor": plate.vendor,
             "barcode": plate.barcode,
             "rows": plate.rows,
@@ -101,6 +102,17 @@ def build_manifest(
         "inputs": inputs,
         "input_checksums": "sha256" if checksums else "not computed (size and time only)",
     }
+
+
+def rooted_text(path: str | Path) -> str:
+    """``ROOT:relative/path`` for the manifest (``ABSOLUTE:…`` outside every data root);
+    an unreadable settings file never stops a run."""
+    from hcs_studio.paths import to_rooted
+
+    try:
+        return str(to_rooted(path))
+    except Exception:  # settings unreadable: keep the run going
+        return f"ABSOLUTE:{path}"
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:

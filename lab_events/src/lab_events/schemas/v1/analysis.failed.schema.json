@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcs-studio.local/lab_events/v1/analysis.failed.schema.json",
+  "title": "An analysis failed",
+  "type": "object",
+  "required": [
+    "barcode",
+    "stage",
+    "error",
+    "finished_at"
+  ],
+  "properties": {
+    "barcode": {
+      "type": "string",
+      "minLength": 1
+    },
+    "acquisition_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "registration",
+        "qc",
+        "analysis",
+        "report"
+      ]
+    },
+    "error": {
+      "type": "string"
+    },
+    "finished_at": {
+      "type": "string",
+      "description": "RFC 3339 date-time with time zone"
+    }
+  }
+}

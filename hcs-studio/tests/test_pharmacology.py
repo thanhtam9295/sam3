@@ -428,7 +428,7 @@ def test_command_line(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> Non
     run = write_run(tmp_path / "run")
     code = main(["pharm", str(run), "--readout", "nuclei_count", "--models", "bliss",
                  "--no-figures", "--no-pdf", "--exclude", "SynthPlate:B03",
-                 "--output", str(tmp_path / "out")])  # fmt: skip
+                 "--reason", "tip clog in B03", "--output", str(tmp_path / "out")])  # fmt: skip
     text = capsys.readouterr().out
     assert code == 0, text
     assert "MCF7 · Drug A × Drug B: bliss" in text and "EC50 1" in text

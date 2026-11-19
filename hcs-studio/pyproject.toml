@@ -33,7 +33,16 @@ dependencies = [
     "imageio>=2.30",
     "imageio-ffmpeg>=0.5",
     "h5py>=3.10",
+    "sqlalchemy>=2.1,<2.2",
+    "alembic>=1.20,<2",
+    "jsonschema>=4.26,<5",
+    "keyring>=25.7,<26",
+    "lab-events>=1.0,<2",
 ]
+
+[tool.uv.sources]
+# the event contract shared with the lab scheduler lives next to hcs-studio in this repository
+lab-events = { path = "../lab_events", editable = true }
 
 [project.optional-dependencies]
 gui = [
@@ -100,9 +109,9 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # µ and × are intended in scientific 
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "../lab_events/src"]
 
 [[tool.mypy.overrides]]
-module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*", "sklearn.*", "joblib.*", "igraph.*", "leidenalg.*", "umap", "umap.*", "matplotlib", "matplotlib.*", "openpyxl", "reportlab", "reportlab.*", "imageio_ffmpeg", "imageio_ffmpeg.*", "openpyxl.*", "h5py", "h5py.*"]
+module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*", "sklearn.*", "joblib.*", "igraph.*", "leidenalg.*", "umap", "umap.*", "matplotlib", "matplotlib.*", "openpyxl", "reportlab", "reportlab.*", "imageio_ffmpeg", "imageio_ffmpeg.*", "openpyxl.*", "h5py", "h5py.*", "jsonschema", "jsonschema.*"]
 ignore_missing_imports = true
 follow_imports = "skip"

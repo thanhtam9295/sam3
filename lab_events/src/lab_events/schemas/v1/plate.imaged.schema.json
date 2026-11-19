@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcs-studio.local/lab_events/v1/plate.imaged.schema.json",
+  "title": "A plate finished imaging",
+  "type": "object",
+  "required": [
+    "barcode",
+    "instrument",
+    "acquisition_start",
+    "raw_data"
+  ],
+  "properties": {
+    "barcode": {
+      "type": "string",
+      "minLength": 1
+    },
+    "instrument": {
+      "type": "string",
+      "minLength": 1
+    },
+    "protocol": {
+      "type": "string"
+    },
+    "acquisition_id": {
+      "type": "string"
+    },
+    "acquisition_start": {
+      "type": "string",
+      "description": "RFC 3339 date-time with time zone"
+    },
+    "acquisition_end": {
+      "type": "string",
+      "description": "RFC 3339 date-time with time zone"
+    },
+    "time_point_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "plate_type": {
+      "type": "integer",
+      "enum": [
+        6,
+        24,
+        96,
+        384,
+        1536
+      ]
+    },
+    "raw_data": {
+      "type": "object",
+      "description": "where the images are: a data root and a path below it (preferred), or an absolute location",
+      "properties": {
+        "root": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "root",
+            "path"
+          ]
+        },
+        {
+          "required": [
+            "location"
+          ]
+        }
+      ]
+    }
+  }
+}

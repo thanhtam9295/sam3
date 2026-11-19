@@ -337,6 +337,12 @@ class ResultsPanel(QWidget):
         if self._percent is not None:
             names.insert(0, self._percent_name())
         self.readout.addItems(names)
+        from PySide6.QtCore import Qt
+
+        from hcs_studio.readouts import label
+
+        for i, name in enumerate(names):  # the registry's name and unit as a tooltip
+            self.readout.setItemData(i, label(name), Qt.ItemDataRole.ToolTipRole)
         if keep in names:
             self.readout.setCurrentText(keep)
         self.readout.blockSignals(False)

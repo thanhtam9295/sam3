@@ -41,7 +41,6 @@ from hcs_studio.analysis.profiling import (
     fit_dose_response,
     four_pl,
     load_profile,
-    run_profiling,
     save_scatter,
 )
 from hcs_studio.gui.workers import BackgroundTask
@@ -728,7 +727,11 @@ class ProfilesPanel(QWidget):
         options, runs = self.options(), list(self.runs)
         self.compute_button.setEnabled(False)
         self.status.setText(f"Computing profiles of {len(runs)} plate(s)…")
-        self.task.request(lambda: run_profiling(runs, options))
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import run_profiling
+
+        ctx = context()
+        self.task.request(lambda: run_profiling(ctx, runs, options))
 
     def _on_computed(self, result: ProfileResult) -> None:
         self.compute_button.setEnabled(True)

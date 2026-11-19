@@ -15,6 +15,7 @@ from typing import Any
 
 from hcs_studio import __version__
 from hcs_studio.output.results import RunResults
+from hcs_studio.readouts import label as readout_label
 
 #: Readouts listed in every well's statistics table (when present), after the selected one.
 _KEY_MATCHES = ("_count", "_per_mm2", "fields", "coloc_")
@@ -77,6 +78,7 @@ def report_data(results: RunResults) -> dict[str, Any]:
         "pharmacology": pharmacology,
         "links": report_links(results.folder),
         "readouts": readouts,
+        "readout_labels": {r: readout_label(r) for r in readouts},
         "key_readouts": key_readouts,
         "values": values,
         "wells": wells,

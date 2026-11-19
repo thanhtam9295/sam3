@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcs-studio.local/lab_events/v1/cherrypick.request.schema.json",
+  "title": "Ask the scheduler to run a cherry-pick (hit confirmation)",
+  "type": "object",
+  "required": [
+    "destination_plate",
+    "picks"
+  ],
+  "properties": {
+    "screen": {
+      "type": "string"
+    },
+    "destination_plate": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pick_list_path": {
+      "type": "string"
+    },
+    "picks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "source_plate",
+          "source_well",
+          "destination_well",
+          "volume_nl"
+        ],
+        "properties": {
+          "source_plate": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_well": {
+            "type": "string"
+          },
+          "destination_well": {
+            "type": "string"
+          },
+          "volume_nl": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "compound_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "requested_by": {
+      "type": "string"
+    }
+  }
+}

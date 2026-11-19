@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcs-studio.local/lab_events/v1/analysis.completed.schema.json",
+  "title": "An analysis finished",
+  "type": "object",
+  "required": [
+    "barcode",
+    "run_id",
+    "qc_verdict",
+    "finished_at"
+  ],
+  "properties": {
+    "barcode": {
+      "type": "string",
+      "minLength": 1
+    },
+    "acquisition_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "qc_verdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "warn",
+        "fail"
+      ]
+    },
+    "report_path": {
+      "type": "string"
+    },
+    "key_numbers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    },
+    "finished_at": {
+      "type": "string",
+      "description": "RFC 3339 date-time with time zone"
+    }
+  }
+}

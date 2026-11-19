@@ -414,7 +414,8 @@ class SegmentationPanel(QWidget):
         self._run(action)
 
     def fine_tune(self) -> None:
-        from hcs_studio.segmentation.cellpose_backend import fine_tune
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import fine_tune_cellpose
 
         folder = Path(self.training_folder.text())
         base, epochs = self.base_model.currentText(), self.epochs.value()
@@ -427,7 +428,7 @@ class SegmentationPanel(QWidget):
             self.model_trained.emit(path)
 
         self._start(
-            lambda: fine_tune(folder, base_model=base, epochs=epochs),
+            lambda: fine_tune_cellpose(context(), folder, base_model=base, epochs=epochs),
             done,
             f"Fine-tuning {base} for {epochs} epochs …",
         )

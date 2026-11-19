@@ -8,6 +8,14 @@ import sys
 import pytest
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    """Keep tests away from the real settings folder (settings, registry, event log)."""
+    if not os.environ.get("HCS_STUDIO_HOME"):
+        import tempfile
+
+        os.environ["HCS_STUDIO_HOME"] = tempfile.mkdtemp(prefix="hcs-test-home-")
+
+
 def _has_display() -> bool:
     if sys.platform in ("win32", "darwin"):
         return True

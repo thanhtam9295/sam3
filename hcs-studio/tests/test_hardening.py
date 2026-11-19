@@ -214,7 +214,7 @@ def test_selftest_passes(tmp_path: Path) -> None:
 
     checks = run_selftest(workers=2, keep=tmp_path)
     assert [c.name for c in checks if not c.ok] == []
-    assert len(checks) == 9
+    assert len(checks) == 10
 
 
 def test_gui_error_handler_logs_and_keeps_running(
@@ -263,6 +263,7 @@ def test_user_guide_builds_as_html(tmp_path: Path) -> None:
         "pharmacology.html",
         "figures.html",
         "ilastik.html",
+        "registry.html",
         "validation.html",
     }
     for page in pages:

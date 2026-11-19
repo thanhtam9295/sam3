@@ -41,7 +41,6 @@ from hcs_studio.analysis.classifier import (
     TrainedClassifier,
     labelled_examples,
     robust_stats,
-    save_classifier,
     train_classifier,
     uncertain_objects,
 )
@@ -599,7 +598,10 @@ class ClassifyPanel(QWidget):
     def save_to(self, path: Path) -> None:
         if self.classifier is None:
             raise ValueError("Train a classifier first")
-        save_classifier(self.classifier, path)
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import save_classifier as save_model
+
+        save_model(context(), self.classifier, path)
         self.model_path = Path(path)
         self.log(f"Classifier saved: {path}")
 

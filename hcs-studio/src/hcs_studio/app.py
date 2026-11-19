@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"hcs-studio {__version__}")
     sub = parser.add_subparsers(dest="command")
+    reason_commands: list[argparse.ArgumentParser] = []
     gui = sub.add_parser("gui", help="launch the desktop application (default)")
     gui.add_argument(
         "--smoke-test",
@@ -33,8 +34,10 @@ def build_parser() -> argparse.ArgumentParser:
     inspect.add_argument("path", type=Path)
     sub.add_parser("modules", help="list processing modules and their parameters")
     report = sub.add_parser("report", help="(re)write index.html of a run folder")
+    reason_commands.append(report)
     report.add_argument("folder", type=Path)
     train = sub.add_parser("train-cellpose", help="fine-tune Cellpose on edited masks")
+    reason_commands.append(train)
     train.add_argument("--data", type=Path, required=True, help="training folder")
     train.add_argument("--base", default="cpsam_v2", help="model to start from")
     train.add_argument("--epochs", type=int, default=100)
@@ -45,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
         "analyze",
         help="apply table steps (gates, classifiers, clustering, spatial) to a finished run",
     )
+    reason_commands.append(analyze)
     analyze.add_argument("folder", type=Path, help="run folder")
     analyze.add_argument(
         "--pipeline", type=Path, required=True, help="pipeline file whose table steps to apply"
@@ -57,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     annotate = sub.add_parser(
         "annotate", help="apply a plate layout to a finished run (tables and report rebuilt)"
     )
+    reason_commands.append(annotate)
     annotate.add_argument("folder", type=Path, help="run folder")
     annotate.add_argument(
         "--layout", type=Path, required=True, help="layout: JSON, long CSV/XLSX or plate-map XLSX"
@@ -69,9 +74,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     layout_cmd.add_argument("--plate-map", action="store_true", help="export as a plate-map XLSX")
     layout_cmd.add_argument("--layer", default="compound", help="figure colouring")
+    db = sub.add_parser("db", help="experiment registry: scan runs, search, potency across runs")
+    db_sub = db.add_subparsers(dest="db_command", required=True)
+    db_sub.add_parser("info", help="where the registry is, and what it holds")
+    db_scan = db_sub.add_parser("scan", help="index run folders (and raw plates) into the registry")
+    db_scan.add_argument("paths", nargs="+", type=Path, help="run folders or folders above them")
+    db_scan.add_argument("--raw", action="store_true", help="also register raw plate folders")
+    db_scan.add_argument("--force", action="store_true", help="re-index unchanged runs")
+    reason_commands.append(db_scan)
+    db_search = db_sub.add_parser("search", help="find plates")
+    for name in ("text", "barcode", "experiment", "assay", "cell-line", "compound", "instrument"):
+        db_search.add_argument(f"--{name}", default="")
+    db_search.add_argument("--status", default="", help="latest run status, e.g. completed")
+    db_potency = db_sub.add_parser("potency", help="EC50 across runs: compound × cell line")
+    db_ic50 = db_sub.add_parser("ic50s", help="every EC50 of a compound in a cell line")
+    for command in (db_potency, db_ic50):
+        command.add_argument("--compound", default="", required=command is db_ic50)
+        command.add_argument("--cell-line", default="", required=command is db_ic50)
+        command.add_argument("--readout", default="")
+    db_plate = db_sub.add_parser("plate", help="one plate: acquisitions, runs, QC")
+    db_plate.add_argument("barcode")
+    for command in (db_search, db_potency, db_ic50):
+        command.add_argument("--export", type=Path, help="write the table as .csv or .xlsx")
     ilastik_cmd = sub.add_parser(
         "ilastik", help="ilastik backend: find ilastik and Fiji, check versions, save settings"
     )
+    reason_commands.append(ilastik_cmd)
     ilastik_cmd.add_argument(
         "--detect", action="store_true", help="report the ilastik / Fiji installation found"
     )
@@ -146,6 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
         "pharm",
         help="dose-response curves, combination matrices and synergy scores of finished runs",
     )
+    reason_commands.append(pharm)
     pharm.add_argument("runs", nargs="*", type=Path, help="run folder(s); plates are merged")
     pharm.add_argument(
         "--run",
@@ -211,6 +240,7 @@ def build_parser() -> argparse.ArgumentParser:
         "profile",
         help="PCA/UMAP phenotypic profiles, distance to control and dose-response of runs",
     )
+    reason_commands.append(profile)
     profile.add_argument("runs", type=Path, nargs="+", help="run folder(s), one per plate")
     profile.add_argument("--object-type", default="nuclei")
     profile.add_argument("--level", choices=["cell", "well"], default="cell")
@@ -237,6 +267,7 @@ def build_parser() -> argparse.ArgumentParser:
     classify = sub.add_parser(
         "train-classifier", help="train an object classifier from labelled objects of a run"
     )
+    reason_commands.append(classify)
     classify.add_argument("--run", type=Path, required=True, help="run folder")
     classify.add_argument(
         "--labels",
@@ -261,6 +292,7 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--tile", type=int, default=0, help="tile size in pixels; 0 = automatic")
     bench.add_argument("--max-memory-gb", type=float, help="memory limit (default: half free RAM)")
     run = sub.add_parser("run", help="run a pipeline on a plate, unattended")
+    reason_commands.append(run)
     run.add_argument("--pipeline", type=Path, help="pipeline YAML or JSON file")
     run.add_argument(
         "--input",
@@ -300,7 +332,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="record input file size and time only, instead of SHA-256 checksums",
     )
+    for command in reason_commands:
+        command.add_argument(
+            "--reason",
+            default="",
+            help="why (recorded with the change; required for manual exclusions)",
+        )
     return parser
+
+
+def _ctx(args: argparse.Namespace) -> Any:
+    """The service context of a command: the logged-in user and ``--reason``."""
+    from hcs_studio.services import context
+
+    return context(getattr(args, "reason", "") or "")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -323,10 +368,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "run":
         return _run(args)
     if args.command == "report":
-        from hcs_studio.output.report import write_report
+        from hcs_studio.services.operations import write_report
 
         try:
-            path = write_report(args.folder)
+            path = write_report(_ctx(args), args.folder)
         except (OSError, ValueError, KeyError) as exc:
             print(f"Error: {exc}")
             return 2
@@ -340,6 +385,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _layout(args)
     if args.command == "ilastik":
         return _ilastik(args)
+    if args.command == "db":
+        return _db(args)
     if args.command == "selftest":
         from hcs_studio.selftest import run_selftest
 
@@ -362,10 +409,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _train_classifier(args)
     if args.command == "train-cellpose":
         from hcs_studio.processing.base import ModuleError
-        from hcs_studio.segmentation.cellpose_backend import fine_tune
+        from hcs_studio.services.operations import fine_tune_cellpose
 
         try:
-            path, history = fine_tune(
+            path, history = fine_tune_cellpose(
+                _ctx(args),
                 args.data,
                 base_model=args.base,
                 model_name=args.name,
@@ -507,8 +555,8 @@ def _run_jobs(
     from pydantic import ValidationError
 
     from hcs_studio.io.base import ReaderError
-    from hcs_studio.pipeline.executor import run_pipeline
     from hcs_studio.processing.base import ModuleError
+    from hcs_studio.services.operations import run_pipeline
 
     code = 0
     for plate, pipeline, wells, layout, layout_path in jobs:
@@ -516,6 +564,7 @@ def _run_jobs(
             print(f"== {plate.name} ==", flush=True)
         try:
             result = run_pipeline(
+                _ctx(args),
                 plate,
                 pipeline,
                 output_root=args.output,
@@ -550,16 +599,16 @@ def _run_jobs(
 
 
 def _analyze(args: argparse.Namespace) -> int:
-    from hcs_studio.pipeline.executor import analyze_run
     from hcs_studio.pipeline.schema import Pipeline
     from hcs_studio.processing.base import ModuleError
+    from hcs_studio.services.operations import analyze_run
 
     try:
         pipeline = Pipeline.load(args.pipeline)
         if not pipeline.table_steps() and not pipeline.run_steps() and args.only:
             print("Error: the pipeline has no table steps or run steps")
             return 2
-        record = analyze_run(args.folder, pipeline, include_run_steps=not args.only)
+        record = analyze_run(_ctx(args), args.folder, pipeline, include_run_steps=not args.only)
     except (OSError, ValueError, ModuleError) as exc:
         print(f"Error: {exc}")
         return 2
@@ -574,8 +623,9 @@ def _analyze(args: argparse.Namespace) -> int:
 def _train_classifier(args: argparse.Namespace) -> int:
     import pandas as pd
 
-    from hcs_studio.analysis.classifier import save_classifier, train_from_run
+    from hcs_studio.analysis.classifier import train_from_run
     from hcs_studio.processing.base import ModuleError
+    from hcs_studio.services.operations import save_classifier
 
     try:
         model = train_from_run(
@@ -588,7 +638,7 @@ def _train_classifier(args: argparse.Namespace) -> int:
     except (OSError, ValueError, ModuleError) as exc:
         print(f"Error: {exc}")
         return 2
-    save_classifier(model, args.output)
+    save_classifier(_ctx(args), model, args.output)
     examples = ", ".join(f"{k}: {v}" for k, v in model.n_examples.items())
     print(f"Trained on {examples} ({len(model.features)} features)")
     if model.cv_accuracy is not None:
@@ -645,7 +695,8 @@ def _conc(value: float, unit: str) -> str:
 
 
 def _pharm(args: argparse.Namespace) -> int:
-    from hcs_studio.pharmacology.analysis import PharmOptions, run_pharmacology
+    from hcs_studio.pharmacology.analysis import PharmOptions
+    from hcs_studio.services.operations import run_pharmacology
 
     runs = [*args.runs, *args.extra_runs]
     if not runs:
@@ -676,7 +727,7 @@ def _pharm(args: argparse.Namespace) -> int:
         pdf=not args.no_pdf,
     )
     try:
-        result = run_pharmacology(runs, options, args.output)
+        result = run_pharmacology(_ctx(args), runs, options, args.output)
     except (OSError, ValueError, KeyError) as exc:
         print(f"Error: {exc}")
         return 2
@@ -702,8 +753,8 @@ def _pharm(args: argparse.Namespace) -> int:
 
 
 def _profile(args: argparse.Namespace) -> int:
-    from hcs_studio.analysis.profiling import ProfileOptions, run_profiling
-    from hcs_studio.output.report import write_report
+    from hcs_studio.analysis.profiling import ProfileOptions
+    from hcs_studio.services.operations import run_profiling
 
     options = ProfileOptions(
         object_type=args.object_type,
@@ -721,7 +772,7 @@ def _profile(args: argparse.Namespace) -> int:
         dose_readouts=[r.strip() for r in args.dose_readouts.split(",") if r.strip()],
     )
     try:
-        result = run_profiling(args.runs, options, args.output)
+        result = run_profiling(_ctx(args), args.runs, options, args.output)
     except (OSError, ValueError, KeyError) as exc:
         print(f"Error: {exc}")
         return 2
@@ -733,8 +784,6 @@ def _profile(args: argparse.Namespace) -> int:
     )
     for note in result.notes:
         print(f"Note: {note}")
-    if args.output is None:
-        write_report(args.runs[0])  # the report shows the profiles of the first run
     print(f"Profiles: {result.folder}")
     return 0
 
@@ -777,14 +826,14 @@ def _acceptance(args: argparse.Namespace) -> int:
 
 def _annotate(args: argparse.Namespace) -> int:
     from hcs_studio.io.layout_io import load_layout
-    from hcs_studio.pipeline.executor import annotate_run
     from hcs_studio.processing.base import ModuleError
+    from hcs_studio.services.operations import annotate_run
 
     try:
         imported = load_layout(args.layout)
         for note in imported.notes:
             print(f"Note: {note}")
-        record = annotate_run(args.folder, imported.layout, args.layout)
+        record = annotate_run(_ctx(args), args.folder, imported.layout, args.layout)
     except (OSError, ValueError, KeyError, ModuleError) as exc:
         print(f"Error: {exc}")
         return 2
@@ -792,6 +841,83 @@ def _annotate(args: argparse.Namespace) -> int:
         f"Layout applied ({record['wells']} wells, sha256 {record['sha256'][:12]}…); "
         "tables and report rebuilt"
     )
+    return 0
+
+
+def _db(args: argparse.Namespace) -> int:
+    import pandas as pd
+
+    from hcs_studio.db import queries, session_scope
+    from hcs_studio.db.engine import current_revision, database_url, get_engine
+
+    def show(frame: pd.DataFrame) -> None:
+        if frame.empty:
+            print("(nothing found)")
+        else:
+            with pd.option_context("display.width", 200, "display.max_columns", 20):
+                print(frame.to_string(index=False))
+        if getattr(args, "export", None):
+            print(f"Wrote {queries.export_table(frame, args.export)}")
+
+    try:
+        if args.db_command == "info":
+            from sqlalchemy import func, select
+
+            from hcs_studio.db.catalog import DoseResponseFit, Plate, Run, WellResult
+
+            url = database_url()
+            print(f"Registry: {url.split('@')[-1]}")
+            print(f"Schema revision: {current_revision(get_engine(url))}")
+            with session_scope() as session:
+                for model in (Plate, Run, WellResult, DoseResponseFit):
+                    n = session.scalar(select(func.count()).select_from(model))
+                    print(f"  {model.__tablename__}: {n}")
+            return 0
+        if args.db_command == "scan":
+            from hcs_studio.services.registry import scan_folders
+
+            report = scan_folders(_ctx(args), args.paths, raw=args.raw, force=args.force)
+            print(report.text())
+            return 1 if report.errors else 0
+        with session_scope() as session:
+            if args.db_command == "search":
+                query = queries.PlateQuery(
+                    text=args.text,
+                    barcode=args.barcode,
+                    experiment=args.experiment,
+                    assay=args.assay,
+                    cell_line=args.cell_line,
+                    compound=args.compound,
+                    instrument=args.instrument,
+                    run_status=args.status,
+                )
+                show(queries.search_plates(session, query).drop(columns=["plate_id"]))
+            elif args.db_command == "potency":
+                show(queries.potency_table(session, args.compound, args.cell_line, args.readout))
+            elif args.db_command == "ic50s":
+                show(queries.ic50s(session, args.compound, args.cell_line, args.readout))
+            elif args.db_command == "plate":
+                found = queries.search_plates(session, queries.PlateQuery(barcode=args.barcode))
+                if found.empty:
+                    print(f"No plate {args.barcode!r} in the registry")
+                    return 2
+                page = queries.plate_page(session, int(found.plate_id.iloc[0]))
+                info = page["plate"]
+                print(
+                    f"{info['barcode'] or info['name']}: {info['plate_type']} wells, "
+                    f"assay {info['assay'] or '-'}, experiment {info['experiment'] or '-'}, "
+                    f"cell lines {', '.join(info['cell_lines']) or '-'}"
+                )
+                print("Acquisitions:")
+                show(pd.DataFrame(page["acquisitions"]))
+                print("Runs:")
+                show(pd.DataFrame(page["runs"]))
+                if page["qc"]:
+                    print("Plate QC:")
+                    show(pd.DataFrame(page["qc"]))
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Error: {exc}")
+        return 2
     return 0
 
 
@@ -823,7 +949,9 @@ def _ilastik(args: argparse.Namespace) -> int:
             settings = replace(settings, ilastik=found.ilastik)
         if found.fiji and not settings.fiji:
             settings = replace(settings, fiji=found.fiji)
-        print(f"Saved {settings.save()}")
+        from hcs_studio.services.operations import save_ilastik_settings
+
+        print(f"Saved {save_ilastik_settings(_ctx(args), settings)}")
     if not found.ilastik:
         return 2
     return 0 if found.ilastik_ok else 1

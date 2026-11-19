@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcs-studio.local/lab_events/v1/envelope.schema.json",
+  "title": "Lab event envelope",
+  "description": "Every message has this envelope; `payload` is defined per `type`. Minor versions only add optional fields, so receivers accept unknown fields.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_id",
+    "type",
+    "emitted_at",
+    "source",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "event_id": {
+      "type": "string",
+      "description": "UUID, unique per event (receivers ignore duplicates)"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "plate.imaged",
+        "plate.dispensed",
+        "analysis.started",
+        "analysis.completed",
+        "analysis.failed",
+        "reimage.request",
+        "cherrypick.request"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "description": "RFC 3339 date-time with time zone"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "system"
+      ],
+      "properties": {
+        "system": {
+          "type": "string",
+          "minLength": 1
+        },
+        "host": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "links related events, e.g. the event_id of the plate.imaged that started an analysis"
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

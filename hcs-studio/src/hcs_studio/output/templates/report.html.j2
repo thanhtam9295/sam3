@@ -205,9 +205,12 @@ function currentValues() {
 function fillReadouts() {
   const filter = $("filter").value.trim().toLowerCase(), select = $("readout"), keep = select.value;
   select.innerHTML = "";
+  const labels = DATA.readout_labels || {};
   for (const r of DATA.readouts) {
-    if (filter && !r.toLowerCase().includes(filter)) continue;
-    const o = document.createElement("option"); o.value = r; o.textContent = r; select.appendChild(o);
+    const text = labels[r] || r;
+    if (filter && !r.toLowerCase().includes(filter) && !text.toLowerCase().includes(filter)) continue;
+    const o = document.createElement("option"); o.value = r; o.textContent = text; o.title = r;
+    select.appendChild(o);
   }
   if ([...select.options].some((o) => o.value === keep)) select.value = keep;
   draw();

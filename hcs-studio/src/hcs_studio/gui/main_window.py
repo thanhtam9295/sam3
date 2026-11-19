@@ -27,6 +27,7 @@ from hcs_studio import __version__
 from hcs_studio.gui.browser import BrowserPanel
 from hcs_studio.gui.classify_panel import ClassifyPanel
 from hcs_studio.gui.compare_panel import ComparePanel
+from hcs_studio.gui.experiments_panel import ExperimentsPanel
 from hcs_studio.gui.ilastik_settings import IlastikSettingsDialog
 from hcs_studio.gui.jobs_panel import JobsPanel
 from hcs_studio.gui.layout_editor import LayoutEditor
@@ -106,6 +107,10 @@ class MainWindow(QMainWindow):
         self.last_selection: tuple[Path, list[str]] | None = None
         self.compare_panel = ComparePanel(self.log, lambda: self.last_selection)
         self.tabs.addTab(self.compare_panel, "Compare")
+        self.experiments_panel = ExperimentsPanel()
+        self.experiments_panel.open_run.connect(self.show_results)
+        self.experiments_panel.log.connect(self.log)
+        self.tabs.addTab(self.experiments_panel, "Experiments")
         self.setCentralWidget(self.tabs)
 
         self.browser = BrowserPanel()
@@ -542,8 +547,9 @@ class MainWindow(QMainWindow):
 
     def apply_table_steps(self, folder: Path, steps: list[dict[str, Any]]) -> None:
         """Apply gates / classifiers to a finished run in the background."""
-        from hcs_studio.pipeline.executor import analyze_run
         from hcs_studio.pipeline.schema import PipelineStep
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import analyze_run
 
         try:
             parsed = [PipelineStep.model_validate(s) for s in steps]
@@ -552,7 +558,8 @@ class MainWindow(QMainWindow):
             return
         self.log(f"Applying {len(parsed)} table step(s) to {folder.name}…")
         self.statusBar().showMessage("Applying table steps to the run…")
-        self.analysis_task.request(lambda: (folder, analyze_run(folder, parsed)))
+        ctx = context()
+        self.analysis_task.request(lambda: (folder, analyze_run(ctx, folder, parsed)))
 
     def _on_analysis_finished(self, outcome: tuple[Path, dict[str, Any]]) -> None:
         folder, record = outcome
@@ -826,6 +833,8 @@ class MainWindow(QMainWindow):
         self.log(f"Saved layout version {layout.version}; new runs use it ({path})")
 
     def _on_tab_changed(self, index: int) -> None:
+        if self.tabs.widget(index) is self.experiments_panel:
+            self.experiments_panel.refresh()  # the registry may have changed meanwhile
         # show the editor's (possibly unsaved) annotation on the plate map
         edited = dict(self.layout_editor.doc.wells) != self.layout_annotations
         if self.tabs.widget(index) is self.plate_panel and self.plate is not None and edited:

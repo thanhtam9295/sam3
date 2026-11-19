@@ -188,5 +188,8 @@ class IlastikSettingsDialog(QDialog):
         except ValueError as exc:
             self.status.setText(str(exc))
             return
-        settings.save()
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import save_ilastik_settings
+
+        save_ilastik_settings(context(), settings)
         self.accept()

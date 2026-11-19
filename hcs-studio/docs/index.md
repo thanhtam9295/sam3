@@ -627,6 +627,14 @@ figure per compound. Every export writes a JSON sidecar from which
 `hcs-studio figure --regenerate` re-creates it exactly. Details:
 [figures.md](figures.md).
 
+## Experiments across runs
+
+The **Experiments** tab is a searchable catalog of every plate, imaging session and run:
+plate pages, EC50s of a compound across runs, a readout followed over time, compounds and
+cell lines. Runs enter it with **Scan folder…** (or `hcs-studio db scan`); scanning only
+reads and can be repeated. Data roots let every computer find the same files; every change
+is recorded with who made it and why. Details: [registry.md](registry.md).
+
 ## ilastik
 
 Projects trained in ilastik (`.ilp`) will run as pipeline steps, like Cellpose and SAM 3.

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
 
 from PySide6.QtCore import QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
@@ -23,20 +21,7 @@ from PySide6.QtWidgets import (
 
 from hcs_studio.model.plate import parse_well_name
 from hcs_studio.pipeline.jobs import Job, JobProcess
-
-
-@dataclass
-class JobState:
-    job: Job
-    #: queued, running, paused, completed, completed_with_failures, cancelled, error, interrupted
-    status: str = "queued"
-    folder: str | None = None
-    done: int = 0
-    total: int = 0
-    eta_s: float | None = None
-    wells: dict[str, dict[str, Any]] = field(default_factory=dict)
-    failed: dict[str, str] = field(default_factory=dict)
-    message: str = ""
+from hcs_studio.pipeline.queue import JobState, LocalJobQueue, recover_interrupted
 
 
 def job_for_folder(folder: Path, wells: list[str] | None = None) -> Job:
@@ -66,9 +51,14 @@ class JobsPanel(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.states: list[JobState] = []
-        self.current: JobProcess | None = None
-        self._current_state: JobState | None = None
+        #: The queue does the scheduling; this panel shows it and forwards the buttons.
+        self.queue = LocalJobQueue()
+        try:  # jobs left running by a previous session are marked interrupted
+            recover_interrupted()
+        except Exception as exc:  # the registry is a record; the dock works without it
+            import logging
+
+            logging.getLogger(__name__).warning("Job history not updated: %s", exc)
         self.timer = QTimer(self)
         self.timer.setInterval(200)
         self.timer.timeout.connect(self.poll)
@@ -120,120 +110,81 @@ class JobsPanel(QWidget):
 
     # ----------------------------------------------------------------- queue
 
-    def add_jobs(self, jobs: list[Job]) -> None:
-        for job in jobs:
-            self.states.append(JobState(job=job))
-        self._refresh_jobs()
-        self._start_next()
+    @property
+    def states(self) -> list[JobState]:
+        return self.queue.states
 
-    def _start_next(self) -> None:
-        if self.current is not None:
-            return
-        state = next((s for s in self.states if s.status == "queued"), None)
-        if state is None:
-            self._update_buttons()
-            return
-        self.current = JobProcess(state.job)
-        self._current_state = state
-        state.status = "running"
-        self.current.start()
-        self.timer.start()
-        self._refresh_jobs()
-        self.jobs_table.setCurrentCell(self.states.index(state), 0)
+    @property
+    def _current_state(self) -> JobState | None:
+        return next((self.queue.status(i) for i in self.queue.running), None)
+
+    @property
+    def current(self) -> JobProcess | None:
+        return next(iter(self.queue.running.values()), None)
+
+    def add_jobs(self, jobs: list[Job]) -> None:
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import submit_job
+
+        ctx = context()
+        for job in jobs:
+            submit_job(ctx, self.queue, job)
+        self._after_queue_change()
+
+    def _after_queue_change(self) -> None:
+        self._refresh_jobs()  # rows first, then select the running job
+        state = self._current_state
+        if state is not None:
+            self.timer.start()
+            self.jobs_table.setCurrentCell(self.states.index(state), 0)
 
     def poll(self) -> None:
-        process, state = self.current, self._current_state
-        if process is None or state is None:
-            return
-        for event in process.poll():
-            self._handle(state, event)
+        running_before = set(self.queue.running)
+        for state, event in self.queue.poll():
             self.event_received.emit(event)
-        if state.status in ("running", "paused") and not process.alive():
-            for event in process.poll():  # anything sent just before exiting
-                self._handle(state, event)
-            if state.status in ("running", "paused"):
-                state.status = "interrupted"
-                state.message = "The job stopped unexpectedly; resume it from its run folder."
-                self._finish(state)
-
-    def _handle(self, state: JobState, event: dict[str, Any]) -> None:
-        kind = event.get("type")
-        if kind == "run_started":
-            state.folder = event["folder"]
-            state.total = event["total"]
-            for well in event["wells"]:
-                state.wells[well] = {"status": "queued", "fields": 0, "error": ""}
-            for well in event["skipped"]:
-                state.wells[well] = {"status": "done (earlier)", "fields": 0, "error": ""}
-        elif kind == "well_started":
-            state.wells.setdefault(event["well"], {"fields": 0, "error": ""})["status"] = "running"
-        elif kind == "field_done":
-            state.done, state.total, state.eta_s = event["done"], event["total"], event["eta_s"]
-            state.wells.setdefault(event["well"], {"status": "running", "error": ""})["fields"] = (
-                state.wells[event["well"]].get("fields", 0) + 1
-            )
-        elif kind == "well_finished":
-            entry = state.wells.setdefault(event["well"], {"fields": 0})
-            entry["status"], entry["error"] = event["status"], event.get("error") or ""
-        elif kind == "status":
-            state.message = event["text"]
-        elif kind == "finished":
-            state.status = event["status"]
-            state.failed = dict(event.get("failed") or {})
-            state.folder = event.get("folder", state.folder)
-            if event.get("error"):
-                state.message = event["error"]
-            self._finish(state)
-            return
-        self._refresh_progress(state)
-
-    def _finish(self, state: JobState) -> None:
-        self.timer.stop()
-        if self.current is not None:
-            self.current.process.join(timeout=5)
-        self.current, self._current_state = None, None
-        self._refresh_jobs()
-        self._refresh_progress(state)
-        self.job_finished.emit(state)
-        self._start_next()
+            if event.get("type") == "finished" and state.status != "running":
+                self._refresh_progress(state)
+                self.job_finished.emit(state)
+            else:
+                self._refresh_progress(state)
+        if set(self.queue.running) != running_before:
+            self._after_queue_change()
+        if not self.queue.running:
+            self.timer.stop()
+            self._update_buttons()
 
     # --------------------------------------------------------------- control
 
     def toggle_pause(self) -> None:
-        if self.current is None or self._current_state is None:
+        state = self._current_state
+        if state is None:
             return
-        if self.current.pause.is_set():
-            self.current.pause.clear()
-            self._current_state.status = "running"
-        else:
-            self.current.pause.set()
-            self._current_state.status = "paused"
+        self.queue.toggle_pause(state.id)
         self._refresh_jobs()
 
     def cancel(self) -> None:
-        if self.current is not None:
-            self.current.pause.clear()
-            self.current.cancel.set()
-            if self._current_state is not None:
-                self._current_state.message = "Cancelling: finishing the wells in progress …"
-                self._refresh_progress(self._current_state)
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import cancel_job
+
+        state = self._current_state
+        if state is not None:
+            cancel_job(context(), self.queue, state.id)
+            self._refresh_progress(state)
 
     def selected_state(self) -> JobState | None:
         row = self.jobs_table.currentRow()
         return self.states[row] if 0 <= row < len(self.states) else None
 
     def retry_failed(self) -> None:
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import retry_job
+
         state = self.selected_state()
         if state is None or not state.folder or not state.failed:
             self.eta.setText("The selected job has no failed wells.")
             return
-        retry = replace(
-            state.job,
-            wells=[parse_well_name(w) for w in state.failed],
-            resume=state.folder,
-            label=f"{state.job.label} (retry {len(state.failed)} wells)",
-        )
-        self.add_jobs([retry])
+        retry_job(context(), self.queue, state.id)
+        self._after_queue_change()
 
     def resume_folder(self, folder: Path) -> None:
         try:
@@ -242,11 +193,13 @@ class JobsPanel(QWidget):
             self.eta.setText(f"Cannot resume {folder}: {exc}")
 
     def resume_selected(self) -> None:
+        from hcs_studio.services import context
+        from hcs_studio.services.operations import resume_job
+
         state = self.selected_state()
         if state is not None and state.folder:
-            self.add_jobs(
-                [replace(state.job, resume=state.folder, label=f"{state.job.label} (resumed)")]
-            )
+            resume_job(context(), self.queue, state.id)
+            self._after_queue_change()
 
     def _choose_resume(self) -> None:
         state = self.selected_state()
@@ -265,11 +218,7 @@ class JobsPanel(QWidget):
     def shutdown(self) -> None:
         """On application exit: stop the running job (it can be resumed later)."""
         self.timer.stop()
-        if self.current is not None:
-            self.current.cancel.set()
-            self.current.process.join(timeout=10)
-            if self.current.alive():
-                self.current.kill()
+        self.queue.shutdown()
 
     # --------------------------------------------------------------- display
 
@@ -318,7 +267,8 @@ class JobsPanel(QWidget):
         self.pause_button.setEnabled(running)
         self.cancel_button.setEnabled(running)
         if running and self.current is not None:
-            self.pause_button.setText("Continue" if self.current.pause.is_set() else "Pause")
+            paused = self.current.pause.is_set()
+            self.pause_button.setText("Continue" if paused else "Pause")
         state = self.selected_state()
         self.retry_button.setEnabled(bool(state and state.failed and not running))
         self.open_button.setEnabled(bool(state and state.folder))

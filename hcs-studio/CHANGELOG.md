@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+### Platform foundations (PROMPT_PLATFORM.md §2)
+- **Registry database** (`hcs_studio/db/`): SQLAlchemy 2 models with Alembic migrations
+  shipped in the package; SQLite at `<settings>/registry.sqlite` (WAL, foreign keys) and a
+  refusal to open it on a network share; PostgreSQL URL for server mode (Phase 27).
+- **Data roots** (`hcs_studio/paths.py`): paths stored as `ROOT:relative` and resolved per
+  operating system; run manifests record `plate.rooted_path`.
+- **Service layer** (`hcs_studio/services/`): every state change (layout versions,
+  re-annotation, pharmacology with exclusions, run start/cancel/retry/resume, analyses,
+  profiles, model training, settings, registry scans and edits) records who, when, what,
+  before/after and why; manual exclusions need a reason (`--reason` on the command line).
+  A test keeps the GUI and the CLI on the services.
+- **Job queue** (`pipeline/queue.py`): `JobQueue` interface with a headless local queue
+  (priorities interactive > auto > batch, GPU jobs alone, jobs stored in the registry,
+  interrupted jobs recovered); the Jobs dock shows it.
+- **Readout registry** (`hcs_studio/readouts.py`): name, unit, level, direction and default
+  normalization of every readout of Phases 5–15 (patterns for generated names); the report,
+  the Results tab and pharmacology use it.
+- **`lab_events`** (repository root): versioned JSON Schemas for the scheduler events.
+- **Settings and secrets**: versioned `settings.json`; secrets in the OS keychain
+  (`keyring`), redacted from logs.
+- **Synthetic data** (`hcs_studio/synthetic/`): composable plate builder writing
+  `truth.json`; multi-run registry builder.
+- New dependencies: sqlalchemy, alembic, jsonschema, keyring, lab-events. `selftest` checks
+  the registry (10 checks).
+- Fixed: spatial statistics failed on wells whose nearest-neighbour distances were all equal.
+
+### Phase 17a — experiment catalog and browser
+- Catalog: projects, experiments, plates (with well annotations), acquisitions, runs,
+  per-well results (long form), dose–response fits, combination scores, plate QC,
+  compounds, library plates, cell lines, event annotations, saved searches.
+- Scanner: indexes run folders (and raw plates with `--raw`); re-running adds nothing; a
+  changed run replaces its own results; unregistered readouts are stored and reported.
+- **Experiments** tab and `hcs-studio db info | scan | search | potency | ic50s | plate`:
+  plate search and pages, potency across runs, readout over time, compound and cell-line
+  pages, CSV/XLSX export. Docs: `docs/registry.md`.
+
 ### Phase 16 (a) — ilastik: settings, detection, HDF5 and axis order
 - Tools → **ilastik settings…** and `hcs-studio ilastik --detect / --save`: finds ilastik
   (install folders, settings, `HCS_ILASTIK`; also the Python of an ilastik conda environment)
