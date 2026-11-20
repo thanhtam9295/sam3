@@ -241,6 +241,22 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Assay monitoring (Phase 17c)
+
+| Check | Result | Test |
+|---|---|---|
+| Rules on a hand-made series | `1_3s`, `2of3_2s`, `7x`, `6t` fire exactly at the expected points | `test_rules_parse_and_fire_where_expected` |
+| 20 stable Z′ runs (0.75 ± 0.03), then a slow decline (−0.012 per run) | no flag in the baseline; drift flagged within 8 runs | `test_control_chart_flags_a_seeded_drift_and_not_the_baseline` |
+| Registry: 26 scanned runs whose control noise grows after run 20 | Z′ and vehicle-CV charts flag only runs ≥ 20; another instrument's event is not drawn | `test_z_prime_chart_of_registered_runs_flags_a_drift_and_shows_events` |
+| MSR of four EC50 values (1, 2, 1, 0.5 × 10⁻⁷ M) | s = 0.24578, MSR = 10^(2√2 s) = 4.96, equal to the hand calculation; identical runs give 1 | `test_msr_matches_a_hand_calculation` |
+| Test–retest of 20 compounds, run 1 2× more potent | MR 0.5, MSR and limits as hand-computed; acceptable; a 4-fold shift is not | same test |
+| Bridging, same plates on two instruments | r = 1, ratio and CI as hand-computed; a 5-fold shift is not equivalent | `test_bridging_ratios_and_equivalence` |
+| Bridging through the registry (3 plates, 6 fits each) | 18 ratio pairs, mean ratio 0.8–1.25, equivalent at MSR 2; not at 1.01 | `test_bridging_report_of_plates_imaged_on_two_instruments` |
+
+Not yet checked: the MSR formulas against the NCATS Assay Guidance Manual text (implemented
+from Eastwood et al. 2006); charts of real assays (choose a baseline of stable runs and the
+rules with the people who run the assay); bridging on real plates imaged on two instruments.
+
 ## Comparison and figure export (Phase 14)
 
 | Check | Result |

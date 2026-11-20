@@ -103,6 +103,95 @@ hcs-studio db concordance P00123 P00124 --readout nuclei_count
 hcs-studio db batch --readout nuclei_count --experiment "DRC week 1"
 ```
 
+## Assay monitoring (Experiments → Monitoring)
+
+Control charts (Levey–Jennings) follow an assay over time, per assay, cell line and
+instrument. Choose a metric and a readout, narrow it with the filters, and press **Show
+chart**. Always filter by assay (or experiment) when one instrument runs several plate
+types: their Z′ values belong to different charts.
+
+| Metric | One point per run |
+|---|---|
+| `z_prime` | Z′ of the run's negative and positive controls |
+| `vehicle_mean`, `vehicle_cv_pct` | mean and CV % of the negative-control wells |
+| `positive_mean`, `positive_cv_pct` | mean and CV % of the positive-control wells |
+| `log_ec50` | log10 EC50 (M) of a reference compound in one cell line |
+
+**Limits** come from the first 20 runs (the *baseline*, changeable): centre line = their
+mean, ±1, 2 and 3 SD dashed. With fewer runs than the baseline, the limits come from all
+runs and the chart says so.
+
+**Rules** (comma-separated; flagged points turn red):
+
+| Rule | Fires when |
+|---|---|
+| `1_3s` | one point beyond 3 SD |
+| `2of3_2s` | 2 of the last 3 points beyond 2 SD on the same side |
+| `7x` | 7 consecutive points on one side of the centre |
+| `6t` | 6 points steadily rising or falling (optional) |
+
+The general forms are `<n>of<m>_<k>s`, `<n>_<k>s`, `<n>x` and `<n>t`.
+
+**Events** (new reagent lot, cell vial, instrument service, instrument change, other) are
+drawn as vertical lines on the charts they concern: an event with an empty instrument,
+assay or cell line applies to all of them. Record one with **Record event…** or the
+command line; it is kept in the registry with who recorded it.
+
+### Minimum significant ratio (MSR)
+
+For a reference compound the chart shows the MSR of its EC50 across runs:
+
+- single compound tested in several runs: MSR = 10^(2·√2·s), s = SD of log10 EC50;
+- two runs of a set of compounds (test–retest): d = log10 EC50 run 1 − run 2 per compound;
+  MR = 10^mean(d), MSR = 10^(2·SD(d)), limits of agreement LsA = 10^(mean(d) ± 2·SD(d)).
+  Reproducible when MSR < 3 and both limits lie within 1/3 … 3;
+- a rolling MSR over the last 6 runs shows whether reproducibility is drifting.
+
+Two EC50 values from different runs differ significantly when their ratio exceeds the MSR.
+The formulas follow Eastwood et al. 2006 (J Biomol Screen 11:253). **They have not yet
+been checked against the text of the NCATS Assay Guidance Manual** (the manual could not
+be read from the build environment); confirm them before relying on MSR decisions.
+
+### Instrument bridging report
+
+When an assay moves to another instrument, image the same plates on both and scan both
+runs. **Bridging report…** (or `db bridge`) pairs the plates by barcode and writes a
+folder with `bridging_report.html` (self-contained), `bridging.json`, `agreement.csv`
+and `potency_ratios.csv`:
+
+- per plate: Pearson and Spearman correlation of the wells, Bland–Altman bias and 95 %
+  limits (A − B, in the readout's unit);
+- per compound and cell line: EC50 ratio A/B with a 95 % CI (from the two fits' CIs,
+  combined in log space) and whether it lies within 1/MSR … MSR;
+- overall: mean ratio, limits of agreement and MSR across the pairs.
+
+The instruments are called equivalent when every ratio and both limits of agreement lie
+within the MSR (3 by default; use the assay's own MSR when known).
+
+### Command line
+
+```bash
+hcs-studio db chart --metric z_prime --readout nuclei_count --assay "Viability 384" --instrument "Operetta CLS"
+```
+
+```bash
+hcs-studio db chart --metric log_ec50 --compound Staurosporine --cell-line MCF7 --readout nuclei_count --rules 1_3s,2of3_2s,7x,6t --export chart.csv
+```
+
+```bash
+hcs-studio db msr --compound Staurosporine --cell-line MCF7 --readout nuclei_count --window 6
+```
+
+```bash
+hcs-studio db event --kind reagent_lot --on 2026-03-21 --instrument "Operetta CLS" --description "new Hoechst lot" --reason "lot change"
+```
+
+```bash
+hcs-studio db bridge --instrument-a "Operetta CLS" --instrument-b "Nikon Ji" --readout nuclei_count --msr 3 --output bridge/ --reason "instrument change"
+```
+
+`db bridge` exits with status 1 when the instruments are not shown to be equivalent.
+
 ## Data roots: the same paths on every computer
 
 The same share is `\\labserver\screening` on Windows and `/mnt/screening` on Linux. Define

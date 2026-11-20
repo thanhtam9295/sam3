@@ -105,6 +105,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # µ and × are intended in scientific 
 [tool.ruff.lint.per-file-ignores]
 # methods prose: sentences read better unbroken
 "src/hcs_studio/output/methods.py" = ["E501"]
+"src/hcs_studio/monitoring/report.py" = ["E501"]  # HTML page template
 
 [tool.mypy]
 python_version = "3.11"

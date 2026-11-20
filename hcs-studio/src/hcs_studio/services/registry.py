@@ -251,3 +251,25 @@ def save_uniformity_map(
         record.actor = ctx.actor.id
         ctx.note(object_id=name, before=before, after={"run": source.name, **mapped.stats})
         return dict(mapped.stats)
+
+
+@service("registry.bridging_report", object_type="report")
+def write_bridging_report(
+    ctx: ServiceContext,
+    instrument_a: str,
+    instrument_b: str,
+    readout: str,
+    folder: Path,
+    *,
+    msr: float = 3.0,
+) -> list[Path]:
+    """Compare plates imaged on two instruments and write the bridging report to ``folder``."""
+    from hcs_studio.db.monitoring import bridging
+    from hcs_studio.monitoring.report import summary
+    from hcs_studio.monitoring.report import write_bridging_report as write
+
+    with session_scope() as session:
+        result = bridging(session, instrument_a, instrument_b, readout, msr)
+    files = write(result, Path(folder))
+    ctx.note(object_id=str(files[0]), after=summary(result) | {"files": [p.name for p in files]})
+    return files

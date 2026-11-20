@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -49,6 +49,14 @@ def fill_table(table: QTableWidget, frame: pd.DataFrame, hidden: tuple[str, ...]
         for col, name in enumerate(columns):
             table.setItem(row, col, QTableWidgetItem(_text(record[name])))
     table.resizeColumnsToContents()
+
+
+def _ts(value: Any) -> float:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None).timestamp()
+    if hasattr(value, "year"):
+        return datetime(value.year, value.month, value.day).timestamp()
+    return 0.0
 
 
 def _text(value: Any) -> str:
@@ -188,6 +196,7 @@ class ExperimentsPanel(QWidget):
         self.views.addTab(trend, "Readout over time")
         self.views.addTab(reference, "Compounds and cell lines")
         self.views.addTab(self._build_normalization(), "Normalization")
+        self.views.addTab(self._build_monitoring(), "Monitoring")
         layout = QVBoxLayout(self)
         layout.addLayout(bar)
         layout.addWidget(self.views, 1)
@@ -237,6 +246,7 @@ class ExperimentsPanel(QWidget):
                     "readouts": sorted(queries.readouts_in_registry(s)),
                     "runs": queries.run_names(s),
                     "maps": list(dbn.uniformity_maps(s).get("name", [])),
+                    "instruments": dbn.instruments(s),
                 }
 
         self._run(work, self._show_all, "Reading the registry…")
@@ -255,6 +265,11 @@ class ExperimentsPanel(QWidget):
             (self.norm_run, data["runs"]),
             (self.norm_run_b, data["runs"]),
             (self.norm_map, data["maps"]),
+            (self.mon_readout, data["readouts"]),
+            (self.mon_compound, data["compounds"]),
+            (self.mon_instrument, ["", *data["instruments"]]),
+            (self.bridge_a, data["instruments"]),
+            (self.bridge_b, data["instruments"]),
         ):
             keep = combo.currentText()
             combo.clear()
@@ -637,6 +652,229 @@ class ExperimentsPanel(QWidget):
             self.status.setText(f"{len(runs)} plates")
 
         self._run(work, done, "Collecting day and plate effects…")
+
+    # ------------------------------------------------------------------ monitoring
+
+    def _build_monitoring(self) -> QWidget:
+        from PySide6.QtWidgets import QSpinBox
+
+        self.mon_metric = QComboBox()
+        self.mon_metric.addItems(
+            [
+                "z_prime",
+                "vehicle_mean",
+                "vehicle_cv_pct",
+                "positive_mean",
+                "positive_cv_pct",
+                "log_ec50",
+            ]
+        )
+        self.mon_readout = QComboBox()
+        self.mon_readout.setEditable(True)
+        self.mon_compound = QComboBox()
+        self.mon_compound.setEditable(True)
+        self.mon_compound.setToolTip("Reference compound (metric log_ec50)")
+        self.mon_line = QLineEdit()
+        self.mon_line.setPlaceholderText("cell line (optional)")
+        self.mon_assay = QLineEdit()
+        self.mon_assay.setPlaceholderText("assay (recommended)")
+        self.mon_instrument = QComboBox()
+        self.mon_baseline = QSpinBox()
+        self.mon_baseline.setRange(3, 500)
+        self.mon_baseline.setValue(20)
+        self.mon_rules = QLineEdit("1_3s,2of3_2s,7x")
+        self.mon_rules.setToolTip("1_3s, 2of3_2s, 4of5_1s, 7x (run), 6t (trend)")
+        plot = QPushButton("Plot control chart")
+        plot.clicked.connect(self.show_chart)
+        event = QPushButton("Record an event…")
+        event.clicked.connect(self._record_event)
+        self.bridge_a = QComboBox()
+        self.bridge_b = QComboBox()
+        bridge = QPushButton("Bridging report…")
+        bridge.clicked.connect(self._choose_bridge)
+        form = QFormLayout()
+        for label, field_widget in (
+            ("Metric", self.mon_metric),
+            ("Readout", self.mon_readout),
+            ("Reference compound", self.mon_compound),
+            ("Cell line", self.mon_line),
+            ("Assay", self.mon_assay),
+            ("Instrument", self.mon_instrument),
+            ("Baseline runs", self.mon_baseline),
+            ("Rules", self.mon_rules),
+        ):
+            form.addRow(label, field_widget)
+        form.addRow("", plot)
+        form.addRow("", event)
+        form.addRow("Instrument A", self.bridge_a)
+        form.addRow("Instrument B", self.bridge_b)
+        form.addRow("", bridge)
+        controls = QWidget()
+        controls.setLayout(form)
+        self.chart_plot = pg.PlotWidget()
+        self.chart_plot.setLabel("bottom", "run (oldest → newest)")
+        self.chart_text = QTextBrowser()
+        self.control_chart: Any = None
+        right = QVBoxLayout()
+        right.addWidget(self.chart_plot, 3)
+        right.addWidget(self.chart_text, 1)
+        right_widget = QWidget()
+        right_widget.setLayout(right)
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.addWidget(controls, 1)
+        layout.addWidget(right_widget, 3)
+        return widget
+
+    def show_chart(self) -> None:
+        from hcs_studio.monitoring.charts import Rule
+
+        try:
+            rules = [Rule.parse(r) for r in self.mon_rules.text().split(",") if r.strip()]
+        except ValueError as exc:
+            self.status.setText(str(exc))
+            return
+        options: dict[str, Any] = {
+            "readout": self.mon_readout.currentText().strip(),
+            "compound": self.mon_compound.currentText().strip(),
+            "cell_line": self.mon_line.text().strip(),
+            "assay": self.mon_assay.text().strip(),
+            "instrument": self.mon_instrument.currentText().strip(),
+            "rules": rules,
+            "baseline_n": self.mon_baseline.value(),
+        }
+        metric = self.mon_metric.currentText()
+
+        def work() -> Any:
+            from hcs_studio.db import monitoring as dbm
+            from hcs_studio.db import session_scope
+
+            with session_scope() as s:
+                chart = dbm.chart(s, metric, **options)
+                msr = None
+                if metric == "log_ec50":
+                    msr = dbm.msr_history(
+                        s,
+                        options["compound"],
+                        cell_line=options["cell_line"],
+                        readout=options["readout"],
+                    )["msr"]
+                return chart, msr
+
+        self._run(work, self._draw_chart, "Building the control chart…")
+
+    def _draw_chart(self, result: Any) -> None:
+        chart, msr = result
+        self.control_chart = chart
+        plot = self.chart_plot
+        plot.clear()
+        values = chart.points["value"].astype(float).to_numpy()
+        x = np.arange(len(values))
+        plot.plot(x, values, pen=pg.mkPen("#888"), symbol="o", symbolSize=6, symbolBrush="#3060c0")
+        flagged = chart.flagged
+        if flagged:
+            plot.plot(
+                x[flagged],
+                values[flagged],
+                pen=None,
+                symbol="o",
+                symbolSize=9,
+                symbolBrush="#d02020",
+            )
+        plot.addLine(y=chart.centre, pen=pg.mkPen("#1b7f3b", width=1.5))
+        for k, colour in ((1, "#bbbbbb"), (2, "#e0a000"), (3, "#d02020")):
+            for limit in chart.limits(k):
+                plot.addLine(y=limit, pen=pg.mkPen(colour, style=Qt.PenStyle.DashLine))
+        times = [_ts(t) for t in chart.points["when"]]
+        for event in chart.events.to_dict("records"):
+            when = _ts(event["on"])
+            position = next((i for i, t in enumerate(times) if t >= when), len(times)) - 0.5
+            line = pg.InfiniteLine(
+                position,
+                angle=90,
+                pen=pg.mkPen("#7040a0"),
+                label=str(event["kind"]),
+                labelOpts={"position": 0.9},
+            )
+            plot.addItem(line)
+        plot.setTitle(chart.name)
+        rules = "".join(
+            f"<li>{v.rule}: {chart.points['run'].iat[v.index]} ({v.value:.4g})</li>"
+            for v in chart.violations
+        )
+        notes = "".join(f"<li>{n}</li>" for n in chart.notes)
+        msr_text = f"<p>MSR of the reference compound: {msr:.3g}</p>" if msr is not None else ""
+        low, high = chart.limits(3)
+        self.chart_text.setHtml(
+            f"<p>Centre {chart.centre:.4g}, SD {chart.sd:.4g} (from {chart.baseline_n} runs); "
+            f"±3 SD {low:.4g} … {high:.4g}.</p>{msr_text}<ul>{notes}</ul>"
+            f"<p>{len(chart.violations)} rule violation(s)</p><ul>{rules}</ul>"
+        )
+        self.status.setText(f"{len(values)} runs charted")
+
+    def _record_event(self) -> None:
+        kinds = ["reagent_lot", "cell_vial", "instrument_service", "instrument_change", "other"]
+        kind, ok = QInputDialog.getItem(self, "Event", "Kind:", kinds, 0, False)
+        if not ok:
+            return
+        when, ok = QInputDialog.getText(self, "Event", "Date (YYYY-MM-DD):")
+        if not ok:
+            return
+        text, ok = QInputDialog.getText(self, "Event", "Description:")
+        if ok:
+            self.record_event(kind, when.strip(), text.strip())
+
+    def record_event(self, kind: str, when: str, description: str) -> None:
+        from datetime import date
+
+        from hcs_studio.services import context
+        from hcs_studio.services.registry import add_event_annotation
+
+        try:
+            on = date.fromisoformat(when)
+        except ValueError:
+            self.status.setText(f"Not a date: {when!r} (YYYY-MM-DD)")
+            return
+        ctx = context()
+        instrument = self.mon_instrument.currentText().strip()
+        assay = self.mon_assay.text().strip()
+
+        def work() -> int:
+            return add_event_annotation(
+                ctx, kind, on, instrument=instrument, assay=assay, description=description
+            )
+
+        self._run(
+            work,
+            lambda _: self.status.setText(f"Event recorded: {kind} on {on}"),
+            "Recording the event…",
+        )
+
+    def _choose_bridge(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Write the bridging report to")
+        if folder:
+            self.bridge(Path(folder))
+
+    def bridge(self, folder: Path) -> None:
+        from hcs_studio.services import context
+        from hcs_studio.services.registry import write_bridging_report
+
+        a, b = self.bridge_a.currentText(), self.bridge_b.currentText()
+        readout = self.mon_readout.currentText().strip()
+        if not a or not b or a == b or not readout:
+            self.status.setText("Choose two different instruments and a readout")
+            return
+        ctx = context()
+
+        def done(files: list[Path]) -> None:
+            self.chart_text.setHtml(f"<p>Bridging report written: {files[0]}</p>")
+            self.log.emit(f"Bridging report: {files[0]}")
+
+        self._run(
+            lambda: write_bridging_report(ctx, a, b, readout, folder),
+            done,
+            "Comparing the instruments…",
+        )
 
     # ----------------------------------------------------------- searches, files
 

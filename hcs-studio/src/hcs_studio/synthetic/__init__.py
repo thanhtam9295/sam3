@@ -267,6 +267,7 @@ def write_values_run(
     started: datetime | None = None,
     instrument: str = "Synthetic",
     cell_line: str = "LINE-1",
+    raw: Path | None = None,
 ) -> Path:
     """A finished-run folder holding given per-well values (``tables/per_well_summary.csv``),
     a layout made from ``wells`` (``WellInfo``: role and drugs) and a manifest — enough for the
@@ -295,7 +296,7 @@ def write_values_run(
         folder / "plate_layout.json",
     )
     started = started or datetime(2026, 1, 5, 9, 0, tzinfo=UTC)
-    raw = folder.parent / "raw" / barcode
+    raw = raw or folder.parent / "raw" / barcode
     manifest = {
         "software": {"name": "hcs-studio", "version": "synthetic"},
         "status": "completed",
@@ -327,6 +328,8 @@ def registry_runs(
     noise: float = 8.0,
     start: datetime | None = None,
     pharmacology: bool = True,
+    instrument: str = "Synthetic",
+    seed_offset: int = 0,
 ) -> list[Path]:
     """``n_runs`` finished runs of the known-answer dose–response plate (one per day, plate
     barcodes ``REG-001`` …), each with a full manifest and, by default, pharmacology results
@@ -337,7 +340,9 @@ def registry_runs(
     runs = []
     for i in range(n_runs):
         barcode = f"REG-{i + 1:03d}"
-        folder = write_run(root / f"{barcode}__regression__run", noise=noise, seed=i, name=barcode)
+        folder = write_run(
+            root / f"{barcode}__regression__run", noise=noise, seed=i + seed_offset, name=barcode
+        )
         manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
         started = start + timedelta(days=i)
         manifest.update(
@@ -352,7 +357,7 @@ def registry_runs(
         manifest["plate"].update(
             {
                 "barcode": barcode,
-                "vendor": "Synthetic",
+                "vendor": instrument,
                 "path": str(root / "raw" / barcode),
                 "rooted_path": f"ABSOLUTE:{root / 'raw' / barcode}",
             }

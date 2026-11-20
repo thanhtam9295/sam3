@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 from collections.abc import Sequence
 from pathlib import Path
@@ -126,7 +127,50 @@ def build_parser() -> argparse.ArgumentParser:
     db_conc.add_argument("--readout", required=True)
     db_conc.add_argument("--r-min", type=float, default=0.8)
     db_conc.add_argument("--fold-max", type=float, default=3.0)
-    for command in (db_search, db_potency, db_ic50, db_norm, db_batch, db_conc):
+    db_chart = db_sub.add_parser("chart", help="control chart of a metric over runs")
+    db_chart.add_argument(
+        "--metric",
+        required=True,
+        choices=[
+            "z_prime",
+            "vehicle_mean",
+            "vehicle_cv_pct",
+            "positive_mean",
+            "positive_cv_pct",
+            "log_ec50",
+        ],
+    )
+    db_chart.add_argument("--readout", default="")
+    db_chart.add_argument("--compound", default="", help="reference compound (metric log_ec50)")
+    for name in ("cell-line", "assay", "instrument", "experiment"):
+        db_chart.add_argument(f"--{name}", default="")
+    db_chart.add_argument("--baseline", type=int, default=20, help="runs that set the limits")
+    db_chart.add_argument(
+        "--rules", default="1_3s,2of3_2s,7x", help="e.g. 1_3s,2of3_2s,4of5_1s,7x,6t"
+    )
+    db_msr = db_sub.add_parser("msr", help="minimum significant ratio of a reference compound")
+    db_msr.add_argument("--compound", required=True)
+    db_msr.add_argument("--cell-line", default="")
+    db_msr.add_argument("--readout", default="")
+    db_msr.add_argument("--window", type=int, default=6, help="runs in the rolling MSR")
+    db_bridge = db_sub.add_parser("bridge", help="bridging report: plates imaged on 2 instruments")
+    db_bridge.add_argument("--instrument-a", required=True)
+    db_bridge.add_argument("--instrument-b", required=True)
+    db_bridge.add_argument("--readout", required=True)
+    db_bridge.add_argument("--msr", type=float, default=3.0)
+    db_bridge.add_argument("--output", type=Path, required=True, help="folder for the report")
+    reason_commands.append(db_bridge)
+    db_event = db_sub.add_parser("event", help="annotate an event (new lot, vial, service …)")
+    db_event.add_argument(
+        "--kind",
+        required=True,
+        choices=["reagent_lot", "cell_vial", "instrument_service", "instrument_change", "other"],
+    )
+    db_event.add_argument("--on", required=True, help="date, YYYY-MM-DD")
+    for name in ("instrument", "assay", "cell-line", "description"):
+        db_event.add_argument(f"--{name}", default="")
+    reason_commands.append(db_event)
+    for command in (db_search, db_potency, db_ic50, db_norm, db_batch, db_conc, db_chart, db_msr):
         command.add_argument("--export", type=Path, help="write the table as .csv or .xlsx")
     ilastik_cmd = sub.add_parser(
         "ilastik", help="ilastik backend: find ilastik and Fiji, check versions, save settings"
@@ -922,6 +966,40 @@ def _db(args: argparse.Namespace) -> int:
             for key in ("edge_effect_pct", "cv_pct", "row_trend_pct", "col_trend_pct"):
                 print(f"  {key}: {stats[f'before_{key}']:.2f} → {stats[f'after_{key}']:.2f}")
             return 0
+        if args.db_command == "bridge":
+            from hcs_studio.services.registry import write_bridging_report
+
+            files = write_bridging_report(
+                _ctx(args),
+                args.instrument_a,
+                args.instrument_b,
+                args.readout,
+                args.output,
+                msr=args.msr,
+            )
+            summary = json.loads(files[1].read_text(encoding="utf-8"))
+            print(
+                f"{summary['plates']} plate(s), {summary['potency_pairs']} potency pair(s); "
+                f"equivalent: {'yes' if summary['equivalent'] else 'no'}"
+            )
+            print(f"Report: {files[0]}")
+            return 0 if summary["equivalent"] else 1
+        if args.db_command == "event":
+            from datetime import date
+
+            from hcs_studio.services.registry import add_event_annotation
+
+            add_event_annotation(
+                _ctx(args),
+                args.kind,
+                date.fromisoformat(args.on),
+                instrument=args.instrument,
+                assay=args.assay,
+                cell_line=args.cell_line,
+                description=args.description,
+            )
+            print(f"Event recorded: {args.kind} on {args.on}")
+            return 0
         if args.db_command == "scan":
             from hcs_studio.services.registry import scan_folders
 
@@ -945,6 +1023,8 @@ def _db(args: argparse.Namespace) -> int:
                 show(queries.potency_table(session, args.compound, args.cell_line, args.readout))
             elif args.db_command == "ic50s":
                 show(queries.ic50s(session, args.compound, args.cell_line, args.readout))
+            elif args.db_command in ("chart", "msr"):
+                return _db_monitoring(args, session, show)
             elif args.db_command in ("normalize", "maps", "batch", "concordance"):
                 return _db_normalization(args, session, show)
             elif args.db_command == "plate":
@@ -970,6 +1050,54 @@ def _db(args: argparse.Namespace) -> int:
         print(f"Error: {exc}")
         return 2
     return 0
+
+
+def _db_monitoring(args: argparse.Namespace, session: Any, show: Any) -> int:
+    from hcs_studio.db import monitoring as dbm
+    from hcs_studio.monitoring.charts import Rule
+
+    if args.db_command == "msr":
+        history = dbm.msr_history(
+            session,
+            args.compound,
+            cell_line=args.cell_line,
+            readout=args.readout,
+            window=args.window,
+        )
+        print(
+            f"{args.compound}: {history['n_runs']} runs, MSR {history['msr']:.3g} "
+            "(Eastwood et al. 2006: 10^(2·√2·s), s = SD of log10 EC50 between runs)"
+        )
+        show(history["rolling"])
+        return 0
+    rules = [Rule.parse(r) for r in args.rules.split(",") if r.strip()]
+    chart = dbm.chart(
+        session,
+        args.metric,
+        readout=args.readout,
+        compound=args.compound,
+        cell_line=args.cell_line,
+        assay=args.assay,
+        instrument=args.instrument,
+        experiment=args.experiment,
+        rules=rules,
+        baseline_n=args.baseline,
+    )
+    low, high = chart.limits(3)
+    print(
+        f"{chart.name}: centre {chart.centre:.4g}, SD {chart.sd:.4g} "
+        f"(from {chart.baseline_n} runs), ±3 SD {low:.4g} … {high:.4g}"
+    )
+    for note in chart.notes:
+        print(f"Note: {note}")
+    for v in chart.violations:
+        print(f"  RULE {v.rule}: run {chart.points['run'].iat[v.index]} ({v.value:.4g})")
+    for e in chart.events.to_dict("records"):
+        print(f"  event {e['on']}: {e['kind']} {e['description']}")
+    flagged = set(chart.flagged)
+    table = chart.points.assign(flag=[i in flagged for i in range(len(chart.points))])
+    show(table)
+    return 1 if chart.violations else 0
 
 
 def _db_normalization(args: argparse.Namespace, session: Any, show: Any) -> int:

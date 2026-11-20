@@ -122,3 +122,58 @@ def test_normalization_tab_blocks_b_score_on_dose_response_and_compares_replicat
     qtbot.waitUntil(lambda: panel.plate_table.rowCount() == 4, timeout=20000)
     panel.day_effects()
     qtbot.waitUntil(lambda: "R² day" in panel.norm_text.toHtml(), timeout=20000)
+
+
+def test_monitoring_tab_charts_records_events_and_bridges(qtbot: QtBot, home: Path) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from hcs_studio.services import context
+    from hcs_studio.services.registry import scan_folders
+    from hcs_studio.synthetic import screening_plate, write_values_run
+
+    start = datetime(2026, 3, 2, 9, tzinfo=UTC)
+    for i in range(24):
+        noise = 3.0 if i < 20 else 9.0 + 2 * (i - 20)
+        values, wells, _ = screening_plate(noise=noise, hits=0, seed=200 + i)
+        write_values_run(
+            home / "runs" / f"QC{i:02d}__run",
+            values,
+            wells,
+            barcode=f"QC{i:02d}",
+            started=start + timedelta(days=i),
+            instrument="Operetta CLS",
+        )
+    registry_runs(home / "a", n_runs=2, instrument="Operetta CLS")
+    registry_runs(home / "b", n_runs=2, instrument="Nikon Ji", seed_offset=9)
+    scan_folders(context(), [home / "runs", home / "a", home / "b"])
+    panel = ExperimentsPanel()
+    qtbot.addWidget(panel)
+    panel.refresh()
+    qtbot.waitUntil(lambda: panel.bridge_a.count() == 2, timeout=30000)
+
+    panel.mon_metric.setCurrentText("z_prime")
+    panel.mon_readout.setCurrentText("nuclei_count")
+    panel.mon_assay.setText("")
+    panel.mon_instrument.setCurrentText("Operetta CLS")
+    panel.record_event("reagent_lot", "2026-03-21", "new lot")
+    qtbot.waitUntil(lambda: "Event recorded" in panel.status.text(), timeout=20000)
+    panel.show_chart()
+    qtbot.waitUntil(lambda: panel.control_chart is not None, timeout=30000)
+    chart = panel.control_chart
+    assert chart.flagged and "rule violation" in panel.chart_text.toHtml()
+    assert list(chart.events["kind"]) == ["reagent_lot"]
+
+    panel.mon_metric.setCurrentText("log_ec50")
+    panel.mon_compound.setCurrentText("Drug A")
+    panel.mon_line.setText("MCF7")
+    panel.mon_instrument.setCurrentText("")
+    panel.control_chart = None
+    panel.show_chart()
+    qtbot.waitUntil(lambda: panel.control_chart is not None, timeout=30000)
+    assert "MSR of the reference compound" in panel.chart_text.toHtml()
+
+    panel.bridge_a.setCurrentText("Operetta CLS")
+    panel.bridge_b.setCurrentText("Nikon Ji")
+    panel.bridge(home / "bridge")
+    qtbot.waitUntil(lambda: "Bridging report written" in panel.chart_text.toHtml(), timeout=30000)
+    assert (home / "bridge" / "bridging_report.html").exists()

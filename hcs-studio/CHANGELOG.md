@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Phase 17c — assay monitoring
+- `monitoring/` (headless): Levey–Jennings **control charts** with configurable rules
+  (`1_3s`, `2of3_2s`, `7x`, `6t` and general forms), limits from a baseline of runs, and
+  **event annotations** (reagent lot, cell vial, instrument service/change) filtered per
+  assay/instrument/cell line; **MSR** of a reference compound (10^(2√2·s)), test–retest MSR,
+  MR and limits of agreement, rolling MSR (Eastwood et al. 2006; not yet checked against the
+  NCATS Assay Guidance Manual text); **instrument bridging** (per-plate correlation and
+  Bland–Altman, EC50 ratios with 95 % CIs against the MSR, equivalence verdict) with an HTML
+  report, CSVs and JSON.
+- Registry series `db/monitoring.py` (Z′, control means/CVs, reference log EC50 per run);
+  recorded services `registry.bridging_report` (and `registry.event_annotation`).
+- Experiments → **Monitoring** tab and `hcs-studio db chart | msr | bridge | event`.
+  Docs: registry.md, validation.md.
+
 ### Phase 17b — normalization across plates and replicate concordance
 - `normalization/` (headless): % of control, % inhibition, robust Z and **B-score** (median
   polish); a **guard rail** refuses B-score on dose–response series along rows/columns and on

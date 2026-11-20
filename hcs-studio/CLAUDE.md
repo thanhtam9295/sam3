@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; steps 17a, 17b built
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; steps 17a, 17b, 17c built (Phase 17 done)
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -479,8 +479,15 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   id / folder name / barcode, `plate_values`, `normalize_run`, `concordance`, `day_effects`);
   maps stored via `services.registry.save_uniformity_map` (`uniformity_map` table). Synthetic:
   `synthetic.screening_plate` (seeded hits + positional artifact), `synthetic.write_values_run`
-  (a run folder from values). Next: 17c (control charts with rules and event annotations, MSR
-  verified against the NCATS Assay Guidance Manual, instrument bridging report).
+  (a run folder from values).
+- **Phase 17c (built)**: `monitoring/` is headless: `charts.control_chart(points, rules,
+  baseline_n)` (points = DataFrame `when`, `value`, `label`; `Rule.parse("2of3_2s")`),
+  `charts.events_for` (empty field = applies to all), `msr` (MSR formulas from Eastwood 2006;
+  **not yet verified against the NCATS AGM** — www.ncbi.nlm.nih.gov answers automated clients with
+  a reCAPTCHA; ask the user to confirm before changing them), `bridging.bridge`, `report.
+  write_bridging_report`. Registry glue `db/monitoring.py` (`run_metrics`, `chart`,
+  `reference_potency`, `msr_history`, `bridging` pairs plates by barcode). Charts mix plate types
+  unless filtered by assay or experiment. Next: Phase 18 (automatic image QC).
 
 ## Commands
 
@@ -501,7 +508,7 @@ Run from this folder (`hcs-studio/`).
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
-- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`
+- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`
