@@ -252,6 +252,18 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | `max_area_um2` | None | Largest focus (µm²; per plane); empty = a disc twice the focus diameter. |
 | `calibration_fields` | 24 | Vehicle fields sampled. |
 
+## Detect spheroids (`detect_spheroids`)
+
+Spheroids (Phase 21), 2D: brightfield = textured objects (local SD of a difference of Gaussians at texture_um; smooth well-edge and meniscus shading cancels out; objects not textured inside are dropped), outline refined at half height between the interior and the local background (blur does not change the size); dark = darker than the background; bright = fluorescence (Otsu). Label set `spheroids`, largest first.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel` | required | Brightfield (or fluorescence) channel. |
+| `method` | 'brightfield' | brightfield: texture, then half-height outline; dark: darker than the background; bright: fluorescence (Otsu). |
+| `texture_um` | 6.0 | Texture window (Gaussian σ). |
+| `min_area_um2` | 300.0 | Smaller objects are dropped. |
+| `output` | 'spheroids' | Name of the label set. |
+
 ## Spot detection (LoG / DoG) (`detect_spots`)
 
 Finds sub-cellular spots with a Laplacian-of-Gaussian or difference-of-Gaussians filter tuned to the spot size, thresholded at a multiple of the robust noise level. Each spot is linked to the cell under its centre; spots outside cells are dropped unless `only_inside_parent` is off.
@@ -367,6 +379,15 @@ Measures every object of the chosen label sets on the linear image (never on con
 | `zernike` | False | Zernike shape moments (2D). |
 | `neighbor_radius_um` | 20.0 | Radius for neighbour counts. |
 | `nucleus_labels` | 'nuclei' | Label set used for nuclear/cytoplasmic ratios of its children. |
+
+## Measure spheroids (`measure_spheroids`)
+
+Spheroids (Phase 21): use instead of measure_objects for the spheroids. Area, equivalent diameter, perimeter, axes, circularity, solidity, compactness, volume (sphere π/6·d³ and ellipsoid π/6·L·W²), darkness (brightfield), edge blur (edge_sigma_um, focus), position (offcentre, touching_edge).
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `labels` | 'spheroids' | Label set of the spheroids. |
+| `channel` | None | Brightfield/fluorescence channel for darkness and focus. |
 
 ## Micronuclei and multinucleation (`mitotic_errors`)
 
@@ -584,6 +605,26 @@ Table step: runs on the object tables after all wells are processed, and can be 
 | `radii_um` | [10.0, 25.0, 50.0, 100.0] | Radii for Ripley's H and g in the summary. |
 | `simulations` | 39 | CSR simulations for the envelopes; 0 = none. |
 | `seed` | 0 | Random seed for the simulations. |
+
+## Assay: spheroids (one per well) (`spheroid`)
+
+Spheroids (Phase 21): one spheroid per well — the largest object not touching the image border (≥ min_spheroid_um2). Readouts `sp_` (volume by `volume`: sphere or ellipsoid), volume vs vehicle, Z′; flags no_spheroid, multiple, touching_edge, off_centre, out_of_focus, debris, irregular (exclude_flags set sp_qc_ok = 0). Writes `spheroids/`: spheroids.csv, wells.csv, crops and a sortable gallery.html.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'spheroids' | Label set of the spheroids. |
+| `brightfield_channel` | '' | Brightfield channel (preset). |
+| `fluorescence_channel` | '' | Fluorescence channel (preset). |
+| `volume` | 'sphere' | Volume estimate reported as sp_volume_um3. |
+| `min_spheroid_um2` | 2000.0 | Smaller objects are debris, never the spheroid. |
+| `multiple_fraction` | 0.25 | Another object ≥ this × the spheroid: 'multiple'. |
+| `max_offcentre` | 0.5 | Centroid distance from the field centre / half field. |
+| `max_edge_sigma_um` | 4.0 | Blurrier: 'out_of_focus'. |
+| `debris_fraction` | 0.02 | Other objects' area above this × spheroid: 'debris'. |
+| `min_solidity` | 0.95 | Below: 'irregular'. |
+| `exclude_flags` | ['no_spheroid', 'multiple', 'touching_edge', 'out_of_focus'] | Flags that fail a well (sp_qc_ok = 0). |
 
 ## Stitch well (`stitch_well`)
 

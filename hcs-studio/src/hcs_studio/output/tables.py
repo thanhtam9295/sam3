@@ -141,6 +141,7 @@ _LABEL_PREFIXES = (
     "ap_",
     "tl_",
     "pf_",
+    "sp_",
 )
 
 

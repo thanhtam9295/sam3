@@ -318,6 +318,23 @@ def _object_and_well(
     ]
 
 
+#: measure_spheroids features (Phase 21) → (display, unit, direction, description)
+SPHEROID_FEATURES: dict[str, tuple[str, str, Direction, str]] = {
+    "volume_sphere_um3": ("volume (sphere)", "µm³", "either", "π/6 · equivalent diameter³"),
+    "volume_ellipsoid_um3": ("volume (ellipsoid)", "µm³", "either", "π/6 · major · minor²"),
+    "circularity": ("circularity", "", "either", "4π·area / perimeter²; 1 for a circle"),
+    "compactness": ("compactness", "", "either", "spread around the centroid; 1 for a disc"),
+    "offcentre": ("off-centre", "", "up", "centroid distance from the field centre / half field"),
+    "pixel_um": ("pixel size", "µm", "none", "pixel size of the field"),
+    "field_height_px": ("field height", "px", "none", "field height"),
+    "field_width_px": ("field width", "px", "none", "field width"),
+    "mean_intensity": ("mean intensity", "", "either", "mean intensity inside the object"),
+    "background": ("local background", "", "none", "median intensity around the object"),
+    "darkness": ("darkness", "", "either", "1 − interior / local background (brightfield)"),
+    "edge_sigma_um": ("edge blur", "µm", "up", "Gaussian blur of the outline (focus)"),
+}
+
+
 def _builtin() -> list[ReadoutSpec]:
     specs: list[ReadoutSpec] = []
     for feat, (display, unit, direction, text) in OBJECT_FEATURES.items():
@@ -328,6 +345,8 @@ def _builtin() -> list[ReadoutSpec]:
         )
     for feat, (display, unit, direction, text) in CHILD_FEATURES.items():
         specs += _object_and_well(feat, display, unit, direction, text, "measure_objects")
+    for feat, (display, unit, direction, text) in SPHEROID_FEATURES.items():
+        specs += _object_and_well(feat, display, unit, direction, text, "measure_spheroids")
     w: Level = "well"
     specs += [
         # well summary basics (output/tables.py)
@@ -526,6 +545,136 @@ def _builtin() -> list[ReadoutSpec]:
             "none",
             "integrated DNA stain scaled so the vehicle G1 peak = 2N",
             "cell_cycle",
+        ),
+        ReadoutSpec(
+            "sp_volume_um3",
+            "spheroid volume",
+            "µm³",
+            w,
+            "down",
+            "percent_of_control",
+            "volume of the well's spheroid (sphere or ellipsoid estimate)",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_volume_{x:sphere|ellipsoid}_um3",
+            "spheroid volume ({x})",
+            "µm³",
+            w,
+            "down",
+            "percent_of_control",
+            "volume estimate of the well's spheroid",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_volume_vs_vehicle_pct",
+            "spheroid volume vs vehicle",
+            "%",
+            w,
+            "down",
+            "none",
+            "volume / median volume of the vehicle wells",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_area_um2",
+            "spheroid area",
+            "µm²",
+            w,
+            "down",
+            "percent_of_control",
+            "projected area of the well's spheroid",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_diameter_um",
+            "spheroid diameter",
+            "µm",
+            w,
+            "down",
+            "percent_of_control",
+            "equivalent diameter of the well's spheroid",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_{x:circularity|solidity|compactness}",
+            "spheroid {x}",
+            "",
+            w,
+            "either",
+            "none",
+            "shape of the well's spheroid",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_darkness",
+            "spheroid darkness",
+            "",
+            w,
+            "either",
+            "none",
+            "1 − interior / background (brightfield)",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_edge_sigma_um",
+            "spheroid edge blur",
+            "µm",
+            w,
+            "up",
+            "none",
+            "Gaussian blur of the outline (focus)",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_offcentre",
+            "spheroid off-centre",
+            "",
+            w,
+            "up",
+            "none",
+            "centroid distance from the field centre / half field",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_objects",
+            "objects detected",
+            "objects",
+            w,
+            "none",
+            "none",
+            "spheroids and debris detected in the well",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_found",
+            "spheroid found",
+            "",
+            w,
+            "none",
+            "none",
+            "1 when the well has a spheroid",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_field",
+            "spheroid field",
+            "",
+            w,
+            "none",
+            "none",
+            "field holding the well's spheroid",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_qc_ok",
+            "spheroid QC passed",
+            "",
+            w,
+            "none",
+            "none",
+            "0 when a failing flag is set (exclude_flags)",
+            "spheroid",
         ),
         ReadoutSpec(
             "pf_{m:ki67|edu|ph3}_pos_pct",

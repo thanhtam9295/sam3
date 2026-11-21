@@ -37,6 +37,14 @@ DESCRIPTIONS = {
     "local maxima, size filter; 3D with Z stacks)",
     "foci": "foci per nucleus and well (pan-nuclear nuclei — mean intensity ≥ a multiple of the "
     "vehicle median — reported apart)",
+    "detect_spheroids": "spheroid detection (brightfield: local standard deviation of a "
+    "difference of Gaussians, which ignores smooth well-edge and meniscus shading, then the outline "
+    "at half height between the spheroid interior and its local background; fluorescence: Otsu)",
+    "measure_spheroids": "spheroid size, shape and volume (sphere from the equivalent diameter, "
+    "π/6·d³; ellipsoid π/6·L·W²), brightfield darkness, outline blur and position",
+    "spheroid": "one spheroid per well (the largest object not touching the image border), with "
+    "QC flags for no spheroid, several spheroids, touching the border, off-centre, out of focus, "
+    "debris and irregular outlines",
     "mitotic_errors": "micronuclei (small DNA objects up to 0.2 × the median nuclear area within "
     "5 µm of a nucleus but not touching it, assigned to the nearest nucleus) and nuclei per cell "
     "(each nucleus linked to the cell segmented on a cell stain that it overlaps most)",

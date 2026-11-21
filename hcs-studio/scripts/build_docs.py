@@ -28,6 +28,7 @@ PAGES = [
     ("registry.md", "Experiment registry"),
     ("image_qc.md", "Image QC"),
     ("assays.md", "Oncology assays"),
+    ("spheroids.md", "Spheroids and organoids"),
     ("validation.md", "Validation"),
 ]
 TEMPLATE = """<!doctype html>

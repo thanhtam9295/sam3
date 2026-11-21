@@ -645,6 +645,13 @@ segmentation and its exclusions reach counts, fits, plate maps and reports; the 
 reviews flagged fields (each override needs a reason), and reviews can train a learned QC
 classifier. Details: [image_qc.md](image_qc.md).
 
+## Spheroids and organoids
+
+One spheroid per well on brightfield or fluorescence: detection that ignores the well edge and
+meniscus, size, shape and volume (sphere or ellipsoid), QC flags (no / several spheroids, cut by
+the border, off-centre, out of focus, debris, irregular), a gallery sortable by any readout and
+dose–response on volume. Details: [spheroids.md](spheroids.md).
+
 ## Oncology assays
 
 **Tools → Assay wizard…** runs a calibrated assay on the run open in Results: choose the assay,

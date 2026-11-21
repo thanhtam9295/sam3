@@ -22,7 +22,13 @@ _RGB: dict[str, tuple[float, float, float]] = {
 
 
 def channel_colormap(channel: ChannelInfo, index: int) -> str:
-    """Colormap name for a channel, from its emission wavelength when known."""
+    """Colormap name for a channel: gray for transmitted light (brightfield, phase contrast),
+    else from its emission wavelength when known."""
+    name = channel.name.lower().replace(" ", "").replace("-", "").replace("_", "")
+    if name in ("bf", "tl", "dpc", "dic") or any(
+        word in name for word in ("brightfield", "phase", "transmitted", "trans")
+    ):
+        return "gray"
     emission = channel.emission_nm
     if emission is None:
         return _FALLBACK[index % len(_FALLBACK)]

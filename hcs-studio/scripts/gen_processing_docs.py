@@ -126,6 +126,20 @@ NOTES = {
     "positive_min_foci foci, focus area and intensity, and pan-nuclear nuclei (mean intensity ≥ "
     "pan_factor × the vehicle median) reported apart; by cell-cycle phase when the cell-cycle "
     "step ran first. Writes `dd_` columns and `assays/foci/`. Warns about Z projections.",
+    "detect_spheroids": "Spheroids (Phase 21), 2D: brightfield = textured objects (local SD of a "
+    "difference of Gaussians at texture_um; smooth well-edge and meniscus shading cancels out; "
+    "objects not textured inside are dropped), outline refined at half height between the "
+    "interior and the local background (blur does not change the size); dark = darker than the "
+    "background; bright = fluorescence (Otsu). Label set `spheroids`, largest first.",
+    "measure_spheroids": "Spheroids (Phase 21): use instead of measure_objects for the spheroids. "
+    "Area, equivalent diameter, perimeter, axes, circularity, solidity, compactness, volume "
+    "(sphere π/6·d³ and ellipsoid π/6·L·W²), darkness (brightfield), edge blur (edge_sigma_um, "
+    "focus), position (offcentre, touching_edge).",
+    "spheroid": "Spheroids (Phase 21): one spheroid per well — the largest object not touching "
+    "the image border (≥ min_spheroid_um2). Readouts `sp_` (volume by `volume`: sphere or "
+    "ellipsoid), volume vs vehicle, Z′; flags no_spheroid, multiple, touching_edge, off_centre, "
+    "out_of_focus, debris, irregular (exclude_flags set sp_qc_ok = 0). Writes `spheroids/`: "
+    "spheroids.csv, wells.csv, crops and a sortable gallery.html.",
     "mitotic_errors": "Assay (Phase 20e), right after the nuclear segmentation, 2D: micronuclei = "
     "small DNA objects (min_area_um2 to max_area_fraction × the median nuclear area) within "
     "search_um of a nucleus edge but not touching it; segmented ones are taken out of the nuclei, "

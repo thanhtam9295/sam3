@@ -154,6 +154,7 @@ def report_links(folder: Path) -> list[dict[str, str]]:
         ("experiment_report/experiment_report.html", "Experiment report (HTML)"),
         ("experiment_report/experiment_report.pdf", "Experiment report (PDF)"),
         ("qc/qc_report.html", "Image QC report"),
+        ("spheroids/gallery.html", "Spheroid gallery"),
     ):
         if (folder / path).exists():
             links.append({"title": title, "href": path})

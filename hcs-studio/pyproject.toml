@@ -112,6 +112,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # µ and × are intended in scientific 
 "src/hcs_studio/assays/apoptosis.py" = ["E501"]  # HTML page template
 "src/hcs_studio/assays/translocation.py" = ["E501"]  # HTML page template
 "src/hcs_studio/assays/proliferation.py" = ["E501"]  # HTML page template
+"src/hcs_studio/assays/spheroids.py" = ["E501"]  # HTML page template
 
 [tool.mypy]
 python_version = "3.11"

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Phase 21a — spheroids: detection, size, volume, QC, gallery
+- `detect_spheroids` (image step): brightfield texture detection that ignores well-edge and
+  meniscus shading, outline at half height (blur-independent size); dark and fluorescence modes.
+- `measure_spheroids` (measurement step): size, shape, sphere and ellipsoid volume, darkness,
+  outline blur (focus), position.
+- `spheroid` (assay step): one spheroid per well, `sp_` readouts, volume vs vehicle, Z′, QC
+  flags (no spheroid, multiple, touching edge, off-centre, out of focus, debris, irregular);
+  `spheroids/` with per-spheroid and per-well tables, crops and a sortable gallery (linked from
+  `index.html`). Readouts for pharmacology (% of control on volume).
+- Brightfield/phase channels are previewed in gray. Synthetic brightfield spheroids
+  (`synthetic/spheroids.py`). Docs: spheroids.md.
+
 ### Phase 20e — proliferation markers, micronuclei, multinucleation
 - `proliferation` (assay step): % positive nuclei for Ki67, EdU/BrdU and pH3 with thresholds
   from secondary-only wells (role `unstained`), a two-population fit to the vehicle (equal

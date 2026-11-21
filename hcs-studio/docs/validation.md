@@ -241,6 +241,25 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Spheroids (Phase 21a)
+
+| Check | Result | Test |
+|---|---|---|
+| Synthetic brightfield wells (2 µm pixels; bright background darkening radially to 40 % at the corners like a meniscus; textured spheroid with a darker core; shot noise): radius 70–200 µm; blurred (σ 8 px); a second spheroid; debris; attached blob; off-centre; cut by the border; an empty well | sphere volume within 1 % (seen ≤ 0.3 %) for clean spheroids and within 5 % blurred (seen −1.4 %); each well gets exactly its expected flags; the empty well: no objects, `no_spheroid`; circularity > 0.85, compactness 1.00, darkness 0.60, edge blur < 3 µm (blurred: > 10 µm) | `test_volume_and_qc_flags_from_brightfield` |
+| Fluorescent and dark discs | area within 2 % | `test_fluorescence_and_dark_methods` |
+| Ellipse 240 × 120 µm, object cut by the border | ellipsoid volume within 2 %; touching_edge | `test_spheroid_table_known_shapes` |
+| 384-well plate (2.5 µm pixels), 16 compounds × 10 concentrations × 2 replicates, IC50 10^−7.5 … 10^−6 M on volume, 2 workers | runs in batch (~35 s here), all 384 volumes within 2 % (seen 1.0 %), 384 crops in the gallery, Z′ > 0.9; IC50s on % of control within 0.05 log (seen 0.005) | `test_384_plate_batch_and_dose_response_on_volume` |
+
+Found while building: the local SD of the raw image is higher on a meniscus gradient than inside
+a spheroid (→ difference of Gaussians first); reflected padding at the image border creates a
+kink on steep shading (→ odd reflection); two touching spheroids shared one coarse region and
+the smaller was lost (→ every refined part kept); a field without a spheroid had its noise split
+by Otsu (→ noise floor); an empty well wrote no table and vanished from the summary (→ 0-row
+table, reported as no_spheroid).
+
+Not yet checked: real brightfield ULA plates (phase rings, well walls inside the field, very
+dense or very loose spheroids, 4× vs 10×); fluorescence spheroids with dim cores.
+
 ## Proliferation markers and mitotic errors (Phase 20e)
 
 | Check | Result | Test |

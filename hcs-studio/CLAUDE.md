@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20 built (20a–20e)
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20 built (20a–20e); 21a built
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -581,6 +581,21 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   children of the nuclei) and table step `proliferation` (prefix `pf_`; markers ki67/edu/ph3;
   secondary-only = role `unstained`; `mixture_threshold` = 1D EM, equal-density point — Otsu is
   biased by unequal class sizes). Synthetic `synthetic/proliferation.py`.
+- **Phase 21 plan** (user asked for 21 before 22, 2026-11-21): (a) one spheroid per well,
+  detection, size/shape/volume, QC flags, gallery, 384 batch + volume dose–response — built;
+  (b) live/dead viability, necrotic core (radial shells), invasion (skeleton), organoid mode;
+  (c) confocal 3D (Cellpose 3D nuclei, per-plane attenuation correction, Z-coverage warning).
+  Deferred: ilastik detection (Phase 16 b), growth curves (Phase 22). Ask for one brightfield and
+  one confocal spheroid plate with treatment, and an invasion example.
+- **Phase 21a (built)**: `assays/spheroids.py`: `detect_spheroids` (`texture_map` = local SD of a
+  DoG with odd-reflection padding; Otsu with a 4 × p10 noise floor; half-height refinement per
+  component, every refined part kept, untextured parts dropped), `measure_spheroids`
+  (MeasurementModule returning the **objects** table for the spheroids — never also
+  `measure_objects` on them; writes a 0-row table for empty wells so they are reported),
+  `spheroid` (AssayModule, prefix `sp_`, output `spheroids/` not `assays/`, crops cut from
+  `previews/fNNN.png` + outline overlay). `SPHEROID_FEATURES` in readouts.py. `channel_colormap`:
+  transmitted-light names → gray. Synthetic `synthetic/spheroids.py` (`BrightfieldSpheroid`,
+  radial smooth meniscus — a min-of-distances meniscus has diagonal ridges that read as texture).
 
 ## Commands
 
