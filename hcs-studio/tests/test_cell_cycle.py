@@ -225,7 +225,9 @@ def test_assay_wizard_previews_and_applies(qtbot: Any, tmp_path: Path, home: Pat
     (run / "run_manifest.json").write_text(json.dumps(manifest))
     wizard = AssayWizard(run)
     qtbot.addWidget(wizard)
-    assert wizard.assay.currentText() == "cell_cycle"
+    assert wizard.assay.currentText() == "apoptosis"  # alphabetical
+    assert set(wizard.role_combos) == {"dna", "apoptosis", "dead"}
+    wizard.assay.setCurrentText("cell_cycle")
     assert wizard.role_combos["dna"].currentText() == "DAPI"
     assert wizard.role_combos["edu"].currentText() == "EdU"
     assert "A01" in wizard.controls.text()
