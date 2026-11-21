@@ -200,6 +200,20 @@ def build_parser() -> argparse.ArgumentParser:
     qc_cmd.add_argument("--write-rules", type=Path, help="write the default rules here and exit")
     qc_cmd.add_argument("--reason", default="", help="why (recorded)")
 
+    review = sub.add_parser("qc-review", help="accept or override an image-QC decision")
+    review.add_argument("folder", type=Path, help="run folder (or QC output folder)")
+    review.add_argument("--well", required=True)
+    review.add_argument("--field", type=int, help="field number; omit to review the well")
+    review.add_argument("--action", required=True, choices=["confirm", "include", "exclude"])
+    review.add_argument("--reason", required=True, help="why (recorded)")
+    qc_train = sub.add_parser("qc-train", help="train learned QC from reviewed QC folders")
+    qc_train.add_argument("folders", nargs="+", type=Path)
+    qc_train.add_argument("--output", type=Path, required=True, help="classifier file (.joblib)")
+    qc_train.add_argument(
+        "--reviewed-only", action="store_true", help="do not count unflagged fields as good"
+    )
+    qc_train.add_argument("--reason", default="", help="why (recorded)")
+
     selftest = sub.add_parser(
         "selftest", help="check this installation on a small synthetic plate (about a minute)"
     )
@@ -468,6 +482,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _analyze(args)
     if args.command == "qc":
         return _qc(args)
+    if args.command == "qc-review":
+        return _qc_review(args)
+    if args.command == "qc-train":
+        return _qc_train(args)
     if args.command == "annotate":
         return _annotate(args)
     if args.command == "layout":
@@ -726,6 +744,51 @@ def _qc(args: argparse.Namespace) -> int:
     )
     print(f"Files: {Path(args.output) / 'qc'}")
     return 0 if summary["passed"] else 1
+
+
+def _qc_review(args: argparse.Namespace) -> int:
+    from hcs_studio.services.operations import review_qc
+
+    try:
+        result = review_qc(
+            _ctx(args),
+            args.folder,
+            "field" if args.field is not None else "well",
+            args.well,
+            args.action,
+            field=args.field,
+        )
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    plate = result.plate
+    verdict = "passed" if plate["passed"] else "FAILED"
+    print(
+        f"Fields excluded: {plate['excluded_fields']} of {plate['fields']}; "
+        f"wells failed: {plate['failed_wells']}; plate {verdict}"
+    )
+    return 0
+
+
+def _qc_train(args: argparse.Namespace) -> int:
+    from hcs_studio.analysis.classifier import file_sha256
+    from hcs_studio.qc.learned import train_field_qc
+    from hcs_studio.services.operations import save_classifier
+
+    try:
+        classifier = train_field_qc(args.folders, unflagged_good=not args.reviewed_only)
+        save_classifier(_ctx(args), classifier, args.output)
+    except (OSError, ValueError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    accuracy = classifier.cv_balanced_accuracy
+    shown = "n/a" if accuracy is None else f"{accuracy:.2f}"
+    print(f"Examples: {classifier.n_examples}; balanced CV accuracy: {shown}")
+    print("Add to the QC rules:")
+    print(
+        f"learned: {{model: '{args.output}', sha256: {file_sha256(args.output)}, threshold: 0.5}}"
+    )
+    return 0
 
 
 def _analyze(args: argparse.Namespace) -> int:

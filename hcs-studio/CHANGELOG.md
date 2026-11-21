@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Phase 18c — QC review, QC tab, learned QC, QC report
+- Reviews (`qc/review.py`): confirm / include / exclude a field, pass / fail a well, each with
+  a reason through the recorded service `qc.review` (`hcs-studio qc-review`); decisions are
+  recomputed (`rule_excluded` keeps the rules' decision), and a run's tables, plate maps and
+  report are rebuilt (`executor.refresh_run_tables`).
+- **QC** tab: heat map per QC metric with failed wells hatched, gallery of flagged fields by
+  severity with thumbnails, review buttons.
+- Thumbnails (`qc/thumbs/`) and a 28-number image embedding per field; **learned QC**
+  (`hcs-studio qc-train`): the Phase 8 classifier trained on reviewed fields, used through
+  `learned:` in the rules (SHA-256 checked) as the flag `learned`.
+- `qc/qc_report.html`: self-contained QC report (decision, heat maps, failed wells, excluded
+  fields, flagged-field gallery, compound artifacts, reviews).
+
 ### Phase 18b — image QC in runs, object QC, compound artifacts, exclusions everywhere
 - Pipelines carry QC rules (`qc:` section; pipeline panel: **Image QC before processing**,
   **QC rules…**). Runs check every field from the raw images before fitting and

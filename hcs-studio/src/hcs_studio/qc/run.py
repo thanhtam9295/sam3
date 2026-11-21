@@ -3,7 +3,8 @@
 Fields are read one at a time (first timepoint), so memory stays at one field per worker.
 Files: ``qc/field_qc.parquet`` (metrics, flags, severity, exclusion and reasons per field),
 ``qc/well_qc.csv``, ``qc/plate_qc.json`` (decision, counts, rules name/version/SHA-256,
-provenance) and ``qc/rules.yaml`` (the rules used).
+provenance), ``qc/rules.yaml`` (the rules used), ``qc/qc_report.html`` and
+``qc/thumbs/`` (a thumbnail per field).
 """
 
 from __future__ import annotations
@@ -39,7 +40,11 @@ def metric_settings(plate: Plate, rules: QcRules) -> MetricSettings:
     )
 
 
-def _field_row(well: Well, index: int, settings: MetricSettings) -> dict[str, Any]:
+def _field_row(
+    well: Well, index: int, settings: MetricSettings, thumbs: Path | None
+) -> dict[str, Any]:
+    from hcs_studio.qc.thumbs import embedding, thumb_name, thumbnail
+
     f = well.fields[index]
     data = np.asarray(f.load()[0])  # (C, Z, Y, X) of the first timepoint
     row: dict[str, Any] = {
@@ -51,6 +56,10 @@ def _field_row(well: Well, index: int, settings: MetricSettings) -> dict[str, An
         "y_um": f.y_um,
     }
     row.update(field_metrics(data, settings))
+    content = data[settings.content_channel - 1].max(axis=0)  # projection for display
+    row.update(embedding(content))
+    if thumbs is not None:
+        thumbnail(content, thumbs / thumb_name(well.name, f.index))
     return row
 
 
@@ -61,9 +70,11 @@ def measure_plate(
     *,
     workers: int = 1,
     progress: Progress | None = None,
+    thumbs: Path | None = None,
 ) -> pd.DataFrame:
-    """Metrics of every field of the selected wells (all wells by default). An exception
-    raised by ``progress`` (e.g. a cancellation) stops the remaining fields."""
+    """Metrics (and the image embedding) of every field of the selected wells (all wells by
+    default); with ``thumbs`` a thumbnail per field is written there. An exception raised by
+    ``progress`` (e.g. a cancellation) stops the remaining fields."""
     settings = metric_settings(plate, rules)
     channels = len(plate.metadata.channels) or (plate.shape_tczyx or (0, 0))[1]
     if channels and settings.content_channel > channels:
@@ -78,7 +89,7 @@ def measure_plate(
     done = 0
     pool = ThreadPoolExecutor(max_workers=max(1, workers))
     try:
-        for row in pool.map(lambda job: _field_row(job[0], job[1], settings), jobs):
+        for row in pool.map(lambda job: _field_row(job[0], job[1], settings, thumbs), jobs):
             rows.append(row)
             done += 1
             if progress is not None:
@@ -121,6 +132,9 @@ def write_qc(
         }
     files[2].write_text(json.dumps(summary, indent=1, default=str), encoding="utf-8")
     save_rules(rules, files[3])
+    from hcs_studio.qc.report import write_qc_report
+
+    files.append(write_qc_report(Path(folder)))
     return files
 
 
@@ -145,7 +159,14 @@ def run_qc(
             "choose a location outside it"
         )
     started = datetime.now(UTC)
-    fields = measure_plate(plate, rules, wells, workers=workers, progress=progress)
+    fields = measure_plate(
+        plate,
+        rules,
+        wells,
+        workers=workers,
+        progress=progress,
+        thumbs=target / QC_FOLDER / "thumbs",
+    )
     result = apply_rules(fields, rules, roles=roles, z_prime=z_prime, layout=layout)
     seconds = (datetime.now(UTC) - started).total_seconds()
     write_qc(result, target, rules, plate=plate, extra={"seconds": round(seconds, 2)})

@@ -640,7 +640,10 @@ is recorded with who made it and why. Details: [registry.md](registry.md).
 `hcs-studio qc <plate> --output <folder>` checks every field of a plate from the raw images
 (focus, saturation, background, illumination gradient, bubbles, out-of-well imaging, debris,
 fibers, scratches, empty fields, autofocus failures), applies a versioned rules file, and
-writes field flags and well / plate decisions to `qc/`. Details: [image_qc.md](image_qc.md).
+writes field flags and well / plate decisions to `qc/`. In a pipeline it runs before
+segmentation and its exclusions reach counts, fits, plate maps and reports; the **QC** tab
+reviews flagged fields (each override needs a reason), and reviews can train a learned QC
+classifier. Details: [image_qc.md](image_qc.md).
 
 ## ilastik
 

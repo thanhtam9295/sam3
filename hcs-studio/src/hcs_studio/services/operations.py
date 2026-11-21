@@ -219,6 +219,50 @@ def run_image_qc(ctx: ServiceContext, plate: Plate, rules: Any, output: Path, **
     return result
 
 
+@service("qc.review", object_type="qc", reason_required=True)
+def review_qc(
+    ctx: ServiceContext,
+    folder: Path,
+    level: str,
+    well: str,
+    action: str,
+    field: int | None = None,
+) -> Any:
+    """Accept or override a QC decision for a field or a well (a reason is required); the
+    run's tables and report follow."""
+    from hcs_studio.qc.review import Override, apply_override, load_fields
+
+    fields = load_fields(Path(folder))
+    if level == "field":
+        rows = fields[(fields["well"] == well) & (fields["field"] == field)]
+        before = {"excluded": bool(rows["excluded"].any()), "flags": ";".join(rows["flags"])}
+    else:
+        before = {"excluded_fields": int(fields.loc[fields["well"] == well, "excluded"].sum())}
+    override = Override.model_validate(
+        {
+            "level": level,
+            "well": well,
+            "field": field,
+            "action": action,
+            "reason": ctx.reason,
+            "actor": ctx.actor.id,
+        }
+    )
+    result = apply_override(Path(folder), override)
+    target = f"{object_id(folder)}#{well}" + (f"/f{field}" if field is not None else "")
+    wells = result.wells.set_index("well")
+    ctx.note(
+        object_id=target,
+        before=before,
+        after={
+            "action": action,
+            "well_failed": bool(wells.loc[well, "failed"]) if well in wells.index else None,
+            "plate_passed": result.plate["passed"],
+        },
+    )
+    return result
+
+
 # -------------------------------------------------------------------- models
 
 

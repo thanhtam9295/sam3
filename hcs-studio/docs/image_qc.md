@@ -4,8 +4,9 @@ Automatic image QC finds bad fields, wells and plates from the raw images, befor
 distort results. It measures every field, applies a rules file and writes the decisions;
 in a pipeline run it runs before segmentation, and its exclusions reach every result:
 counts and measurements, IC50 fits, plate maps and reports. Object-level QC removes likely
-segmentation errors from feature statistics. A review dashboard with overrides follows in
-step 18c.
+segmentation errors from feature statistics. The **QC** tab (and `qc_report.html`) shows
+what was flagged; every decision can be accepted or overridden with a reason, and a learned
+classifier can be trained from those reviews.
 
 ## QC in a pipeline run
 
@@ -107,6 +108,9 @@ raw data folder. It writes `<folder>/qc/`:
 | `well_qc.csv` | one row per well: fields, good fields, cells, flags, `failed`, `reasons` |
 | `plate_qc.json` | plate decision (`passed`, `reasons`), counts per flag, controls, the rules' name, version and SHA-256, plate path, time taken |
 | `rules.yaml` | the rules that were used |
+| `qc_report.html` | the QC on one self-contained page: decision, heat maps (failed wells hatched), failed wells, excluded fields, a gallery of flagged fields by severity, compound artifacts, reviews |
+| `thumbs/` | a thumbnail of every field (content channel) |
+| `overrides.json` | the reviews (after the first review) |
 
 The command exits with status 1 when the plate fails. Each QC run is recorded (who, when,
 why, which rules, the outcome).
@@ -215,6 +219,61 @@ dose–response plates: wells with potent compounds legitimately have few cells.
 **Plates** fail when more than `max_failed_well_fraction` of the wells failed, when more than
 `max_failed_control_fraction` of the wells of a control role failed (with a layout), or when
 Z′ is below `min_z_prime` (when Z′ is known).
+
+## Reviewing QC (the QC tab)
+
+Opening a run with image QC fills the **QC** tab:
+
+- a plate heat map of the chosen metric (worst severity, excluded fields, or any QC metric);
+  failed wells are hatched; click a well to list all its fields, click it again for the
+  flagged fields of the plate;
+- a gallery of flagged fields, most severe first (filter by flag), with thumbnails, flags,
+  reasons and whether the field is excluded;
+- **Confirm flag**, **Include field**, **Exclude field** for the selected field, and **Pass
+  well** / **Fail well** for its well. Each needs a reason and is recorded (who, when,
+  why, before and after).
+
+After a review the decisions are recomputed (the rules' own decision is kept as
+`rule_excluded`), the `qc/` files and `qc_report.html` are rewritten, and in a run folder the
+tables, per-well summary, plate maps and `index.html` are rebuilt. Run pharmacology again to
+update fits. From the command line:
+
+```bash
+hcs-studio qc-review <run> --well C05 --field 3 --action include --reason "in focus on inspection"
+```
+
+```bash
+hcs-studio qc-review <run> --well C05 --action exclude --reason "bubble seen at the microscope"
+```
+
+| Action | Field | Well |
+|---|---|---|
+| `confirm` | the flag is right (decision stands) | decision stands |
+| `include` | keep a field the rules excluded | pass a well the rules failed |
+| `exclude` | leave out a field the rules kept | fail the well |
+
+## Learned QC
+
+Reviews teach a classifier what your reviewers call a bad field — artifacts the rules miss.
+Confirmed and excluded fields are "bad", included fields "good", and (unless
+`--reviewed-only`) unflagged fields nobody overrode count as "good" (up to 200 per plate).
+Inputs are every QC metric and a 28-number image embedding (block means and radial power
+spectrum of the field), as robust Z within each plate. The classifier is the Phase 8 random
+forest (balanced classes, cross-validated accuracy reported):
+
+```bash
+hcs-studio qc-train <run 1> <run 2> --output learned_qc.joblib --reason "trained on October screens"
+```
+
+Then add it to the rules (the command prints the line, with the file's SHA-256):
+
+```yaml
+learned: {model: 'learned_qc.joblib', sha256: 3f1c…, threshold: 0.5, exclude: false}
+```
+
+Fields with P(bad) ≥ `threshold` get the flag `learned` (and are excluded with `exclude:
+true`). A changed model file is refused (SHA-256). It needs at least 3 bad and 3 good
+reviewed fields; more and more varied reviews make it better.
 
 ## Tuning on your data
 

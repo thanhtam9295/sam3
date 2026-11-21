@@ -139,6 +139,19 @@ def flag_fields(fields: pd.DataFrame, rules: QcRules) -> pd.DataFrame:
                 text = f"{rule.flag} ({column} = {values[i]:.4g})"
                 if text not in reasons[i]:
                     reasons[i].append(text)
+    if rules.learned is not None:
+        from hcs_studio.qc.learned import bad_probability
+
+        p_bad = bad_probability(out, rules.learned)
+        out["learned_p_bad"] = p_bad
+        fired = p_bad >= rules.learned.threshold
+        out["flag_learned"] = fired
+        severity = severity.combine((p_bad / rules.learned.threshold).where(fired, 0.0), max)
+        if rules.learned.exclude:
+            excluded |= fired
+        values = p_bad.to_numpy(dtype=float)
+        for i in np.flatnonzero(fired.to_numpy()).tolist():
+            reasons[i].append(f"learned (p bad = {values[i]:.2f})")
     flag_columns = [f"flag_{f}" for f in rules.flags]
     out["flags"] = [
         ";".join(f[5:] for f in flag_columns if row[f])

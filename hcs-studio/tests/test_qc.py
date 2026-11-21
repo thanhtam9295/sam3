@@ -204,7 +204,8 @@ def test_command_line_writes_qc_files_and_records_the_run(tmp_path: Path) -> Non
                  "--reason", "new plate"])  # fmt: skip
     assert code == 0
     files = {p.name for p in (tmp_path / "out" / "qc").iterdir()}
-    assert files == {"field_qc.parquet", "well_qc.csv", "plate_qc.json", "rules.yaml"}
+    assert files == {"field_qc.parquet", "well_qc.csv", "plate_qc.json", "rules.yaml",
+                     "qc_report.html", "thumbs"}  # fmt: skip
     event = recent_events(1, "qc.run")[0]
     assert event["reason"] == "new plate" and event["after"]["excluded_fields"] == 4
     assert main(["qc", str(path), "--output", str(path / "inside")]) == 2  # never into raw data

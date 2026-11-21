@@ -280,6 +280,15 @@ The object ellipse axes used for debris and fibers equal scikit-image `regionpro
 | Compound artifacts | autofluorescence rising with dose in channel 2 flags the high doses of that compound only; precipitation (brightfield particles at ≥ 3 µM) flags that compound's top doses; a clean compound and the controls are not flagged | `test_compound_autofluorescence_and_precipitation_follow_the_dose` |
 | Registry | run QC summary stored; QC-failed wells flagged `qc_failed` and left out of cross-run queries | `test_registry_keeps_the_run_qc_and_skips_failed_wells` |
 
+### Step 18c: reviews, QC tab, learned QC, report
+
+| Check | Result | Test |
+|---|---|---|
+| Field review | including a blurred field (reason required) keeps the rules' decision as `rule_excluded`, rebuilds the run tables (the well's excluded fields drop by one) and is recorded (`qc.review` event, `overrides.json`) | `test_reviews_change_exclusions_everywhere_and_are_recorded` |
+| Well review | failing a well with a reason marks it failed in `well_qc.csv` and the per-well summary; the report lists the review | same test |
+| Learned QC | plate A: the 12 blurred fields confirmed by review, 60 clean; classifier cross-validated balanced accuracy > 0.9. Plate B (other seed, rules without the blur rule): ≥ 90 % of blurred fields flagged and excluded by learned QC, ≤ 5 % of clean fields; a modified model file is refused | `test_learned_qc_catches_an_artifact_the_rules_miss` |
+| QC tab | gallery sorted by severity, failed wells hatched, reviews need a reason and update the tab | `test_qc_tab_shows_flags_and_records_reviews` |
+
 Not yet checked: real bad and good fields (thresholds were set on synthetic artifacts;
 20–50 bad fields with reasons and ~50 good fields per instrument are needed to tune them);
 speed on full-size fields (2048² and larger, 4 channels); bubbles and out-of-well regions in

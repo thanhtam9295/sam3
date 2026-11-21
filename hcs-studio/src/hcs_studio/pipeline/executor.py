@@ -45,7 +45,7 @@ from hcs_studio.output.writers import (
     write_parent_links,
     write_png,
 )
-from hcs_studio.pipeline.schema import Pipeline
+from hcs_studio.pipeline.schema import Pipeline, PipelineStep
 from hcs_studio.processing.base import (
     ImageData,
     MeasureContext,
@@ -1358,6 +1358,33 @@ def summarise_run(
         log.exception("The HTML report could not be written")
 
 
+def refresh_run_tables(folder: Path) -> None:
+    """Rebuild a finished run's tables and report with its current table steps (those of the
+    latest analysis, else the pipeline's) — e.g. after a QC review changed exclusions."""
+    folder = Path(folder)
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
+    pipeline = Pipeline.model_validate(manifest["pipeline"])
+    analyses = manifest.get("analyses") or []
+    steps = (
+        [PipelineStep.model_validate(s) for s in analyses[-1].get("steps", [])]
+        if analyses
+        else pipeline.table_steps()
+    )
+    log = _run_log(folder, "refresh")
+    try:
+        log.info("Refreshing tables and report (%d table step(s))", len(steps))
+        summarise_run(
+            folder,
+            [s.create() for s in pipeline.image_steps()],
+            [s.create() for s in steps],
+            log,
+        )
+    finally:
+        for h in list(log.handlers):
+            log.removeHandler(h)
+            h.close()
+
+
 def analyze_run(
     folder: Path, table_steps: Pipeline | list[Any], *, include_run_steps: bool = True
 ) -> dict[str, Any]:
@@ -1511,7 +1538,9 @@ def image_qc_stage(
         if done == total or done % 50 == 0:
             emit({"type": "status", "text": f"Image QC: {done}/{total} fields"})
 
-    fields = measure_plate(plate, rules, wells, workers=workers, progress=progress)
+    fields = measure_plate(
+        plate, rules, wells, workers=workers, progress=progress, thumbs=folder / "qc" / "thumbs"
+    )
     result = apply_rules(fields, rules, layout=layout if layout.wells else None)
     seconds = round(time.monotonic() - started, 2)
     write_qc(result, folder, rules, plate=plate, extra={"seconds": seconds})

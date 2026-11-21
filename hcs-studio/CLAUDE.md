@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phase 17 built; Phase 18 steps 18a, 18b built
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -516,6 +516,16 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   Compound artifacts `qc/compound.py` (series = single-agent wells per compound × cell line).
   Registry `Run.image_qc` (migration 0004), `WellResult.qc_flag = "qc_failed"`. QC metric
   speed: never use large structuring elements (distance transforms instead).
+- **Phase 18c (built)**: reviews in `qc/review.py` (`Override`, `qc/overrides.json` append-only,
+  latest per (level, well, field) wins; `redecide` rewrites qc files from `rule_excluded` +
+  reviews; `apply_override` (in `WRAPPED`) also calls `executor.refresh_run_tables` for run
+  folders); service `operations.review_qc` (`qc.review`, reason required). Thumbnails +
+  `emb_*` embedding in `qc/thumbs.py` (written during measurement); learned QC `qc/learned.py`
+  (features = QC metrics + emb as plate robust Z; trained with normalisation "none" on
+  pre-normalised features, then marked `plate_robust_z`; `LearnedQc` in rules with SHA-256).
+  `qc/report.py` writes `qc_report.html` from `write_qc` (every QC write). GUI `gui/qc_panel.py`
+  (QC tab; widget is `metric_combo` — `metric` shadows `QWidget.metric()`). CLI `qc-review`,
+  `qc-train`. Next: Phase 19 (scheduler integration and automatic runs).
 
 ## Commands
 
@@ -536,7 +546,7 @@ Run from this folder (`hcs-studio/`).
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
-- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
+- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`

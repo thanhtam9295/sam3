@@ -39,6 +39,7 @@ from hcs_studio.gui.pipeline_panel import PipelinePanel
 from hcs_studio.gui.plate_panel import PlatePanel
 from hcs_studio.gui.profiles_panel import ProfilesPanel
 from hcs_studio.gui.psf_dialog import PsfDialog
+from hcs_studio.gui.qc_panel import QcPanel
 from hcs_studio.gui.results_panel import ResultsPanel
 from hcs_studio.gui.run_dialog import RunDialog
 from hcs_studio.gui.sam_settings import Sam3SettingsDialog
@@ -103,6 +104,10 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.profiles_panel, "Profiles")
         self.pharmacology_panel = PharmacologyPanel(self.log)
         self.tabs.addTab(self.pharmacology_panel, "Pharmacology")
+        self.qc_panel = QcPanel()
+        self.qc_panel.log.connect(self.log)
+        self.qc_panel.reviewed.connect(lambda folder: self.results_panel.load(Path(folder)))
+        self.tabs.addTab(self.qc_panel, "QC")
         #: The last wells selected anywhere (run folder, wells), for the Compare tab.
         self.last_selection: tuple[Path, list[str]] | None = None
         self.compare_panel = ComparePanel(self.log, lambda: self.last_selection)
@@ -457,6 +462,7 @@ class MainWindow(QMainWindow):
         self.classify_panel.set_run(folder)
         self.profiles_panel.set_run(folder)
         self.pharmacology_panel.set_run(folder)
+        self.qc_panel.open(folder)
         self.tabs.setCurrentWidget(self.results_panel)
         report = folder / "index.html"
         if report.exists():

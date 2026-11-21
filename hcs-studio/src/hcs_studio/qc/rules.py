@@ -140,6 +140,18 @@ class CompoundChecks(BaseModel):
     exclude: bool = False
 
 
+class LearnedQc(BaseModel):
+    """A field classifier trained on reviewed fields (``hcs-studio qc-train``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str  # path of the classifier file
+    sha256: str = ""
+    #: Flag a field when P(bad) reaches this.
+    threshold: float = Field(default=0.5, gt=0, lt=1)
+    exclude: bool = False
+
+
 class QcRules(BaseModel):
     model_config = ConfigDict(extra="forbid", serialize_by_alias=True, validate_by_name=True)
 
@@ -152,6 +164,7 @@ class QcRules(BaseModel):
     well: WellDecision = WellDecision()
     plate: PlateDecision = PlateDecision()
     compound: CompoundChecks = CompoundChecks()
+    learned: LearnedQc | None = None
 
     @model_validator(mode="after")
     def _check(self) -> QcRules:
@@ -171,7 +184,8 @@ class QcRules(BaseModel):
 
     @property
     def flags(self) -> list[str]:
-        return list(dict.fromkeys(r.flag for r in self.field))
+        names = [r.flag for r in self.field] + (["learned"] if self.learned else [])
+        return list(dict.fromkeys(names))
 
     def describe(self) -> dict[str, Any]:
         return {"name": self.name, "version": self.version, "sha256": self.sha256()}
