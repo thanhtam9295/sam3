@@ -6,7 +6,8 @@ so it can be applied to a finished run without reprocessing images). It needs a 
 with **vehicle** (negative-control) wells; without one it calibrates on all wells and says so.
 
 Available: **cell cycle** (20a), **DNA-damage foci** (20b), **apoptosis and cytotoxicity**
-(20c), **nuclear translocation** (20d). Coming: proliferation markers (20e).
+(20c), **nuclear translocation** (20d), **proliferation markers, micronuclei and
+multinucleation** (20e).
 
 ## The assay wizard
 
@@ -262,6 +263,59 @@ hcs-studio pharm runs/plate1 --readout tl_responding_pct --normalize percent_inh
 
 In `agonist` mode the curve rises from the vehicle (0 %) to the stimulus (100 %) and its
 midpoint is the EC50; in `inhibitor` mode it is the IC50 against the stimulated controls.
+
+## Proliferation markers (Ki67, EdU, BrdU, pH3), micronuclei, multinucleation
+
+One table step, **`proliferation`** (% positive nuclei per marker), and an optional image step,
+**`mitotic_errors`** (micronuclei and nuclei per cell — mitotic errors after antimitotic drugs).
+
+```bash
+hcs-studio assay preset proliferation --map dna=DAPI --map ki67=Ki67 --map edu=EdU --map cells=CellMask \
+    --channels DAPI,Ki67,EdU,CellMask --output prolif.yaml
+```
+
+Map any of `ki67`, `edu` (EdU or BrdU) and `ph3`; `cells` (a cell stain: CellMask, actin,
+tubulin …) adds a cell segmentation for multinucleation.
+
+**Thresholds** per marker on the mean nuclear intensity (`feature`), stored in
+`assays/proliferation/calibration.json`:
+
+| `threshold_method` | Threshold |
+|---|---|
+| `secondary_only` | median + `threshold_sd` (5) robust SD of log intensity of the nuclei of **secondary-antibody-only** wells (DAPI and secondary, no primary; for EdU: no click reaction). Mark them with the layout role **unstained** or list them in `secondary_only_wells`. |
+| `vehicle_mixture` | two log-normal populations fitted to the vehicle nuclei; the threshold is where both are **equally likely**, so it does not move with the positive share (which differs between treated wells). Warns when the vehicle does not show two populations (Ashman's D < 2). |
+| `vehicle_robust` | median + 5 robust SD of the vehicle nuclei — for rare positives such as pH3 |
+| `vehicle_otsu` | Otsu's threshold on the vehicle — biased towards the smaller population (with 70 % Ki67-positive vehicle cells it cut into the negatives on the test plate) |
+| `auto` (default) | `secondary_only` when such wells exist, else `vehicle_robust` for pH3 and `vehicle_mixture` for Ki67 and EdU |
+
+`thresholds: {ki67: 250}` fixes a value. The report shows, per marker, the histograms of the
+vehicle, secondary-only and positive-control nuclei with the threshold, and the intensity
+distribution of every well (5–95 % boxes on a log scale).
+
+**Micronuclei** (`mitotic_errors`, right after the nuclear segmentation, 2D): small DNA objects
+between `min_area_um2` (0.5 µm²) and `max_area_fraction` (0.2) × the median nuclear area, within
+`search_um` (5 µm) of a nucleus edge but **not touching** it (blebs and buds are not micronuclei).
+A threshold segmentation keeps the larger micronuclei as "nuclei"; the step takes them out. Smaller
+ones are found with their own threshold (`threshold_fraction` 0.4 × the median nuclear DNA
+intensity). Each micronucleus belongs to its nearest nucleus.
+
+**Multinucleation**: segment the cells on a cell stain **without** using the nuclei (cells grown
+from nuclei have one nucleus each by construction); `mitotic_errors` with `cells: cells` links
+each nucleus to the cell it overlaps most.
+
+**Per well**:
+
+| Readout | Meaning |
+|---|---|
+| `pf_ki67_pos_pct`, `pf_edu_pos_pct`, `pf_ph3_pos_pct` | % positive nuclei |
+| `pf_<marker>_median`, `pf_<marker>_pos_vs_vehicle` | median nuclear intensity; % positive / vehicle |
+| `pf_mn_pct`, `pf_mn_per_100`, `pf_mn_per_100_vs_vehicle` | nuclei with micronuclei; micronuclei per 100 nuclei; fold vs vehicle |
+| `pf_multinucleated_pct`, `pf_binucleated_pct`, `pf_nuclei_per_cell`, `pf_multinucleated_vs_vehicle` | cells with ≥ 2 / exactly 2 nuclei; mean nuclei per cell |
+| `pf_nuclei`, `pf_cells` | nuclei (micronuclei apart); cells with a nucleus |
+| per nucleus: `pf_<marker>_positive`, `pf_micronuclei` | |
+
+Z′ (positive control vs vehicle) of every % readout is in the report. % positive defaults to
+% of control in the pharmacology module (antiproliferative IC50s).
 
 ## Validating on your plates
 

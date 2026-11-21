@@ -368,6 +368,22 @@ Measures every object of the chosen label sets on the linear image (never on con
 | `neighbor_radius_um` | 20.0 | Radius for neighbour counts. |
 | `nucleus_labels` | 'nuclei' | Label set used for nuclear/cytoplasmic ratios of its children. |
 
+## Micronuclei and multinucleation (`mitotic_errors`)
+
+Assay (Phase 20e), right after the nuclear segmentation, 2D: micronuclei = small DNA objects (min_area_um2 to max_area_fraction × the median nuclear area) within search_um of a nucleus edge but not touching it; segmented ones are taken out of the nuclei, smaller ones found with threshold_fraction × the median nuclear DNA intensity. Label set `micronuclei` (parent: nearest nucleus) → `micronuclei_count` per nucleus. With `cells` (segmented on a cell stain, not grown from the nuclei) each nucleus is linked to its cell → `nuclei_count` per cell (multinucleation).
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel` | required | DNA channel (starting at 1). |
+| `nuclei` | 'nuclei' | Label set of the nuclei. |
+| `micronuclei` | True | Detect micronuclei. |
+| `output` | 'micronuclei' | Name of the micronucleus label set. |
+| `max_area_fraction` | 0.2 | Largest micronucleus, × median nuclear area. |
+| `min_area_um2` | 0.5 | Smallest micronucleus. |
+| `search_um` | 5.0 | Largest distance from a nucleus edge. |
+| `threshold_fraction` | 0.4 | DNA threshold, × median nuclear DNA intensity. |
+| `cells` | '' | Cells segmented on a cell stain (not grown from the nuclei): each nucleus is linked to its cell, for nuclei per cell. Empty = no multinucleation. |
+
 ## Object QC: outliers (`object_qc`)
 
 Object-level QC: learns the median and robust spread (1.4826 × MAD) of size (log area), shape (solidity) and the mean intensity of the first channel (log) from objects sampled across the plate, and flags objects beyond the robust-Z threshold in any of them (merged cells, fragments, out-of-focus or debris-like objects). Writes `qc_outlier`, `qc_excluded` and `qc_reason` per object and the outlier count and fraction per well. Excluded objects are left out of per-well feature statistics and of later table steps; counts are unchanged. See the Image QC guide.
@@ -436,6 +452,28 @@ Collapses Z: maximum (default), mean, sum, minimum, standard deviation or extend
 | `focus_metric` | 'normalized_variance' | auto: focus score of each plane (normalized variance or Brenner gradient). |
 | `n_planes` | 5 | auto: number of planes kept around the best focus. |
 | `focus_channel` | None | auto: channel whose focus chooses the planes for all channels; empty = each channel chooses its own planes. |
+
+## Assay: proliferation markers (`proliferation`)
+
+Assay (Phase 20e): % positive nuclei for Ki67, EdU/BrdU and pH3. Thresholds per marker: secondary-only wells (role unstained, median + threshold_sd robust SD of log intensity), vehicle_mixture (two log-normal populations, equal-likelihood point), vehicle_otsu, vehicle_robust (rare positives, pH3) or fixed; auto picks secondary-only when present. Micronuclei per 100 nuclei and % with micronuclei; multinucleated and binucleated cells; fold vs vehicle; Z′. Writes `pf_` columns and `assays/proliferation/` (control histograms and per-well intensity distributions). See the Assays guide.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `dna_channel` | 'DAPI' | Nuclear stain. |
+| `ki67_channel` | '' | Ki67 (or another nuclear marker). |
+| `edu_channel` | '' | EdU or BrdU. |
+| `ph3_channel` | '' | Phospho-histone H3 (mitoses). |
+| `cells_channel` | '' | Cell stain for multinucleation (the preset segments cells on it). |
+| `feature` | 'mean' | Nuclear intensity feature (mean, integrated). |
+| `threshold_method` | 'auto' | auto: secondary-only wells if any, else vehicle_robust for pH3 and vehicle_mixture for the others. |
+| `threshold_sd` | 5.0 |  |
+| `thresholds` | {} | Fixed thresholds by marker (ki67, edu, ph3). |
+| `secondary_only_wells` | [] | Secondary-only wells; empty = wells with role 'unstained' in the layout. |
+| `micronuclei` | 'micronuclei' | Micronucleus label set. |
+| `cells` | 'cells' | Cell label set (multinucleation). |
 
 ## Measure: field QC and counts (`qc`)
 

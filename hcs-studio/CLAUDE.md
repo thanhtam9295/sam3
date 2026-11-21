@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20a–20d built
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20 built (20a–20e)
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -574,6 +574,13 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   need no new code). Preset uses **Otsu** nuclei (triangle inflates masks into the cytoplasm)
   and a **constant** background (polynomial over-subtracts under dense cells). Synthetic
   `synthetic/translocation.py` needs plate rows/cols in the manifest for `RunResults`.
+- **Phase 20e (built)**: `assays/proliferation.py`: image step `mitotic_errors` (2D,
+  `find_micronuclei`: small segmented nuclei moved out + threshold components not touching the
+  1-px-dilated nuclei, nearest nucleus via EDT indices; `cells` sets the nuclei's parent to the
+  cells → `nuclei_count` per cell; refuses cells made from the nuclei and runs only before other
+  children of the nuclei) and table step `proliferation` (prefix `pf_`; markers ki67/edu/ph3;
+  secondary-only = role `unstained`; `mixture_threshold` = 1D EM, equal-density point — Otsu is
+  biased by unequal class sizes). Synthetic `synthetic/proliferation.py`.
 
 ## Commands
 

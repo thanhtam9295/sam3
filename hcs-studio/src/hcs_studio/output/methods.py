@@ -37,6 +37,13 @@ DESCRIPTIONS = {
     "local maxima, size filter; 3D with Z stacks)",
     "foci": "foci per nucleus and well (pan-nuclear nuclei — mean intensity ≥ a multiple of the "
     "vehicle median — reported apart)",
+    "mitotic_errors": "micronuclei (small DNA objects up to 0.2 × the median nuclear area within "
+    "5 µm of a nucleus but not touching it, assigned to the nearest nucleus) and nuclei per cell "
+    "(each nucleus linked to the cell segmented on a cell stain that it overlaps most)",
+    "proliferation": "proliferation markers (% positive nuclei for Ki67, EdU/BrdU and pH3 with "
+    "thresholds from secondary-only wells, median + 5 robust SD of log intensity, or from the "
+    "vehicle nuclei: equal-likelihood point of two log-normal populations, or median + 5 robust "
+    "SD for pH3), micronucleus frequency and multinucleated cells",
     "cytoplasm": "a cytoplasm compartment per nucleus (a ring between gap_um and gap_um + "
     "width_um from the nuclear edge, assigned to the nearest nucleus and, with a cell segmentation, "
     "kept inside the cell; or the cell minus its nucleus)",

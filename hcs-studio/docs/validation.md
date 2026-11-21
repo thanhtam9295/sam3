@@ -241,6 +241,24 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Proliferation markers and mitotic errors (Phase 20e)
+
+| Check | Result | Test |
+|---|---|---|
+| Two nuclei with a micronucleus 3 px away, a segmented micronucleus, a bleb touching a nucleus, debris 20 px away, a 1-px speck | the two micronuclei found and assigned to the right nucleus (the segmented one taken out of the nuclei); bleb, debris and speck rejected | `test_find_micronuclei_geometry` |
+| Two log-normal populations (80 / 800, σ 0.35) at 15, 50 and 85 % positive | mixture threshold at √(80·800) ± 5 % at every share; Otsu's moves more | `test_mixture_threshold_does_not_depend_on_the_positive_share` |
+| Synthetic images: 4 wells × 4 fields × 36 round cells (cell stain), 1 or 2 nuclei, Ki67 per cell, micronuclei (r 1.5–2.5 px, 3 px from the nucleus), through the preset with cell segmentation | nuclei and cells exact; % Ki67-positive within 1.5 pp (seen: exact); micronuclei per 100 nuclei and % multinucleated within 1 pp (seen: exact) | `test_markers_micronuclei_and_multinucleation_from_images` |
+| Object tables: vehicle, nocodazole-like positive control, sample, secondary-only well; Ki67, EdU, pH3 | secondary-only thresholds within 2 pp of truth (seen ≤ 1.2 pp: the positive tail below the threshold); vehicle thresholds (mixture; robust SD for pH3) within 1 pp; Z′ > 0.9 | `test_thresholds_from_secondary_only_and_vehicle` |
+| Vehicle without Ki67-positive cells | Ashman's D warning | `test_unimodal_vehicle_warns` |
+
+Found while building: Otsu's threshold on a vehicle with 70 % Ki67-positive nuclei sat at 158
+(geometric mean of the populations: 253) and counted the upper tail of the negatives — 3.7 pp too
+many positives in treated wells with 15 % positives; replaced by the two-population fit.
+
+Not yet checked: real Ki67/EdU plates with secondary-only wells; pH3 at 20×; micronuclei on real
+images (out-of-focus nuclei, apoptotic fragments — run the apoptosis step to tell them apart);
+multinucleation with Cellpose cells.
+
 ## Nuclear translocation (Phase 20d)
 
 | Check | Result | Test |

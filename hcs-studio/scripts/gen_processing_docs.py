@@ -126,6 +126,20 @@ NOTES = {
     "positive_min_foci foci, focus area and intensity, and pan-nuclear nuclei (mean intensity ≥ "
     "pan_factor × the vehicle median) reported apart; by cell-cycle phase when the cell-cycle "
     "step ran first. Writes `dd_` columns and `assays/foci/`. Warns about Z projections.",
+    "mitotic_errors": "Assay (Phase 20e), right after the nuclear segmentation, 2D: micronuclei = "
+    "small DNA objects (min_area_um2 to max_area_fraction × the median nuclear area) within "
+    "search_um of a nucleus edge but not touching it; segmented ones are taken out of the nuclei, "
+    "smaller ones found with threshold_fraction × the median nuclear DNA intensity. Label set "
+    "`micronuclei` (parent: nearest nucleus) → `micronuclei_count` per nucleus. With `cells` "
+    "(segmented on a cell stain, not grown from the nuclei) each nucleus is linked to its cell → "
+    "`nuclei_count` per cell (multinucleation).",
+    "proliferation": "Assay (Phase 20e): % positive nuclei for Ki67, EdU/BrdU and pH3. Thresholds "
+    "per marker: secondary-only wells (role unstained, median + threshold_sd robust SD of log "
+    "intensity), vehicle_mixture (two log-normal populations, equal-likelihood point), "
+    "vehicle_otsu, vehicle_robust (rare positives, pH3) or fixed; auto picks secondary-only when "
+    "present. Micronuclei per 100 nuclei and % with micronuclei; multinucleated and binucleated "
+    "cells; fold vs vehicle; Z′. Writes `pf_` columns and `assays/proliferation/` (control "
+    "histograms and per-well intensity distributions). See the Assays guide.",
     "cytoplasm": "Assay (Phase 20d): a cytoplasm label set with the nucleus IDs, for nuclear "
     "translocation. ring: pixels between gap_um and gap_um + width_um from the nuclear edge that "
     "are closer to this nucleus than to any other (never inside a neighbour); with cells (grown "

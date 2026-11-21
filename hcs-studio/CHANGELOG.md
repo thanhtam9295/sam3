@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Phase 20e — proliferation markers, micronuclei, multinucleation
+- `proliferation` (assay step): % positive nuclei for Ki67, EdU/BrdU and pH3 with thresholds
+  from secondary-only wells (role `unstained`), a two-population fit to the vehicle (equal
+  likelihood: independent of the positive share), robust SD (pH3), Otsu or fixed values;
+  micronuclei per 100 nuclei, multinucleated/binucleated cells, fold vs vehicle, Z′; report with
+  control histograms and per-well intensity distributions (`assays/proliferation/`).
+- `mitotic_errors` (image step): micronuclei next to nuclei (segmented ones taken out of the
+  nuclei, smaller ones found by threshold; blebs and debris rejected), and nuclei linked to cells
+  segmented on a cell stain.
+- Preset (`hcs-studio assay preset proliferation`), readouts, docs, synthetic data
+  (`synthetic/proliferation.py`).
+
 ### Phase 20d — nuclear translocation
 - `cytoplasm` (image step): a cytoplasm ring per nucleus (gap and width in µm, assigned to the
   nearest nucleus, optionally kept inside its cell) or the cell minus its nucleus; nucleus IDs.

@@ -655,7 +655,8 @@ pan-nuclear nuclei apart, 3D counting with Z stacks) and apoptosis/cytotoxicity 
 annexin V, dead-cell dye, condensed and fragmented nuclei; GR from a time-zero count separates
 cytostatic from cytotoxic) and nuclear translocation (N/C ratio of p65, YAP, TFEB … per cell with
 a cytoplasm ring, % responding cells calibrated on unstimulated controls, EC50/IC50 through the
-pharmacology module). Details:
+pharmacology module) and proliferation (% Ki67/EdU/pH3-positive nuclei with thresholds from
+secondary-only or vehicle wells, micronuclei and multinucleated cells). Details:
 [assays.md](assays.md).
 
 ## ilastik
