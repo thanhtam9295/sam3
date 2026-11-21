@@ -653,7 +653,9 @@ map its channels, check the control wells, preview the calibration, apply. Avail
 foci (γH2AX, 53BP1, RAD51: foci per nucleus with a threshold calibrated on vehicle wells,
 pan-nuclear nuclei apart, 3D counting with Z stacks) and apoptosis/cytotoxicity (caspase or
 annexin V, dead-cell dye, condensed and fragmented nuclei; GR from a time-zero count separates
-cytostatic from cytotoxic). Details:
+cytostatic from cytotoxic) and nuclear translocation (N/C ratio of p65, YAP, TFEB … per cell with
+a cytoplasm ring, % responding cells calibrated on unstimulated controls, EC50/IC50 through the
+pharmacology module). Details:
 [assays.md](assays.md).
 
 ## ilastik

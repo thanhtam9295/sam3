@@ -185,6 +185,19 @@ Rescales each channel to 0-1 between two percentiles and applies gamma.
 | `high_percentile` | 99.9 | Maps to white. |
 | `gamma` | 1.0 | Gamma applied after rescaling to 0-1. |
 
+## Cytoplasm ring around nuclei (`cytoplasm`)
+
+Assay (Phase 20d): a cytoplasm label set with the nucleus IDs, for nuclear translocation. ring: pixels between gap_um and gap_um + width_um from the nuclear edge that are closer to this nucleus than to any other (never inside a neighbour); with cells (grown from the nuclei) the ring stays inside its own cell. cells: the cell minus its nucleus and the gap. Put it before measure_objects.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `nuclei` | 'nuclei' | Label set of the nuclei. |
+| `cells` | '' | Label set of the cells (grown from the nuclei, same IDs); empty = none. |
+| `mode` | 'ring' | ring: a band around each nucleus; cells: the whole cell minus its nucleus. |
+| `gap_um` | 0.5 | Gap between nucleus and cytoplasm. |
+| `width_um` | 2.0 | Ring width. |
+| `output` | 'cytoplasm' | Name of the new label set. |
+
 ## Deconvolution (`deconvolution`)
 
 Richardson-Lucy with total-variation regularisation (Dey et al. 2006) and Biggs-Andrews acceleration, or a one-step Wiener filter for quick previews. 3D for Z stacks (2D per plane with `force_2d`). The image is mirror-padded by the PSF half-size, a constant background is estimated (or given) and excluded from the result, and the result is non-negative. The PSF is computed from the metadata with `psfmodels` (vectorial or Gibson-Lanni; pinhole-aware for confocal) or loaded from a file saved by Tools → PSF tool, resampled to the image voxel size. Large images are split into overlapping Y/X tiles, blended linearly, whenever they would exceed the memory budget. Iterations, residual, runtime, tiles and the PSF used are recorded per channel in each well's `well_summary.json`. Runs on a CUDA GPU through PyTorch when one is available, otherwise on the CPU. **Validate against your reference software (e.g. Huygens) on bead and cell images before using it for quantitative claims** — see [validation.md](validation.md).
@@ -548,6 +561,27 @@ Places the fields of each well in one coordinate system from their stage positio
 | `image_max_size` | 1024 | Fields are downsampled to this for matching. |
 | `save_mosaic` | False | Also write the well as one linear image (mosaic.ome.tif, all channels; overlaps averaged), e.g. of projected and background-corrected fields. |
 | `mosaic_downsample` | 2 | Mosaic image: block-average by this factor (1 = full resolution; needs all fields of a well in memory). |
+
+## Assay: nuclear translocation (`translocation`)
+
+Assay (Phase 20d): nuclear/cytoplasmic ratio of a reporter per cell (nucleus vs the cytoplasm label set), log2 ratio, and responding cells above a threshold from the unstimulated controls (median + threshold_sd robust SD of log N/C; a percentile; Otsu over unstimulated and stimulated cells; or fixed). mode agonist: vehicle = unstimulated; inhibitor: positive controls = unstimulated. Per well % responding, median N/C, activation between the controls, Z′. Writes `tl_` columns and `assays/translocation/`. EC50/IC50 with the pharmacology step on tl_responding_pct. See the Assays guide.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `dna_channel` | 'DAPI' | Nuclear stain. |
+| `reporter_channel` | 'p65' | Translocating protein (as on the plate). |
+| `cytoplasm` | 'cytoplasm' | Label set of the cytoplasm (cytoplasm step), or of the cells (cytoplasm = cell minus nucleus, from the cells' nc_ratio measurement). |
+| `statistic` | 'mean' | Intensity statistic of nucleus and cytoplasm. |
+| `mode` | 'agonist' | agonist: vehicle wells are unstimulated, positive controls stimulated; inhibitor: all wells stimulated, positive controls unstimulated. |
+| `unstimulated_wells` | [] | Unstimulated wells (overrides the layout roles). |
+| `threshold_method` | 'unstimulated_robust' | unstimulated_robust: median + threshold_sd robust SD of log N/C of the unstimulated cells; unstimulated_percentile: a percentile of them; controls: Otsu over unstimulated and stimulated cells. |
+| `threshold_sd` | 3.0 |  |
+| `percentile` | 95.0 |  |
+| `ratio_threshold` | None | Fixed N/C threshold. |
+| `min_cytoplasm_um2` | 2.0 | Cells with less cytoplasm area are left out. |
 
 ## Linear spectral unmixing (`unmix`)
 

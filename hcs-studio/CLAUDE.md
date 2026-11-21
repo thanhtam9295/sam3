@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20a, 20b, 20c built
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20a–20d built
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -566,6 +566,14 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `z_prime_apoptotic`. `AssayModule.layout()`. Synthetic `synthetic/apoptosis.py`
   (`write_apoptosis_run`, `ApoptosisNuclei`). `run_table_steps` does not write tables — tests
   read `result.per_well`.
+- **Phase 20d (built)**: `assays/translocation.py`: image step `cytoplasm` (`cytoplasm_labels`:
+  `expand_labels` territories → ring = outer minus gap; `cells` restricts; mode `cells`) and table
+  step `translocation` (prefix `tl_`; ratio = nucleus row vs cytoplasm row by well+field+
+  timepoint+object_id, or cells' `<ch>_cytoplasm_mean`; `mode` agonist: vehicle unstimulated /
+  inhibitor: positive controls unstimulated — matches pharmacology % inhibition, so EC50/IC50
+  need no new code). Preset uses **Otsu** nuclei (triangle inflates masks into the cytoplasm)
+  and a **constant** background (polynomial over-subtracts under dense cells). Synthetic
+  `synthetic/translocation.py` needs plate rows/cols in the manifest for `RunResults`.
 
 ## Commands
 

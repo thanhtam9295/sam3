@@ -264,16 +264,7 @@ class Apoptosis(AssayModule):
 
     def _all_for(self, roles: tuple[str, ...]) -> pd.DataFrame:
         """All objects (any type) of the control wells, for markers measured on cells."""
-        from hcs_studio.analysis.table_steps import read_well_objects
-
-        if self.run_folder is None:
-            return pd.DataFrame()
-        parts = [
-            read_well_objects(self.run_folder / "wells" / w)
-            for w, r in self.well_roles().items()
-            if r in roles and (self.run_folder / "wells" / w / "objects.parquet").exists()
-        ]
-        return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+        return self.all_objects(roles)
 
     def transform(self, objects: pd.DataFrame, state: Any, well: WellContext) -> pd.DataFrame:
         columns = self.columns()

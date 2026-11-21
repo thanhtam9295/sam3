@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Phase 20d — nuclear translocation
+- `cytoplasm` (image step): a cytoplasm ring per nucleus (gap and width in µm, assigned to the
+  nearest nucleus, optionally kept inside its cell) or the cell minus its nucleus; nucleus IDs.
+- `translocation` (assay step): N/C mean-intensity ratio and log2 ratio per cell; responding
+  cells above a threshold from the unstimulated controls (robust SD, percentile, Otsu over
+  both controls, or fixed); agonist and inhibitor modes; % responding, median N/C, activation
+  between the controls, Z′; background warnings; report `assays/translocation/`. EC50/IC50
+  through the pharmacology module (% inhibition).
+- Preset (`hcs-studio assay preset translocation`: constant background, Otsu nuclei, ring),
+  readouts, wizard preview, docs, synthetic data (`synthetic/translocation.py`).
+- `AssayModule.all_objects(roles)`: all object types of control wells.
+
 ### Phase 20c — apoptosis and cytotoxicity
 - `apoptosis` (assay step): apoptosis marker (caspase-3/7, cleaved caspase-3, annexin V on the
   cells) and dead-cell dye (PI, SYTOX, DRAQ7) thresholds calibrated on the controls (vehicle

@@ -116,6 +116,21 @@ class AssayModule(TableModule):
             )
         return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
+    def all_objects(self, roles: tuple[str, ...]) -> pd.DataFrame:
+        """All objects of every type (counted once) of the wells with ``roles`` — for values
+        measured on other label sets than ``params.object_type`` (cells, cytoplasm)."""
+        from hcs_studio.analysis.table_steps import read_well_objects
+
+        if self.run_folder is None:
+            return pd.DataFrame()
+        parts = []
+        for well, role in self.well_roles().items():
+            folder = self.run_folder / "wells" / well
+            if role in roles and (folder / "objects.parquet").exists():
+                objects = read_well_objects(folder)
+                parts.append(objects[unique_rows(objects)])
+        return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+
     def require(self, frame: pd.DataFrame, columns: list[str]) -> None:
         missing = [c for c in columns if c not in frame.columns]
         if missing:

@@ -241,6 +241,25 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Nuclear translocation (Phase 20d)
+
+| Check | Result | Test |
+|---|---|---|
+| Two nuclei 14 px apart, ring and cell-restricted ring | ring never on a nucleus, never nearer the other nucleus; wide rings meet half-way; cell mode = cell minus nucleus | `test_cytoplasm_ring_stays_out_of_nuclei_and_neighbours` |
+| Synthetic images: 4 wells × 3 fields × 49 cells (nucleus r 8 px, cell r 15 px), per-cell log2 N/C from N(−1, 0.25) or N(+1, 0.25), background 100 + noise, through the preset (ring) and with `expand_cells` + cell-minus-nucleus | per cell: median error < 3 % and > 90 % of cells within 5 % (seen with the ring: median 1.4 %, 95th percentile 4.4 %); well median N/C within 5 %; % responding within 1.5 pp; Z′ > 0.5 | `test_nc_ratio_per_cell_from_images` |
+| Agonist series (9 points, EC50 100 nM, Hill 1) on object tables, through `hcs-studio assay run` and the pharmacology module (% inhibition) | % responding within 1 pp of truth per well; log EC50 −7.0 ± 0.1 (seen: 1.00 × 10⁻⁷ M) on % responding and on log2 N/C | `test_agonist_ec50_through_pharmacology` |
+| Inhibitor mode (all wells stimulated; positive controls unstimulated; IC50 30 nM) | threshold from the positive controls; IC50 within 0.1 log | `test_inhibitor_mode_calibrates_on_positive_controls` |
+| Threshold methods; cells as cytoplasm; background warnings | robust SD, percentile, Otsu and fixed thresholds all give 50 ± 1.5 % on a 50 % well; tophat/no background/polynomial warnings | `test_threshold_methods_and_errors`, `test_cells_as_cytoplasm`, `test_warnings_about_background` |
+
+Found while building: the triangle threshold (used by the other assays) put the nuclear mask edge
+3 px into the cytoplasm (nuclei 1.9× too large) and the ring then measured nucleus — resting N/C
+0.75 instead of 0.5; Otsu puts the edge at half height. A polynomial background surface fitted
+under ~50 % cell coverage rose into the cytoplasm and inflated N/C ratios ~7×; the preset uses a
+constant background.
+
+Not yet checked: real p65 (TNF-α vs vehicle) or YAP (density/serum) plates; blurred nuclear
+edges at 20× (the gap); Cellpose cells as cytoplasm; very flat or very confluent cells.
+
 ## Apoptosis and cytotoxicity (Phase 20c)
 
 | Check | Result | Test |

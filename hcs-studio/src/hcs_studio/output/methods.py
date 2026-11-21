@@ -37,6 +37,12 @@ DESCRIPTIONS = {
     "local maxima, size filter; 3D with Z stacks)",
     "foci": "foci per nucleus and well (pan-nuclear nuclei — mean intensity ≥ a multiple of the "
     "vehicle median — reported apart)",
+    "cytoplasm": "a cytoplasm compartment per nucleus (a ring between gap_um and gap_um + "
+    "width_um from the nuclear edge, assigned to the nearest nucleus and, with a cell segmentation, "
+    "kept inside the cell; or the cell minus its nucleus)",
+    "translocation": "nuclear translocation (nuclear/cytoplasmic mean-intensity ratio per cell; "
+    "cells responding above median + 3 robust SD of log N/C of the unstimulated control cells; "
+    "% responding, median N/C and activation between unstimulated and stimulated controls)",
     "apoptosis": "apoptosis and cytotoxicity per nucleus (apoptosis-marker and dead-cell-dye "
     "thresholds at median + 5 robust SD of log intensity of the vehicle nuclei; condensed nuclei "
     "by size and DNA brightness relative to vehicle; viable counts, and GR from a time-zero count "

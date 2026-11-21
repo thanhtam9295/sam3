@@ -6,7 +6,7 @@ so it can be applied to a finished run without reprocessing images). It needs a 
 with **vehicle** (negative-control) wells; without one it calibrates on all wells and says so.
 
 Available: **cell cycle** (20a), **DNA-damage foci** (20b), **apoptosis and cytotoxicity**
-(20c). Coming: nuclear translocation (20d), proliferation markers (20e).
+(20c), **nuclear translocation** (20d). Coming: proliferation markers (20e).
 
 ## The assay wizard
 
@@ -189,6 +189,79 @@ counts (Hafner et al. 2016): **GR < 0 cytotoxic** (fewer viable cells than at tr
 QC: the report (`assays/apoptosis/report.html`) gives the thresholds, the time-zero count and
 Z′ of % apoptotic (positive control vs vehicle, with ≥ 2 wells each); a warning when neither
 marker is mapped.
+
+## Nuclear translocation (NF-κB p65, YAP/TAZ, TFEB, β-catenin, FOXO …)
+
+Two steps: **`cytoplasm`** builds a cytoplasm compartment for each nucleus (an image step, before
+`measure_objects`), and **`translocation`** compares the reporter's mean intensity in the
+nucleus and in its cytoplasm.
+
+```bash
+hcs-studio assay preset translocation --map dna=Hoechst --map reporter=p65 --channels Hoechst,p65 --output p65.yaml
+```
+
+**Cytoplasm** (`cytoplasm` step):
+
+| `mode` | Cytoplasm |
+|---|---|
+| `ring` (default) | pixels between `gap_um` (0.5) and `gap_um + width_um` (2) from the nuclear edge, assigned to the **nearest** nucleus — a ring never enters a neighbouring nucleus or the half of the gap that belongs to the neighbour. With a cell segmentation (`cells`: cells grown from the nuclei, e.g. `expand_cells` or Cellpose cells linked to nuclei) the ring also stays inside its own cell. |
+| `cells` | the whole cell minus its nucleus (and the gap) — needs `cells` |
+
+The gap keeps the blurred nuclear edge out of the cytoplasm. Cells whose cytoplasm is smaller
+than `min_cytoplasm_um2` (2 µm²) — crowded or cut by the image edge — are left out and counted
+(`tl_no_cytoplasm_pct`).
+
+**Intensities must be linear and background-subtracted.** An offset left in the image pulls every
+N/C ratio towards 1. The preset subtracts a **constant**: the mean of blank (no-cell) wells
+(`blank_wells=True` in `preset`, wells marked blank in the layout), else the 5th percentile of
+each field. The step warns when the reporter channel had no background subtraction, a top-hat or
+rolling ball with a radius under 40 µm (flattens the cytoplasm), or a polynomial/spline surface
+(rises into the cytoplasm under dense cells and inflates the ratios — on the synthetic test plate
+the median N/C came out 7× too high). The preset segments nuclei with **Otsu** (mask edge at half
+height); the triangle threshold of the other assays puts the mask edge in the cytoplasm.
+
+**Controls and threshold** — `mode` follows the % inhibition convention of the pharmacology
+module (negative control = 0 % effect, positive control = 100 %):
+
+| `mode` | Unstimulated | Stimulated | Dose-response |
+|---|---|---|---|
+| `agonist` (default) | vehicle (negative control) | positive control, e.g. TNF-α | agonist EC50 |
+| `inhibitor` | positive control (no stimulus, or a reference inhibitor) | vehicle = stimulus alone | inhibitor IC50 |
+
+`unstimulated_wells` overrides the layout. A cell **responds** when its N/C ratio is above:
+
+| `threshold_method` | Threshold |
+|---|---|
+| `unstimulated_robust` (default) | median + `threshold_sd` (3) robust SD of log N/C of the unstimulated cells |
+| `unstimulated_percentile` | the `percentile` (95) of the unstimulated cells |
+| `controls` | Otsu's threshold of log N/C over unstimulated and stimulated cells |
+
+or a fixed `ratio_threshold`. The calibration is stored in `assays/translocation/calibration.json`;
+the report shows the N/C histograms of both controls with the threshold.
+
+**Per well**:
+
+| Readout | Meaning |
+|---|---|
+| `tl_responding_pct` | % cells with N/C above the threshold |
+| `tl_nc_ratio`, `tl_nc_ratio_mean`, `tl_log2_nc` | median and mean N/C; mean log2 N/C |
+| `tl_activation_pct` | % responding scaled from unstimulated (0 %) to stimulated (100 %) controls |
+| `tl_fold_vs_unstimulated` | median N/C / median N/C of the unstimulated wells |
+| `tl_cells`, `tl_no_cytoplasm_pct` | cells with a usable ratio; nuclei without usable cytoplasm |
+| per cell: `tl_nuc_intensity`, `tl_cyto_intensity`, `tl_nc_ratio`, `tl_log2_nc`, `tl_responding` | |
+
+Z′ of % responding and of mean log2 N/C (stimulated vs unstimulated, ≥ 2 wells each) is in the
+report, with a warning below 0.5.
+
+**EC50 / IC50**: annotate the dose series in the layout and run the pharmacology module on
+`tl_responding_pct` (or `tl_log2_nc`) with **% inhibition** normalization:
+
+```bash
+hcs-studio pharm runs/plate1 --readout tl_responding_pct --normalize percent_inhibition
+```
+
+In `agonist` mode the curve rises from the vehicle (0 %) to the stimulus (100 %) and its
+midpoint is the EC50; in `inhibitor` mode it is the IC50 against the stimulated controls.
 
 ## Validating on your plates
 

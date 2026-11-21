@@ -126,6 +126,18 @@ NOTES = {
     "positive_min_foci foci, focus area and intensity, and pan-nuclear nuclei (mean intensity ≥ "
     "pan_factor × the vehicle median) reported apart; by cell-cycle phase when the cell-cycle "
     "step ran first. Writes `dd_` columns and `assays/foci/`. Warns about Z projections.",
+    "cytoplasm": "Assay (Phase 20d): a cytoplasm label set with the nucleus IDs, for nuclear "
+    "translocation. ring: pixels between gap_um and gap_um + width_um from the nuclear edge that "
+    "are closer to this nucleus than to any other (never inside a neighbour); with cells (grown "
+    "from the nuclei) the ring stays inside its own cell. cells: the cell minus its nucleus and "
+    "the gap. Put it before measure_objects.",
+    "translocation": "Assay (Phase 20d): nuclear/cytoplasmic ratio of a reporter per cell "
+    "(nucleus vs the cytoplasm label set), log2 ratio, and responding cells above a threshold "
+    "from the unstimulated controls (median + threshold_sd robust SD of log N/C; a percentile; "
+    "Otsu over unstimulated and stimulated cells; or fixed). mode agonist: vehicle = "
+    "unstimulated; inhibitor: positive controls = unstimulated. Per well % responding, median "
+    "N/C, activation between the controls, Z′. Writes `tl_` columns and `assays/translocation/`. "
+    "EC50/IC50 with the pharmacology step on tl_responding_pct. See the Assays guide.",
     "apoptosis": "Assay (Phase 20c): apoptosis and cytotoxicity on the nuclei. An apoptosis "
     "marker (caspase-3/7, cleaved caspase-3, or annexin V measured on the cells) and a dead-cell "
     "dye (PI, SYTOX, DRAQ7) are thresholded from the vehicle nuclei (median + threshold_sd robust "
