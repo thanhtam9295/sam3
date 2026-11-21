@@ -38,11 +38,11 @@ def _png(fig: Any) -> str:
 
 
 def _heatmap(values: pd.Series, failed: set[str], rows: int, cols: int, title: str) -> str:
-    import matplotlib
-
-    matplotlib.use("Agg")
+    # Figure + Agg canvas directly: never matplotlib.use() here, which switches pyplot's
+    # backend and can deadlock with Qt when called from a worker thread.
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
+    from matplotlib.patches import Rectangle
 
     from hcs_studio.model.plate import parse_well_name, row_label
 
@@ -58,9 +58,7 @@ def _heatmap(values: pd.Series, failed: set[str], rows: int, cols: int, title: s
     for well in failed:
         r, c = parse_well_name(well)
         ax.add_patch(
-            matplotlib.patches.Rectangle(
-                (c - 0.5, r - 0.5), 1, 1, fill=False, hatch="////", edgecolor="#b00020", lw=0
-            )
+            Rectangle((c - 0.5, r - 0.5), 1, 1, fill=False, hatch="////", edgecolor="#b00020", lw=0)
         )
     step_c = 1 if cols <= 24 else 2
     ax.set_xticks(range(0, cols, step_c), [str(c + 1) for c in range(0, cols, step_c)], fontsize=6)

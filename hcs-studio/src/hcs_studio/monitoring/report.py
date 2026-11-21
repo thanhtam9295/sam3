@@ -20,9 +20,8 @@ from hcs_studio.monitoring.bridging import Bridging
 
 def _figure(bridging: Bridging) -> str:
     """Potency ratios A/B with 95 % CIs against the MSR band, as an embedded PNG."""
-    import matplotlib
-
-    matplotlib.use("Agg")
+    # Figure + Agg canvas directly: never matplotlib.use() here, which switches pyplot's
+    # backend and can deadlock with Qt when called from a worker thread.
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
 
