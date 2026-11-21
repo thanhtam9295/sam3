@@ -134,9 +134,15 @@ def write_imagexpress_plate(
         f'"ZSteps", {z_steps}',
         f'"XWells", {plate_size[1]}',
         f'"YWells", {plate_size[0]}',
+        *[
+            f'"WellsSelection{r + 1}", '
+            + ", ".join("TRUE" if (r, c) in set(wells) else "FALSE" for c in range(plate_size[1]))
+            for r in range(plate_size[0])
+        ],
         '"Sites", TRUE',
         f'"XSites", {n_sites}',
         '"YSites", 1',
+        '"SiteSelection1", ' + ", ".join(["TRUE"] * n_sites),
         '"Waves", TRUE',
         f'"NWavelengths", {len(waves)}',
         *[f'"WaveName{i + 1}", "{name}"' for i, (name, _) in enumerate(waves)],

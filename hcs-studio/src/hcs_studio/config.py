@@ -19,6 +19,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from hcs_studio.automation.settings import AutomationSettings
 from hcs_studio.io.sidecar import config_dir
 
 CONFIG_VERSION = 1
@@ -65,6 +66,7 @@ class AppSettings(BaseModel):
     config_version: int = CONFIG_VERSION
     data_roots: list[DataRootConfig] = Field(default_factory=list)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    automation: AutomationSettings = Field(default_factory=AutomationSettings)
     #: Earlier per-feature settings files, imported once (read-only copy).
     imported: dict[str, Any] = Field(default_factory=dict)
 
