@@ -214,6 +214,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     qc_train.add_argument("--reason", default="", help="why (recorded)")
 
+    assay = sub.add_parser("assay", help="oncology assay modules (cell cycle …)")
+    assay_sub = assay.add_subparsers(dest="assay_command", required=True)
+    assay_sub.add_parser("list", help="the assay modules and their channel roles")
+    assay_preset = assay_sub.add_parser("preset", help="write an assay's preset pipeline")
+    assay_preset.add_argument("name")
+    assay_preset.add_argument(
+        "--channels", default="", help="the plate's channel names, comma-separated"
+    )
+    assay_preset.add_argument(
+        "--map", action="append", default=[], metavar="ROLE=CHANNEL",
+        help="e.g. --map dna=DAPI --map edu=EdU",
+    )  # fmt: skip
+    assay_preset.add_argument("--nucleus-um", type=float, default=10.0)
+    assay_preset.add_argument("--z-planes", type=int, default=1)
+    assay_preset.add_argument("--output", type=Path, required=True)
+    assay_run = assay_sub.add_parser("run", help="apply an assay to a finished run")
+    assay_run.add_argument("folder", type=Path)
+    assay_run.add_argument("name")
+    assay_run.add_argument("--map", action="append", default=[], metavar="ROLE=CHANNEL")
+    assay_run.add_argument("--reason", default="")
+
     selftest = sub.add_parser(
         "selftest", help="check this installation on a small synthetic plate (about a minute)"
     )
@@ -482,6 +503,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _analyze(args)
     if args.command == "qc":
         return _qc(args)
+    if args.command == "assay":
+        return _assay(args)
     if args.command == "qc-review":
         return _qc_review(args)
     if args.command == "qc-train":
@@ -744,6 +767,50 @@ def _qc(args: argparse.Namespace) -> int:
     )
     print(f"Files: {Path(args.output) / 'qc'}")
     return 0 if summary["passed"] else 1
+
+
+def _assay(args: argparse.Namespace) -> int:
+    from hcs_studio.assays.base import assay_names
+    from hcs_studio.processing.base import MODULES
+
+    if args.assay_command == "list":
+        for name in assay_names():
+            cls: Any = MODULES.get(name)
+            roles = ", ".join(f"{r.key}{'' if r.required else '?'}" for r in cls.roles)
+            print(f"{name}: {cls.title} — channels: {roles}")
+        return 0
+    try:
+        mapping = dict(item.split("=", 1) for item in args.map)
+    except ValueError:
+        print("Error: --map takes ROLE=CHANNEL")
+        return 2
+    if args.name not in assay_names():
+        print(f"Error: unknown assay {args.name!r} ({', '.join(assay_names())})")
+        return 2
+    assay_cls: Any = MODULES.get(args.name)
+    if args.assay_command == "preset":
+        channels = [c.strip() for c in args.channels.split(",") if c.strip()]
+        pipeline = assay_cls.preset(
+            mapping,
+            channels=channels or None,
+            nucleus_diameter_um=args.nucleus_um,
+            z_planes=args.z_planes,
+        )
+        pipeline.save(args.output)
+        print(f"Pipeline: {args.output}")
+        return 0
+    from hcs_studio.pipeline.schema import PipelineStep
+    from hcs_studio.processing.base import ModuleError
+    from hcs_studio.services.operations import analyze_run
+
+    params = {f"{role}_channel": channel for role, channel in mapping.items()}
+    try:
+        analyze_run(_ctx(args), args.folder, [PipelineStep(module=args.name, params=params)])
+    except (OSError, ValueError, ModuleError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    print(f"Report: {args.folder / 'assays' / args.name / 'report.html'}")
+    return 0
 
 
 def _qc_review(args: argparse.Namespace) -> int:

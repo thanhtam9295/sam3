@@ -645,6 +645,13 @@ segmentation and its exclusions reach counts, fits, plate maps and reports; the 
 reviews flagged fields (each override needs a reason), and reviews can train a learned QC
 classifier. Details: [image_qc.md](image_qc.md).
 
+## Oncology assays
+
+**Tools → Assay wizard…** runs a calibrated assay on the run open in Results: choose the assay,
+map its channels, check the control wells, preview the calibration, apply. Available: cell cycle
+(DNA content with a Dean–Jett–Fox-style fit, EdU gating, pH3 mitotic index). Details:
+[assays.md](assays.md).
+
 ## ilastik
 
 Projects trained in ilastik (`.ilp`) will run as pipeline steps, like Cellpose and SAM 3.

@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20a built
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -525,7 +525,30 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   pre-normalised features, then marked `plate_robust_z`; `LearnedQc` in rules with SHA-256).
   `qc/report.py` writes `qc_report.html` from `write_qc` (every QC write). GUI `gui/qc_panel.py`
   (QC tab; widget is `metric_combo` — `metric` shadows `QWidget.metric()`). CLI `qc-review`,
-  `qc-train`. Next: Phase 19 (scheduler integration and automatic runs).
+  `qc-train`.
+- **Phase 19 — PAUSED** (user: "Skip 19, go to 20", 2026-11-21) at WIP commit 703cd85: built
+  `automation/completeness.py` (per-reader checkers in `CHECKERS`), `automation/settings.py`
+  (`AppSettings.automation`), `db/automation.py` (`lab_event`, `auto_run`; migration 0005),
+  `automation/intake.py` (validate/log/dedupe, `EventServer`, `poll_inbox`, `send`). Untested and
+  not wired: watcher, routing, runner, notifications, `auto serve`, Automation tab, tests.
+  Defaults chosen when the user declined the questions: stdlib only (no watchdog/httpx), all
+  formats, all notification channels off until configured, HTTP + folder intake. Before resuming
+  ask again for instrument export paths, notification channels and scheduler transport.
+- **Phase 20 (oncology assays)**: one module per step, stop after each (20a cell cycle — built;
+  20b foci, 20c apoptosis, 20d translocation, 20e proliferation). Ask the user for one real control
+  plate per assay plus their current results.
+- **Phase 20a (built)**: `assays/base.py` `AssayModule(TableModule)` (`roles`, `prefix`,
+  `preset()`, `well_roles()` from the run layout — untreated wells without drugs count as vehicle,
+  `control_objects()`, `run_warnings()`, `output_folder()`); table steps get `run_folder` before
+  `fit_table` and `finish_table(state, folder, per_well)` after the wells (`run_table_steps`).
+  `assays/cell_cycle.py`: pure functions `g1_peak`, `fit_dna` (DJF, binned ML, 3 starts),
+  `phase_of`, `gate_edu`, `otsu_log`, `robust_upper_log`; module `cell_cycle` (prefix `cc_`, in
+  ANNOTATION_PREFIXES and tables `_LABEL_PREFIXES`); report; `preset()` uses a **triangle**
+  threshold (Otsu biases DNA content on arrested fields). Synthetic: `synthetic/cell_cycle.py`
+  (`sample_nuclei`, `write_cycle_run`, `CycleNuclei`). GUI `gui/assay_wizard.py` (Tools → Assay
+  wizard…); CLI `hcs-studio assay list|preset|run`. New assays: register in
+  `processing/base.load_builtin_modules`, readouts in `readouts.py`, methods `DESCRIPTIONS`,
+  `gen_processing_docs.NOTES`, docs/assays.md.
 
 ## Commands
 
@@ -546,7 +569,7 @@ Run from this folder (`hcs-studio/`).
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
-- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
+- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; assays: `hcs-studio assay list | preset cell_cycle --map dna=DAPI [--map edu=EdU] --channels … --output p.yaml | run <run> cell_cycle --map dna=DAPI`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`

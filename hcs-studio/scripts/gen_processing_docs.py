@@ -115,6 +115,13 @@ NOTES = {
     "gate_objects": "Marks objects of one type whose features lie inside thresholds (min "
     "and/or max per feature, all or any rule), e.g. drawn on a histogram or scatter plot in "
     "the Classify panel. Writes `gate_<name>` per object and the count and fraction per well.",
+    "cell_cycle": "Assay (Phase 20a): cell cycle from the integrated nuclear intensity of a DNA "
+    "stain, scaled so the vehicle wells' G1 peak is 2N; per well a Dean–Jett–Fox-style fit "
+    "(Gaussian G1 and G2/M peaks with a shared CV, uniform broadened S phase) gives % G1, S and "
+    "G2/M, with sub-G1 and > 4N by DNA content; optional EdU (2D gating) and pH3 (mitotic "
+    "index), thresholds from the vehicle wells. Writes `cc_dna_n`, `cc_phase` per nucleus, the "
+    "`cc_` readouts per well, and `assays/cell_cycle/` (calibration, per-well CSV, report). "
+    "Warns about max projections and single confocal planes. See the Assays guide.",
     "object_qc": "Object-level QC: learns the median and robust spread (1.4826 × MAD) of size "
     "(log area), shape (solidity) and the mean intensity of the first channel (log) from "
     "objects sampled across the plate, and flags objects beyond the robust-Z threshold in any "

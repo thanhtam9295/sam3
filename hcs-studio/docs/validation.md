@@ -241,6 +241,22 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Cell cycle assay (Phase 20a)
+
+| Check | Result | Test |
+|---|---|---|
+| Fit of known phase fractions (5000 nuclei; vehicle 2/55/25/16/2 % and arrested 4/20/14/54/8 % sub-G1/G1/S/G2M/>4N, CV 4 %) | every phase within 2 points (seen: within 0.7); CV 4.0 ± 0.5 %, G2/G1 2.00 | `test_dean_jett_fox_fit_recovers_known_phase_fractions` |
+| G1 peak on a G2/M-arrested plate (65 % G2/M) | the 2N peak, not the taller 4N one | `test_g1_peak_is_found_also_on_a_g2_arrested_population` |
+| Calibration on vehicle wells, EdU and pH3 | phases within 2 points (fit) and 1 point (EdU gating); EdU % and mitotic index within 0.5; arrest index 1.0 (vehicle) and 3.4 (54/16); a well stained 5 % brighter keeps its phases (G1 peak 2.1N) | `test_cell_cycle_step_calibrates_on_vehicle_wells_and_gates_edu_and_ph3` |
+| From images: synthetic plate (nuclei whose summed intensity ∝ DNA content, 1152 per well) through the preset pipeline | fit within 2 points (seen 1.3), EdU gating within 1 (seen 0.4), CV 4.0 % | `test_preset_pipeline_measures_dna_content_from_images` |
+| Max projection / no layout | warns; calibrates on all wells with a note | `test_warnings_for_max_projections_and_missing_layouts` |
+
+Found while building: with Otsu's threshold the segmentation trimmed dim G1 nuclei on G2/M-rich
+fields (G1 CV 13 % instead of 4 %, 9 % false sub-G1); the preset uses a triangle threshold.
+
+Not yet checked: a real control plate (vehicle + positive control) against your current
+analysis; real DAPI/Hoechst widefield vs sum-projected confocal data.
+
 ## Automatic image QC (Phase 18a)
 
 Labeled synthetic plate (`synthetic.artifacts.qc_plate`): 256 × 256 px fields with 70–140

@@ -271,6 +271,7 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(
             self._action("&Experiment report for the run in Results", self.experiment_report)
         )
+        tools_menu.addAction(self._action("&Assay wizard…", self.open_assay_wizard))
 
         view_menu = self.menuBar().addMenu("&View")
         for dock in (
@@ -456,6 +457,20 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Run folder")
         if folder:
             self.show_results(Path(folder))
+
+    def open_assay_wizard(self) -> None:
+        """Choose an assay, map channels, preview the calibration, apply it to the run open in
+        Results (or add it to the pipeline)."""
+        from hcs_studio.gui.assay_wizard import AssayWizard
+
+        results = self.results_panel.results
+        wizard = AssayWizard(results.folder if results is not None else None, self)
+        wizard.log.connect(self.log)
+        wizard.add_to_pipeline.connect(self.pipeline_panel.add_step)
+        if results is not None:
+            wizard.log.connect(lambda _: self.results_panel.load(results.folder))
+        self.assay_wizard = wizard
+        wizard.show()
 
     def show_results(self, folder: Path) -> None:
         self.results_panel.load(folder)

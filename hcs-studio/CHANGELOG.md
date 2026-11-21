@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Phase 20a — assay framework and cell cycle
+- `assays/`: assay modules are table steps with channel roles, a preset pipeline, calibration
+  on the run's control wells (from the layout; stored in the run), registered readouts, QC
+  warnings and a report page (`assays/<name>/report.html`, linked from `index.html`). Table
+  steps now get the run folder and a `finish_table` hook.
+- **Cell cycle**: DNA content scaled so the vehicle G1 peak = 2N; Dean–Jett–Fox-style fit per
+  well (% sub-G1, G1, S, G2/M, > 4N); EdU 2D gating; pH3 mitotic index; G2/M arrest index;
+  warnings for max projections and single confocal planes. Preset pipeline with a triangle
+  threshold (whole-nucleus masks).
+- **Tools → Assay wizard…** (map channels, check controls, preview calibration, apply or add to
+  the pipeline) and `hcs-studio assay list | preset | run`. Docs: assays.md.
+
+### Phase 19 — started, paused
+- Work in progress (not yet active): export completeness checks (ImageXpress, Harmony, nd2),
+  automation settings, lab-event log and auto-run tables (migration 0005), event intake.
+
 ### Phase 18c — QC review, QC tab, learned QC, QC report
 - Reviews (`qc/review.py`): confirm / include / exclude a field, pass / fail a well, each with
   a reason through the recorded service `qc.review` (`hcs-studio qc-review`); decisions are

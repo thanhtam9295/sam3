@@ -153,9 +153,17 @@ def report_links(folder: Path) -> list[dict[str, str]]:
         ("pharmacology/pharmacology_report.pdf", "Pharmacology report (PDF)"),
         ("experiment_report/experiment_report.html", "Experiment report (HTML)"),
         ("experiment_report/experiment_report.pdf", "Experiment report (PDF)"),
+        ("qc/qc_report.html", "Image QC report"),
     ):
         if (folder / path).exists():
             links.append({"title": title, "href": path})
+    assays = folder / "assays"
+    if assays.is_dir():
+        for page in sorted(assays.glob("*/report.html")):
+            name = page.parent.name.replace("_", " ")
+            links.append(
+                {"title": f"Assay report: {name}", "href": f"assays/{page.parent.name}/report.html"}
+            )
     for sub, kind in (("figures", "Figure"), ("experiment_report/montages", "Montage")):
         if (folder / sub).exists():
             for f in sorted((folder / sub).iterdir()):

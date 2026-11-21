@@ -30,7 +30,7 @@ from hcs_studio.processing.base import MODULES, ImageData, Module, ModuleError, 
 #: Columns that identify an object across tables.
 OBJECT_KEY = ("well", "field", "timepoint", "object_type", "object_id")
 #: Columns added by table steps start with one of these.
-ANNOTATION_PREFIXES = ("gate_", "class_", "cluster_", "spatial_", "qc_")
+ANNOTATION_PREFIXES = ("gate_", "class_", "cluster_", "spatial_", "qc_", "cc_")
 #: Numeric columns that are positions or identifiers, not features.
 NON_FEATURES = frozenset(
     {
@@ -130,6 +130,9 @@ class TableModule(Module):
     needs_fit: ClassVar[bool] = False
     #: Objects sampled from the plate for ``fit_table``.
     max_fit_objects: ClassVar[int] = 200_000
+    #: The run folder, set before ``fit_table`` (assay modules read the layout and the
+    #: control wells' objects from it).
+    run_folder: Path | None = None
 
     def apply(self, image: ImageData, state: Any) -> ImageData:
         return image  # table steps do not touch images
@@ -148,6 +151,9 @@ class TableModule(Module):
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """(per-well summary values, JSON details for ``wells/<W>/analysis.json``)."""
         return {}, {}
+
+    def finish_table(self, state: Any, folder: Path, per_well: dict[str, dict[str, Any]]) -> None:
+        """After every well: write the step's own files (assay reports); default nothing."""
 
     def selected(self, objects: pd.DataFrame) -> pd.Series:
         """Rows this step annotates: its object type, each object counted once, without
@@ -247,6 +253,7 @@ def run_table_steps(
         step_columns: list[str] = []
         try:
             state = None
+            module.run_folder = Path(folder)
             if module.needs_fit:
                 sample = _sample(
                     folders,
@@ -280,6 +287,10 @@ def run_table_steps(
                 result.per_well.setdefault(contexts[well_folder].well, {}).update(summary)
                 if extra:
                     details[well_folder][f"step{number}_{module.name}"] = extra
+        except ModuleError as exc:
+            raise ModuleError(f"{label}: {exc}") from None
+        try:
+            module.finish_table(state, Path(folder), result.per_well)
         except ModuleError as exc:
             raise ModuleError(f"{label}: {exc}") from None
         result.columns.extend(c for c in step_columns if c not in result.columns)

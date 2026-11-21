@@ -54,6 +54,25 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | `max_fields` | 100 | blank_wells, basic: fields sampled across the plate. |
 | `object_diameter_um` | None | Typical object diameter for the radius check; empty = estimated from each field. |
 
+## Assay: cell cycle (DNA content, EdU, pH3) (`cell_cycle`)
+
+Assay (Phase 20a): cell cycle from the integrated nuclear intensity of a DNA stain, scaled so the vehicle wells' G1 peak is 2N; per well a Dean–Jett–Fox-style fit (Gaussian G1 and G2/M peaks with a shared CV, uniform broadened S phase) gives % G1, S and G2/M, with sub-G1 and > 4N by DNA content; optional EdU (2D gating) and pH3 (mitotic index), thresholds from the vehicle wells. Writes `cc_dna_n`, `cc_phase` per nucleus, the `cc_` readouts per well, and `assays/cell_cycle/` (calibration, per-well CSV, report). Warns about max projections and single confocal planes. See the Assays guide.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `dna_channel` | 'DAPI' | DNA stain channel (DAPI, Hoechst). |
+| `edu_channel` | '' | EdU channel; empty = none. |
+| `ph3_channel` | '' | Phospho-histone H3 channel; empty = none. |
+| `dna_feature` | 'integrated' | DNA content feature (integrated nuclear intensity). |
+| `sub_g1_below` | 1.5 | Sub-G1 below this DNA content (N). |
+| `polyploid_above` | 5.0 | > 4N above this DNA content (N). |
+| `edu_threshold` | None | EdU mean intensity threshold; empty = from vehicle wells. |
+| `ph3_threshold` | None | pH3 mean intensity threshold; empty = from vehicle wells. |
+| `min_nuclei` | 200 | Warn below this many nuclei per well. |
+
 ## CLAHE (local contrast) (`clahe`) — **display only**
 
 Contrast-limited adaptive histogram equalisation, per plane (2D).

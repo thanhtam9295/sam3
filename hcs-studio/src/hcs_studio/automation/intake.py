@@ -289,7 +289,8 @@ class EventServer:
     @property
     def url(self) -> str:
         host, port = self.httpd.server_address[:2]
-        return f"http://{host}:{port}/events"
+        name = host.decode() if isinstance(host, bytes) else str(host)
+        return f"http://{name}:{port}/events"
 
     def start(self) -> EventServer:
         self.thread.start()

@@ -32,6 +32,9 @@ DESCRIPTIONS = {
     "qc": "field quality control (focus, saturation) and counts",
     "stitch_well": "stitching of the fields of each well (stage positions refined by phase correlation)",
     "gate_objects": "gating of objects",
+    "cell_cycle": "cell-cycle analysis from integrated nuclear DNA stain (vehicle G1 peak scaled "
+    "to 2N; Dean–Jett–Fox-style fit of G1, S and G2/M; sub-G1 and > 4N by DNA content; EdU and "
+    "pH3 thresholds from the vehicle wells)",
     "object_qc": "object-level QC (robust outliers in size, shape and intensity left out of "
     "feature statistics)",
     "classify_objects": "classification of objects with a trained classifier",
