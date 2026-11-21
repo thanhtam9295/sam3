@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20a, 20b built
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20a, 20b, 20c built
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -557,6 +557,15 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   cell_cycle ran first). `AssayModule.describe_state` returns the state; `preview_values(state)`
   feeds the wizard's plot (assay-generic). Synthetic `synthetic/foci.py` (`FociNuclei`, per-nucleus
   truth).
+- **Phase 20c (built)**: `assays/apoptosis.py`, table step `apoptosis` (prefix `ap_`): thresholds
+  `vehicle_robust` (default; a vehicle percentile falls inside the positives) / `vehicle_percentile`
+  / `controls` (Otsu); `marker_object_type: cells` looks up the cell with the nucleus's
+  well+field+object_id; condensed = area and `dna_feature` (p95) vs vehicle medians, fragments ≤
+  0.25 × area left out of counts; layout time point 0 h → role `time_zero` (`well_roles`
+  override; never vehicle); `finish_table` adds GR/`ap_response`/`ap_viable_vs_vehicle` and
+  `z_prime_apoptotic`. `AssayModule.layout()`. Synthetic `synthetic/apoptosis.py`
+  (`write_apoptosis_run`, `ApoptosisNuclei`). `run_table_steps` does not write tables — tests
+  read `result.per_well`.
 
 ## Commands
 

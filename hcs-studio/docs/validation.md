@@ -241,6 +241,23 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Apoptosis and cytotoxicity (Phase 20c)
+
+| Check | Result | Test |
+|---|---|---|
+| Object tables with known phenotypes (viable, early, condensed, late, necrotic; 3 fragments per condensed/late nucleus): vehicle, staurosporine, cytotoxic, cytostatic, necrotic compound, two 0 h wells | every category within 0.5 pp of truth (seen: exact), fragments counted apart, viable counts exact; GR cytotoxic < 0, cytostatic 0–0.8; Z′ > 0.5 | `test_categories_viable_counts_and_gr_match_truth` |
+| Annexin V on cells, thresholds by Otsu over vehicle + positive control | categories within 1 pp | `test_annexin_on_cells_and_otsu_on_controls` |
+| Vehicle with 6 % marker-positive cells | robust-SD threshold 6 %; the 99th percentile under-calls (< 4 %) — why it is not the default | `test_vehicle_percentile_is_less_robust_than_robust_sd` |
+| Morphology only (30 % condensed); classifier column instead of the rules | 30 ± 1 %; classifier classes used as given | `test_morphology_only_classifier_and_fixed_time_zero` |
+| Synthetic images: 4 wells × 6 fields × 49 nuclei (DNA, caspase, PI), through the preset pipeline | nuclei within 3 %; every category within 2.5 pp (seen: vehicle exact, staurosporine within 1.7 pp) | `test_apoptosis_from_images` |
+
+Found while building: the 99th percentile of the vehicle fell inside the positives (vehicle
+wells have a few % apoptotic cells) → robust SD; time-zero wells counted as vehicle → excluded;
+the mean DNA intensity of condensed nuclei was diluted by edge pixels → 95th percentile.
+
+Not yet checked: real staurosporine/vehicle plates with caspase-3/7 and a dead-cell dye; annexin
+V on real cell segmentations; very confluent wells (touching condensed nuclei).
+
 ## DNA-damage foci (Phase 20b)
 
 | Check | Result | Test |

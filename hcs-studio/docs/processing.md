@@ -33,6 +33,34 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | `max_fields` | 50 | Maximum reference fields sampled. |
 | `smoothing_fraction` | 0.02 | Smoothing of the AF image (fraction of width). |
 
+## Assay: apoptosis and cytotoxicity (`apoptosis`)
+
+Assay (Phase 20c): apoptosis and cytotoxicity on the nuclei. An apoptosis marker (caspase-3/7, cleaved caspase-3, or annexin V measured on the cells) and a dead-cell dye (PI, SYTOX, DRAQ7) are thresholded from the vehicle nuclei (median + threshold_sd robust SD of log intensity; or a percentile; or Otsu over vehicle and positive controls); condensed nuclei (small and bright vs vehicle) or a classifier's classes count as apoptotic; very small bright objects are fragments, not cells. Categories viable / early / late apoptotic / necrotic, viable count, Z′ of the positive control, and GR from a time-zero count (0 h wells or time_zero_count): cytotoxic below 0, cytostatic below no_effect_gr. Writes `ap_` columns and `assays/apoptosis/`. See the Assays guide.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `dna_channel` | 'DAPI' | Nuclear stain (morphology). |
+| `dna_feature` | 'p95' | DNA brightness feature for condensation (p95, max, mean). |
+| `apoptosis_channel` | '' | Caspase-3/7, cleaved caspase-3 or annexin V; empty = none. |
+| `dead_channel` | '' | PI, SYTOX, DRAQ7; empty = none. |
+| `marker_object_type` | '' | Measure the apoptosis marker on these objects (e.g. 'cells' for annexin V); empty = the nuclei. |
+| `threshold_method` | 'vehicle_robust' | vehicle_robust: median + threshold_sd robust SD of log intensity of the vehicle nuclei; vehicle_percentile: a percentile of them; controls: Otsu over vehicle and positive-control nuclei. |
+| `threshold_sd` | 5.0 |  |
+| `vehicle_percentile` | 99.0 |  |
+| `apoptosis_threshold` | None | Fixed threshold. |
+| `dead_threshold` | None | Fixed threshold. |
+| `morphology` | True | Count condensed nuclei as apoptotic. |
+| `condensed_area` | 0.6 |  |
+| `condensed_brightness` | 1.5 |  |
+| `fragment_area` | 0.25 |  |
+| `morphology_column` | '' | Classifier column instead of the morphology rules. |
+| `apoptotic_classes` | ['apoptotic', 'condensed'] |  |
+| `time_zero_count` | None | Viable nuclei per well at time zero (else 0 h wells). |
+| `no_effect_gr` | 0.8 |  |
+
 ## Background removal (`background`)
 
 Removes background per plane, typically after projection: top-hat, rolling ball or sliding paraboloid (estimated on a 3 × 3 mean), Gaussian or median background (subtracted or divided), a polynomial or spline surface fitted to background pixels, a constant (percentile or blank wells), or BaSiC-style flat- and dark-field estimated across the plate. Negatives are clipped; output stays linear. Each field reports the change inside objects and in the background, and warns when the radius is under 2× the typical object diameter.

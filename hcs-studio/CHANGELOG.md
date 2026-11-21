@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Phase 20c — apoptosis and cytotoxicity
+- `apoptosis` (assay step): apoptosis marker (caspase-3/7, cleaved caspase-3, annexin V on the
+  cells) and dead-cell dye (PI, SYTOX, DRAQ7) thresholds calibrated on the controls (vehicle
+  robust SD by default, vehicle percentile, or Otsu over vehicle and positive control);
+  condensed nuclei by size and brightness vs vehicle (or a classifier's classes); fragments of
+  fragmented nuclei counted apart; categories viable / early / late apoptotic / necrotic;
+  viable count; GR from time-zero wells (0 h) or a fixed count separates cytostatic from
+  cytotoxic; Z′ of % apoptotic; report `assays/apoptosis/`.
+- Preset (`hcs-studio assay preset apoptosis`), readouts, wizard preview, docs, synthetic data
+  (`synthetic/apoptosis.py`).
+
 ### Phase 20b — DNA-damage foci
 - `detect_foci` (image step): foci inside nuclei (LoG or white top-hat, local-maxima split,
   size filter), threshold calibrated on the vehicle wells (median + k robust SD of the response

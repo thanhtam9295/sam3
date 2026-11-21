@@ -250,6 +250,7 @@ def load_builtin_modules() -> None:
         stitching,
         table_steps,
     )
+    from hcs_studio.assays import apoptosis as _apoptosis  # noqa: F401
     from hcs_studio.assays import cell_cycle as _cell_cycle  # noqa: F401
     from hcs_studio.assays import foci as _foci  # noqa: F401
     from hcs_studio.processing import (  # noqa: F401

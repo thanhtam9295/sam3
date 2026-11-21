@@ -37,6 +37,10 @@ DESCRIPTIONS = {
     "local maxima, size filter; 3D with Z stacks)",
     "foci": "foci per nucleus and well (pan-nuclear nuclei — mean intensity ≥ a multiple of the "
     "vehicle median — reported apart)",
+    "apoptosis": "apoptosis and cytotoxicity per nucleus (apoptosis-marker and dead-cell-dye "
+    "thresholds at median + 5 robust SD of log intensity of the vehicle nuclei; condensed nuclei "
+    "by size and DNA brightness relative to vehicle; viable counts, and GR from a time-zero count "
+    "to separate cytostatic from cytotoxic responses)",
     "cell_cycle": "cell-cycle analysis from integrated nuclear DNA stain (vehicle G1 peak scaled "
     "to 2N; Dean–Jett–Fox-style fit of G1, S and G2/M; sub-G1 and > 4N by DNA content; EdU and "
     "pH3 thresholds from the vehicle wells)",

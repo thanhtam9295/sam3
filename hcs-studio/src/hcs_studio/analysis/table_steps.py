@@ -30,7 +30,7 @@ from hcs_studio.processing.base import MODULES, ImageData, Module, ModuleError, 
 #: Columns that identify an object across tables.
 OBJECT_KEY = ("well", "field", "timepoint", "object_type", "object_id")
 #: Columns added by table steps start with one of these.
-ANNOTATION_PREFIXES = ("gate_", "class_", "cluster_", "spatial_", "qc_", "cc_", "dd_")
+ANNOTATION_PREFIXES = ("gate_", "class_", "cluster_", "spatial_", "qc_", "cc_", "dd_", "ap_")
 #: Numeric columns that are positions or identifiers, not features.
 NON_FEATURES = frozenset(
     {

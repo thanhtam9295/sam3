@@ -126,6 +126,15 @@ NOTES = {
     "positive_min_foci foci, focus area and intensity, and pan-nuclear nuclei (mean intensity ≥ "
     "pan_factor × the vehicle median) reported apart; by cell-cycle phase when the cell-cycle "
     "step ran first. Writes `dd_` columns and `assays/foci/`. Warns about Z projections.",
+    "apoptosis": "Assay (Phase 20c): apoptosis and cytotoxicity on the nuclei. An apoptosis "
+    "marker (caspase-3/7, cleaved caspase-3, or annexin V measured on the cells) and a dead-cell "
+    "dye (PI, SYTOX, DRAQ7) are thresholded from the vehicle nuclei (median + threshold_sd robust "
+    "SD of log intensity; or a percentile; or Otsu over vehicle and positive controls); condensed "
+    "nuclei (small and bright vs vehicle) or a classifier's classes count as apoptotic; very small "
+    "bright objects are fragments, not cells. Categories viable / early / late apoptotic / "
+    "necrotic, viable count, Z′ of the positive control, and GR from a time-zero count (0 h wells "
+    "or time_zero_count): cytotoxic below 0, cytostatic below no_effect_gr. Writes `ap_` columns "
+    "and `assays/apoptosis/`. See the Assays guide.",
     "cell_cycle": "Assay (Phase 20a): cell cycle from the integrated nuclear intensity of a DNA "
     "stain, scaled so the vehicle wells' G1 peak is 2N; per well a Dean–Jett–Fox-style fit "
     "(Gaussian G1 and G2/M peaks with a shared CV, uniform broadened S phase) gives % G1, S and "

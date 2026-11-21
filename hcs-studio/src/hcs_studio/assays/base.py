@@ -64,6 +64,15 @@ class AssayModule(TableModule):
             return {}
         return data
 
+    def layout(self) -> Any:
+        """The run's plate layout (None without one)."""
+        if self.run_folder is None:
+            return None
+        from hcs_studio.model.layout import load_plate_layout, run_layout_file
+
+        path = run_layout_file(self.run_folder)
+        return load_plate_layout(path) if path is not None else None
+
     def well_roles(self) -> dict[str, str]:
         """Role of each well from the run's plate layout ({} without a layout)."""
         if self.run_folder is None:

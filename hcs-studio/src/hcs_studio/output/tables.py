@@ -129,7 +129,17 @@ _SKIP_STATS = {
     "well_x_um",
     "well_y_um",
 }
-_LABEL_PREFIXES = ("centroid_", "gate_", "class_", "cluster_", "spatial_", "qc_", "cc_", "dd_")
+_LABEL_PREFIXES = (
+    "centroid_",
+    "gate_",
+    "class_",
+    "cluster_",
+    "spatial_",
+    "qc_",
+    "cc_",
+    "dd_",
+    "ap_",
+)
 
 
 def object_statistics(

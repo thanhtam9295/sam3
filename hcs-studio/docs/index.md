@@ -651,7 +651,9 @@ classifier. Details: [image_qc.md](image_qc.md).
 map its channels, check the control wells, preview the calibration, apply. Available: cell cycle
 (DNA content with a Dean–Jett–Fox-style fit, EdU gating, pH3 mitotic index) and DNA-damage
 foci (γH2AX, 53BP1, RAD51: foci per nucleus with a threshold calibrated on vehicle wells,
-pan-nuclear nuclei apart, 3D counting with Z stacks). Details:
+pan-nuclear nuclei apart, 3D counting with Z stacks) and apoptosis/cytotoxicity (caspase or
+annexin V, dead-cell dye, condensed and fragmented nuclei; GR from a time-zero count separates
+cytostatic from cytotoxic). Details:
 [assays.md](assays.md).
 
 ## ilastik

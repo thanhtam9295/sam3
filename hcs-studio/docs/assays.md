@@ -5,8 +5,8 @@ Each assay is a step that runs after segmentation and measurement (it reads the 
 so it can be applied to a finished run without reprocessing images). It needs a plate layout
 with **vehicle** (negative-control) wells; without one it calibrates on all wells and says so.
 
-Available: **cell cycle** (20a), **DNA-damage foci** (20b). Coming: apoptosis (20c), nuclear
-translocation (20d), proliferation markers (20e).
+Available: **cell cycle** (20a), **DNA-damage foci** (20b), **apoptosis and cytotoxicity**
+(20c). Coming: nuclear translocation (20d), proliferation markers (20e).
 
 ## The assay wizard
 
@@ -120,6 +120,75 @@ the run used a projection.
 | per nucleus: `dd_foci`, `dd_positive`, `dd_pan_nuclear` | |
 
 For cell-cycle-aware foci, put `cell_cycle` before `foci` among the table steps.
+
+## Apoptosis and cytotoxicity (caspase-3/7, annexin V, PI, SYTOX, DRAQ7)
+
+One table step, **`apoptosis`**, on the nuclei. Channels: the DNA stain (required: nuclei and
+their morphology), an **apoptosis marker** (caspase-3/7 dye, cleaved caspase-3, annexin V;
+optional) and a **dead-cell dye** (PI, SYTOX, DRAQ7; optional). It runs on a finished run.
+
+```bash
+hcs-studio assay preset apoptosis --map dna=Hoechst --map apoptosis=Casp37 --map dead=DRAQ7 \
+    --channels Hoechst,Casp37,DRAQ7 --output apoptosis.yaml
+hcs-studio assay run runs/plate1 apoptosis --map dna=Hoechst --map apoptosis=Casp37 --map dead=DRAQ7
+```
+
+The preset segments nuclei with a **triangle** threshold (dim healthy nuclei and bright
+condensed ones alike) and measures them; add a cell segmentation step if the marker is a
+membrane stain (below).
+
+**Thresholds** — calibrated on the plate's controls and stored in the run
+(`assays/apoptosis/calibration.json`):
+
+| `threshold_method` | Threshold |
+|---|---|
+| `vehicle_robust` (default) | median + `threshold_sd` (5) robust SD (1.4826 × MAD) of log intensity of the vehicle nuclei — unaffected by the few apoptotic cells every vehicle well has |
+| `vehicle_percentile` | the `vehicle_percentile` (99) of the vehicle nuclei — simple, but with more than 1 % positive vehicle cells it falls inside the positives |
+| `controls` | Otsu's threshold of log intensity over the vehicle and positive-control nuclei (staurosporine, etc.) |
+
+Fixed values: `apoptosis_threshold`, `dead_threshold`.
+
+**Annexin V** and other membrane stains: segment cells too (cells grown from the nuclei share the
+nucleus's ID) and set `marker_object_type: cells`; each nucleus takes its cell's intensity.
+
+**Nuclear morphology**: a nucleus is *condensed* (pyknotic) when its area is ≤ `condensed_area`
+(0.6) × and its DNA brightness ≥ `condensed_brightness` (1.5) × the vehicle medians.
+Brightness is the nucleus's 95th-percentile DNA intensity (`dna_feature`; the mean of a small
+nucleus is diluted by its dim edge pixels). Objects ≤ `fragment_area` (0.25) × the vehicle area
+are *fragments* of fragmented nuclei: reported (`ap_fragments`) but not counted as cells. Or use
+a trained classifier (Phase 8): `morphology_column: class_morphology` and `apoptotic_classes`.
+`morphology: false` uses the markers alone.
+
+**Categories** per nucleus:
+
+| Category | Dead-cell dye | Apoptosis marker or condensed |
+|---|---|---|
+| viable | − | − |
+| early apoptotic | − | + |
+| late apoptotic | + | + |
+| necrotic | + | − |
+
+**Cytostatic vs cytotoxic**: give a **time-zero count** — wells fixed at the time of treatment
+with time point 0 h in the plate layout (their median viable count; they are never used as
+vehicle), or `time_zero_count`. Then GR = 2^(log2(x/x₀) / log2(x_vehicle/x₀)) − 1 on viable
+counts (Hafner et al. 2016): **GR < 0 cytotoxic** (fewer viable cells than at treatment),
+**0 ≤ GR < `no_effect_gr` (0.8) cytostatic**, above: no effect.
+
+**Per well**:
+
+| Readout | Meaning |
+|---|---|
+| `ap_viable_pct`, `ap_early_apoptotic_pct`, `ap_late_apoptotic_pct`, `ap_necrotic_pct` | categories (% of nuclei, fragments apart) |
+| `ap_apoptotic_pct`, `ap_dead_pct` | early + late apoptotic; late apoptotic + necrotic |
+| `ap_condensed_pct` | condensed nuclei (or the classifier's apoptotic classes) |
+| `ap_viable_count`, `ap_viable_vs_vehicle` | viable cells; / the vehicle median |
+| `ap_gr`, `ap_response` | GR; cytotoxic / cytostatic / no effect |
+| `ap_nuclei`, `ap_fragments` | nuclei analysed; fragments |
+| per nucleus: `ap_category`, `ap_condensed`, `ap_marker_positive`, `ap_dead_positive` | |
+
+QC: the report (`assays/apoptosis/report.html`) gives the thresholds, the time-zero count and
+Z′ of % apoptotic (positive control vs vehicle, with ≥ 2 wells each); a warning when neither
+marker is mapped.
 
 ## Validating on your plates
 
