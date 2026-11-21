@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; steps 17a, 17b, 17c built (Phase 17 done)
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phase 17 built; Phase 18 steps 18a, 18b built
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -487,7 +487,35 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   a reCAPTCHA; ask the user to confirm before changing them), `bridging.bridge`, `report.
   write_bridging_report`. Registry glue `db/monitoring.py` (`run_metrics`, `chart`,
   `reference_potency`, `msr_history`, `bridging` pairs plates by barcode). Charts mix plate types
-  unless filtered by assay or experiment. Next: Phase 18 (automatic image QC).
+  unless filtered by assay or experiment.
+- **Phase 18 plan**: (a) field metrics, rules, decisions, `qc/` files, CLI — built; (b) — built: QC
+  before segmentation, object-level QC, compound autofluorescence/precipitation,
+  exclusions propagated to measurements, IC50 fits (hollow points), plate maps (hatched) and
+  reports, QC in the registry, 384-well timing; (c) QC dashboard (heat maps, gallery by
+  severity, accept/override with reason via services), learned QC, `qc_report.html`.
+- **Phase 18a (built)**: `qc/metrics.py` (`field_metrics(stack (C,Z,Y,X), MetricSettings)` →
+  `c<n>_<metric>` per channel + content-channel metrics; PLLS = CellProfiler/centrosome
+  definition; focus metrics on the image clipped at p99; `_properties` = vectorised regionprops
+  area/mean/axes — keep it vectorised, regionprops loops were the bottleneck), `qc/rules.py`
+  (pydantic `QcRules`, schema `hcs-studio-qc-rules/1`, `sha256()`, `default_rules()`; add new
+  metrics to `CHANNEL_METRICS`/`FIELD_METRICS`), `qc/decide.py` (`apply_rules` → `QcResult`;
+  `best_z_offset` from a robust plane over the plate), `qc/run.py` (`run_qc` streams fields with
+  threads, refuses raw-data outputs, writes `qc/`; field numbers are the reader's `Field.index`).
+  Service `services.operations.run_image_qc` (`qc.run`); `run_qc` is in `WRAPPED`. Synthetic:
+  `synthetic.artifacts.Artifacts` / `qc_plate` (labels in `truth["labels"]`). Thresholds are
+  synthetic-tuned: ask the user for 20–50 bad + ~50 good real fields per instrument.
+- **Phase 18b (built)**: `Pipeline.qc: QcRules | None` (dropped from `to_dict` when None and
+  from `pipeline_hash`); `executor.image_qc_stage` runs before `_fit_or_load` (events
+  `qc_started`/`qc_finished`, manifest `image_qc`, `performance.wall_s.image_qc`, `QcStop` →
+  status `qc_failed`). Propagation goes through files, not new plumbing: `output/tables.py`
+  `merge_image_qc` (field exclusions into `qc_flags.excluded`) and `image_qc_wells`
+  (`qc/well_qc.csv` → `qc_failed/qc_flags/qc_reasons`); pharmacology `with_image_qc` in
+  `load_wells`, `_qc_failed` in `normalize` (controls) and `exclude_outliers` (reason "image QC:
+  …"). Object QC = table step `qc/objects.py` (`qc_` prefix in ANNOTATION_PREFIXES; objects with
+  `qc_excluded` are dropped by `object_statistics` and `TableModule.selected`, counts unchanged).
+  Compound artifacts `qc/compound.py` (series = single-agent wells per compound × cell line).
+  Registry `Run.image_qc` (migration 0004), `WellResult.qc_flag = "qc_failed"`. QC metric
+  speed: never use large structuring elements (distance transforms instead).
 
 ## Commands
 
@@ -508,7 +536,7 @@ Run from this folder (`hcs-studio/`).
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
-- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
+- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`

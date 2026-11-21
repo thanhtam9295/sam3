@@ -263,7 +263,7 @@ class LocalJobQueue:
         elif kind == "well_finished":
             entry = state.wells.setdefault(event["well"], {"fields": 0})
             entry["status"], entry["error"] = event["status"], event.get("error") or ""
-        elif kind == "status":
+        elif kind in ("status", "qc_finished"):
             state.message = event["text"]
         elif kind == "finished":
             state.status = event["status"]

@@ -30,7 +30,7 @@ from hcs_studio.processing.base import MODULES, ImageData, Module, ModuleError, 
 #: Columns that identify an object across tables.
 OBJECT_KEY = ("well", "field", "timepoint", "object_type", "object_id")
 #: Columns added by table steps start with one of these.
-ANNOTATION_PREFIXES = ("gate_", "class_", "cluster_", "spatial_")
+ANNOTATION_PREFIXES = ("gate_", "class_", "cluster_", "spatial_", "qc_")
 #: Numeric columns that are positions or identifiers, not features.
 NON_FEATURES = frozenset(
     {
@@ -70,6 +70,13 @@ def feature_columns(frame: pd.DataFrame, wanted: Sequence[str] | None = None) ->
         for c in numeric
         if c not in NON_FEATURES and not str(c).startswith(("centroid_", *ANNOTATION_PREFIXES))
     ]
+
+
+def qc_excluded(frame: pd.DataFrame) -> pd.Series:
+    """True for objects that object QC left out (``qc_excluded``)."""
+    if "qc_excluded" not in frame:
+        return pd.Series(False, index=frame.index)
+    return frame["qc_excluded"].fillna(False).astype(bool)
 
 
 def unique_rows(frame: pd.DataFrame) -> pd.Series:
@@ -143,9 +150,10 @@ class TableModule(Module):
         return {}, {}
 
     def selected(self, objects: pd.DataFrame) -> pd.Series:
-        """Rows this step annotates: its object type, each object counted once."""
+        """Rows this step annotates: its object type, each object counted once, without
+        objects excluded by object QC (``qc_excluded``)."""
         wanted: pd.Series = objects["object_type"] == str(self.params.object_type)
-        return wanted & unique_rows(objects)
+        return wanted & unique_rows(objects) & ~qc_excluded(objects)
 
 
 def count_fractions(

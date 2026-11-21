@@ -365,8 +365,10 @@ def pipeline_hash(
     layout: dict[tuple[int, int], WellAnnotation] | PlateLayout,
 ) -> str:
     """Identifies what a run's wells contain: image steps, plate, metadata (with overrides)
-    and layout. Table steps are left out: they are recomputed from the tables every time."""
+    and layout. Table steps and QC rules are left out: they are recomputed from the tables
+    every time."""
     data = pipeline.to_dict()
+    data.pop("qc", None)  # QC rules decide exclusions in the tables, not what wells contain
     data["steps"] = [
         step
         for step, parsed in zip(data["steps"], pipeline.steps, strict=True)
@@ -1040,11 +1042,18 @@ def run_pipeline(
         }
         if performance:
             record["performance"] = performance
+        if qc_record:
+            record["image_qc"] = {
+                key: qc_record.get(key)
+                for key in ("passed", "reasons", "fields", "excluded_fields", "failed_wells",
+                            "rules", "seconds")
+            }  # fmt: skip
         write_json(folder / "run_manifest.json", record)
 
     status = "failed"
     performance: dict[str, Any] = {}
     layout_record: dict[str, Any] = {}
+    qc_record: dict[str, Any] = {}
     phase_started = time.monotonic()
     try:
         (folder / "pipeline.yaml").write_text(pipeline.to_yaml(), encoding="utf-8")
@@ -1068,6 +1077,19 @@ def run_pipeline(
                 "total": total,
             }
         )
+        if pipeline.qc is not None:
+            qc_record = image_qc_stage(
+                plate,
+                pipeline.qc,
+                folder,
+                selected,
+                document,
+                emit,
+                cancel,
+                workers=max(1, min(8, workers or (os.cpu_count() or 1))),
+            )
+            if not qc_record.get("passed", True) and pipeline.qc.plate.stop_run:
+                raise QcStop("; ".join(qc_record.get("reasons", [])))
         emit({"type": "status", "text": "Estimating plate-level corrections"})
         fit_started = time.monotonic()
         _fit_or_load(runner, folder, run_hash, cancel)
@@ -1180,12 +1202,17 @@ def run_pipeline(
             tables_s=time.monotonic() - summary_started,
             total_s=time.monotonic() - phase_started,
         )
+        if qc_record:
+            performance["wall_s"]["image_qc"] = qc_record.get("seconds")
         log.info("Performance: %s", json.dumps(performance))
         status = "completed_with_failures" if result.failed_wells else "completed"
     except RunCancelled:
         result.cancelled = True
         status = "cancelled"
         log.warning("Run cancelled by the user")
+    except QcStop as exc:
+        status = "qc_failed"
+        log.warning("Run stopped: the plate failed image QC (%s)", exc)
     except Exception:
         log.exception("Run failed")
         history[-1]["finished"] = datetime.now(UTC).isoformat()
@@ -1443,6 +1470,60 @@ def annotate_run(folder: Path, layout: PlateLayout, source: Path | None = None) 
     manifest["layout"] = {**record, "applied": datetime.now(UTC).isoformat()}
     write_json(manifest_path, manifest)
     return record
+
+
+class QcStop(Exception):
+    """The plate failed image QC and the rules stop the run (``plate.stop_run``)."""
+
+
+def image_qc_stage(
+    plate: Plate,
+    rules: Any,
+    folder: Path,
+    wells: list[tuple[int, int]],
+    layout: PlateLayout,
+    emit: Events,
+    cancel: Any,
+    workers: int,
+) -> dict[str, Any]:
+    """Image QC of the run's wells from the raw data, before any field is processed
+    (Phase 18). Writes ``<run>/qc/``; a resumed run reuses it when the rules are the same."""
+    from hcs_studio.qc.decide import apply_rules
+    from hcs_studio.qc.run import measure_plate, write_qc
+
+    existing = folder / "qc" / "plate_qc.json"
+    if existing.exists():
+        try:
+            previous = json.loads(existing.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            previous = {}
+        if previous.get("rules", {}).get("sha256") == rules.sha256():
+            emit({"type": "status", "text": "Image QC: using the results of the earlier attempt"})
+            return dict(previous)
+    n_fields = sum(len(plate.wells[w].fields) for w in wells)
+    emit({"type": "qc_started", "fields": n_fields})
+    emit({"type": "status", "text": f"Image QC of {n_fields} fields"})
+    started = time.monotonic()
+
+    def progress(done: int, total: int) -> None:
+        if cancel is not None and cancel.is_set():
+            raise RunCancelled
+        if done == total or done % 50 == 0:
+            emit({"type": "status", "text": f"Image QC: {done}/{total} fields"})
+
+    fields = measure_plate(plate, rules, wells, workers=workers, progress=progress)
+    result = apply_rules(fields, rules, layout=layout if layout.wells else None)
+    seconds = round(time.monotonic() - started, 2)
+    write_qc(result, folder, rules, plate=plate, extra={"seconds": seconds})
+    summary = {**result.plate, "rules": rules.describe(), "seconds": seconds}
+    verdict = "passed" if summary["passed"] else "FAILED: " + "; ".join(summary["reasons"])
+    text = (
+        f"Image QC {verdict} — {summary['excluded_fields']} of {summary['fields']} fields "
+        f"excluded, {summary['failed_wells']} wells failed ({seconds:.0f} s)"
+    )
+    emit({"type": "qc_finished", "passed": summary["passed"], "text": text, "summary": summary})
+    emit({"type": "log", "level": "info", "text": text})
+    return summary
 
 
 def _fit_or_load(runner: PipelineRunner, folder: Path, run_hash: str, cancel: Any) -> None:

@@ -132,13 +132,16 @@ def _int(value: Any) -> int | None:
 
 
 def fingerprint(folder: Path) -> str:
-    """Changes when the manifest, the per-well table, the layout or pharmacology change."""
+    """Changes when the manifest, the per-well table, the layout, pharmacology or image QC
+    change."""
     digest = hashlib.sha256()
     files = [
         folder / MANIFEST,
         folder / "tables" / "per_well_summary.csv",
         folder / "plate_layout.json",
         *(folder / "pharmacology" / name for name in PHARM_FILES),
+        folder / "qc" / "plate_qc.json",
+        folder / "qc" / "well_qc.csv",
     ]
     for file in files:
         try:
@@ -244,6 +247,18 @@ def _layout_wells(session: Session, plate: Plate, folder: Path) -> None:
     plate.cell_lines = sorted(lines.values(), key=lambda c: c.name)
 
 
+def _image_qc(folder: Path) -> dict[str, Any]:
+    """The run's image QC summary (``qc/plate_qc.json``), or {}."""
+    path = folder / "qc" / "plate_qc.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    keys = ("passed", "reasons", "fields", "excluded_fields", "wells", "failed_wells",
+            "flag_counts", "compound_flags", "rules")  # fmt: skip
+    return {k: data.get(k) for k in keys}
+
+
 def _well_results(session: Session, run: Run, folder: Path, report: ScanReport) -> int:
     from hcs_studio.io.layout_io import is_annotation_column
     from hcs_studio.readouts import resolve
@@ -257,7 +272,7 @@ def _well_results(session: Session, run: Run, folder: Path, report: ScanReport) 
     numeric = [
         str(c)
         for c in frame.select_dtypes(include=["number", "bool"]).columns
-        if not is_annotation_column(str(c), None)
+        if not is_annotation_column(str(c), None) and str(c) != "qc_failed"
     ]
     readouts = {c: resolve(c, "well") for c in numeric}
     flags = pd.Series("", index=frame.index, dtype=object)
@@ -265,6 +280,8 @@ def _well_results(session: Session, run: Run, folder: Path, report: ScanReport) 
         flags[frame["low_count"].fillna(False).astype(bool)] = "low_count"
     if "fields" in frame:
         flags[frame["fields"].fillna(0) == 0] = "no_fields"
+    if "qc_failed" in frame:
+        flags[frame["qc_failed"].fillna(False).astype(bool)] = "qc_failed"
     if "role" in frame:
         flags[frame["role"].astype(str) == "excluded"] = "excluded"
     report.unregistered |= {c for c, r in readouts.items() if r is None}
@@ -409,6 +426,7 @@ def index_run(session: Session, folder: Path, report: ScanReport, force: bool = 
     run.finished = _parse_time(manifest.get("finished"))
     run.actor = str(manifest.get("actor", ""))
     run.fingerprint = print_
+    run.image_qc = _image_qc(folder)
     run.indexed_at = datetime.now().astimezone()
     if acquisition is not None and acquisition not in run.acquisitions:
         run.acquisitions.append(acquisition)

@@ -32,6 +32,8 @@ DESCRIPTIONS = {
     "qc": "field quality control (focus, saturation) and counts",
     "stitch_well": "stitching of the fields of each well (stage positions refined by phase correlation)",
     "gate_objects": "gating of objects",
+    "object_qc": "object-level QC (robust outliers in size, shape and intensity left out of "
+    "feature statistics)",
     "classify_objects": "classification of objects with a trained classifier",
     "phenotypic_clusters": "phenotypic clustering of objects",
     "spatial_clusters": "spatial statistics (colonies, nearest neighbours, Ripley's H)",
@@ -183,7 +185,18 @@ def pharmacology_text(info: dict[str, Any] | None) -> str:
 def methods_paragraphs(
     manifest: dict[str, Any], pharmacology: dict[str, Any] | None = None
 ) -> list[str]:
-    paragraphs = [acquisition(manifest), "Image processing and analysis steps, in order:"]
+    paragraphs = [acquisition(manifest)]
+    qc = manifest.get("image_qc")
+    if qc:
+        rules = qc.get("rules") or {}
+        paragraphs.append(
+            "Before processing, every field was checked on the raw images (focus, saturation, "
+            "illumination, bubbles, out-of-well imaging, debris and other artifacts) with QC "
+            f"rules '{rules.get('name', '')}' version {rules.get('version', '')}; "
+            f"{qc.get('excluded_fields', 0)} of {qc.get('fields', 0)} fields were excluded and "
+            f"{qc.get('failed_wells', 0)} wells failed QC."
+        )
+    paragraphs.append("Image processing and analysis steps, in order:")
     paragraphs += pipeline_text(manifest)
     analyses = manifest.get("analyses") or []
     if analyses:

@@ -26,6 +26,7 @@ _EMPTY = QColor(225, 225, 225)
 _FILLED = QColor(70, 130, 200)
 _SELECTED = QColor(240, 150, 30)
 _NAN = QColor(200, 204, 210)
+_HATCH = QColor(120, 0, 0)
 _CONTROL = {"negative": QColor(120, 120, 120), "positive": QColor(200, 70, 70)}
 
 
@@ -63,6 +64,10 @@ class _WellItem(QGraphicsEllipseItem):
         # Selection is drawn by the pen (see _restyle), not Qt's dashed rectangle.
         option.state &= ~QStyle.StateFlag.State_Selected
         super().paint(painter, option, widget)
+        if (self.row, self.col) in self._view.hatched:  # failed image QC
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(_HATCH, Qt.BrushStyle.BDiagPattern))
+            painter.drawEllipse(self.rect())
 
 
 class _HeaderItem(QGraphicsSimpleTextItem):
@@ -105,6 +110,13 @@ class PlateMapView(QGraphicsView):
         self._layout: dict[tuple[int, int], WellAnnotation] = {}
         self._fills: dict[tuple[int, int], QColor] | None = None
         self.selected: tuple[int, int] | None = None
+        #: Wells drawn hatched (failed image QC).
+        self.hatched: set[tuple[int, int]] = set()
+
+    def set_hatched(self, wells: set[tuple[int, int]]) -> None:
+        """Hatch these wells (e.g. wells that failed image QC)."""
+        self.hatched = set(wells)
+        self._scene.update()
 
     def set_plate(
         self, plate: Plate | None, layout: dict[tuple[int, int], WellAnnotation] | None = None

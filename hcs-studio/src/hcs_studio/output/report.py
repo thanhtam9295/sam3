@@ -27,6 +27,15 @@ def _round(value: float) -> float | None:
     return float(f"{value:.5g}")
 
 
+def _image_qc_failed(results: RunResults) -> dict[str, str]:
+    """Wells that failed image QC → reason (drawn hatched on the plate map)."""
+    qc = results.image_qc_wells()
+    if qc is None:
+        return {}
+    failed = qc[qc["qc_failed"]]
+    return {str(w): str(r) for w, r in zip(failed.index, failed["qc_reasons"], strict=True)}
+
+
 def report_data(results: RunResults) -> dict[str, Any]:
     readouts = results.readout_columns()
     values = {key: {w: _round(v) for w, v in results.values(key).items()} for key in readouts}
@@ -77,6 +86,7 @@ def report_data(results: RunResults) -> dict[str, Any]:
         "plate": {"name": results.plate_name, "rows": results.rows, "cols": results.cols},
         "pharmacology": pharmacology,
         "links": report_links(results.folder),
+        "image_qc": _image_qc_failed(results),
         "readouts": readouts,
         "readout_labels": {r: readout_label(r) for r in readouts},
         "key_readouts": key_readouts,
@@ -192,6 +202,33 @@ def _text(value: Any) -> str:
     return "–" if value is None else f"{value:.4g}"
 
 
+def image_qc_lines(folder: Path) -> dict[str, Any] | None:
+    """Image QC of a run for the report: the plate decision, failed wells and excluded
+    fields with their reasons (every exclusion is listed)."""
+    import pandas as pd
+
+    qc = Path(folder) / "qc"
+    if not (qc / "plate_qc.json").exists():
+        return None
+    plate = json.loads((qc / "plate_qc.json").read_text(encoding="utf-8"))
+    out: dict[str, Any] = {"plate": plate, "wells": [], "fields": [], "flagged": []}
+    if (qc / "well_qc.csv").exists():
+        wells = pd.read_csv(qc / "well_qc.csv", keep_default_na=False, na_values=[""])
+        for row in wells.to_dict("records"):
+            if row.get("failed"):
+                out["wells"].append((row["well"], row.get("reasons") or ""))
+            compound = [f for f in str(row.get("flags") or "").split(";")
+                        if f in ("autofluorescence", "precipitation")]  # fmt: skip
+            if compound:
+                out["flagged"].append((row["well"], ", ".join(compound)))
+    if (qc / "field_qc.parquet").exists():
+        fields = pd.read_parquet(qc / "field_qc.parquet", columns=["well", "field", "excluded",
+                                                                   "reasons"])  # fmt: skip
+        for row in fields[fields["excluded"]].to_dict("records"):
+            out["fields"].append((row["well"], int(row["field"]), row["reasons"]))
+    return out
+
+
 def write_report(folder: Path) -> Path:
     """Write (or rewrite) ``index.html`` for a run folder; returns its path."""
     from jinja2 import Environment, PackageLoader, select_autoescape
@@ -222,6 +259,7 @@ def write_report(folder: Path) -> Path:
         "(at least ±3, at most ±6)",
         data_json=data_json,
         analysis=analysis_lines(folder),
+        image_qc=image_qc_lines(folder),
     )
     target = folder / "index.html"
     part = target.with_name("index.html.part")

@@ -26,6 +26,7 @@ PAGES = [
     ("figures.md", "Comparison and figures"),
     ("ilastik.md", "ilastik"),
     ("registry.md", "Experiment registry"),
+    ("image_qc.md", "Image QC"),
     ("validation.md", "Validation"),
 ]
 TEMPLATE = """<!doctype html>

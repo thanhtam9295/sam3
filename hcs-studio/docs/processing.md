@@ -275,6 +275,21 @@ Measures every object of the chosen label sets on the linear image (never on con
 | `neighbor_radius_um` | 20.0 | Radius for neighbour counts. |
 | `nucleus_labels` | 'nuclei' | Label set used for nuclear/cytoplasmic ratios of its children. |
 
+## Object QC: outliers (`object_qc`)
+
+Object-level QC: learns the median and robust spread (1.4826 × MAD) of size (log area), shape (solidity) and the mean intensity of the first channel (log) from objects sampled across the plate, and flags objects beyond the robust-Z threshold in any of them (merged cells, fragments, out-of-focus or debris-like objects). Writes `qc_outlier`, `qc_excluded` and `qc_reason` per object and the outlier count and fraction per well. Excluded objects are left out of per-well feature statistics and of later table steps; counts are unchanged. See the Image QC guide.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `features` | [] | Features to check; empty = area (or volume), solidity and the mean intensity of the first channel. |
+| `threshold` | 5.0 | Robust Z beyond which an object is an outlier. |
+| `exclude` | True | Leave outliers out of per-well feature statistics. |
+| `max_fit_objects` | 200000 |  |
+| `seed` | 0 |  |
+
 ## Pharmacology: dose–response and synergy (`pharmacology`)
 
 Normalizes per-well readouts per plate and cell line (% of control, % inhibition or GR), checks plate QC (Z′, SSMD, CVs), fits dose–response curves (4PL/5PL/3PL in GraphPad Prism's form) and scores combination matrices (Bliss, HSA, Loewe, ZIP). Writes `pharmacology/` (tables, figures, HTML and PDF report) and adds curves and heat maps to `index.html`. Methods: docs/pharmacology.md.

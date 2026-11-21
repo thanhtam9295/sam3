@@ -120,12 +120,35 @@ def load_wells(folders: Iterable[Path]) -> pd.DataFrame:
         if plate in names:  # the same plate name in two runs: keep them apart
             plate = f"{plate} ({Path(folder).name})"
         names.add(plate)
-        frames.append(
-            wells_table(results.summary, results.layout_document, plate, Path(folder).name)
-        )
+        frame = wells_table(results.summary, results.layout_document, plate, Path(folder).name)
+        frames.append(with_image_qc(frame, Path(folder)))
     if not frames:
         raise ValueError("No runs given")
     return pd.concat(frames, ignore_index=True)
+
+
+def with_image_qc(frame: pd.DataFrame, folder: Path) -> pd.DataFrame:
+    """Add the run's image QC per well (``qc/well_qc.csv``, Phase 18): ``qc_failed`` wells are
+    left out of fits and control levels; ``qc_flags`` (e.g. precipitation) are reported."""
+    from hcs_studio.output.tables import image_qc_wells
+
+    out = frame.drop(columns=["qc_failed", "qc_flags", "qc_reasons"], errors="ignore")
+    qc = image_qc_wells(folder)
+    if qc is None:
+        out["qc_failed"] = False
+        out["qc_flags"] = ""
+        out["qc_reasons"] = ""
+        return out
+    out = out.merge(qc, on="well", how="left")
+    out["qc_failed"] = out["qc_failed"].fillna(False).astype(bool)
+    out[["qc_flags", "qc_reasons"]] = out[["qc_flags", "qc_reasons"]].fillna("")
+    return out
+
+
+def _qc_failed(frame: pd.DataFrame) -> pd.Series:
+    if "qc_failed" not in frame:
+        return pd.Series(False, index=frame.index)
+    return frame["qc_failed"].fillna(False).astype(bool)
 
 
 def readout_choices(wells: pd.DataFrame) -> list[str]:
@@ -185,8 +208,18 @@ def normalize(wells: pd.DataFrame, readout: str, options: Normalization) -> Norm
     control_rows = []
     normalized = pd.Series(np.nan, index=frame.index)
     gi = pd.Series(np.nan, index=frame.index)
+    # controls that failed image QC do not set the control levels (unless all of them failed)
+    failed = _qc_failed(frame)
     vehicle = _is_vehicle(frame)
     positive = frame["role"] == "positive_control"
+    if (vehicle & failed).any() and (vehicle & ~failed).any():
+        notes.append(f"{int((vehicle & failed).sum())} vehicle well(s) failed image QC: not used")
+        vehicle = vehicle & ~failed
+    if (positive & failed).any() and (positive & ~failed).any():
+        notes.append(
+            f"{int((positive & failed).sum())} positive-control well(s) failed image QC: not used"
+        )
+        positive = positive & ~failed
     for plate, plate_frame in frame.groupby("plate"):
         plate_vehicle = plate_frame[vehicle.loc[plate_frame.index]]
         plate_positive = plate_frame[positive.loc[plate_frame.index]]
@@ -332,6 +365,13 @@ def exclude_outliers(
             frame.loc[index, "exclusion_reason"] = (
                 f"outside median ± {mad_threshold:g} MAD of its replicates"
             )
+    failed = _qc_failed(frame)
+    if failed.any():
+        reasons = frame.get("qc_reasons", pd.Series("", index=frame.index)).fillna("")
+        frame.loc[failed, "excluded"] = True
+        frame.loc[failed, "exclusion_reason"] = [
+            f"image QC: {r}" if r else "image QC" for r in reasons[failed]
+        ]
     for plate, well in manual:
         hit = (frame["plate"] == plate) & (frame["well"] == well)
         frame.loc[hit, "excluded"] = True

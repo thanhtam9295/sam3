@@ -115,6 +115,13 @@ NOTES = {
     "gate_objects": "Marks objects of one type whose features lie inside thresholds (min "
     "and/or max per feature, all or any rule), e.g. drawn on a histogram or scatter plot in "
     "the Classify panel. Writes `gate_<name>` per object and the count and fraction per well.",
+    "object_qc": "Object-level QC: learns the median and robust spread (1.4826 × MAD) of size "
+    "(log area), shape (solidity) and the mean intensity of the first channel (log) from "
+    "objects sampled across the plate, and flags objects beyond the robust-Z threshold in any "
+    "of them (merged cells, fragments, out-of-focus or debris-like objects). Writes "
+    "`qc_outlier`, `qc_excluded` and `qc_reason` per object and the outlier count and "
+    "fraction per well. Excluded objects are left out of per-well feature statistics and of "
+    "later table steps; counts are unchanged. See the Image QC guide.",
     "classify_objects": "Applies an object classifier trained in the Classify panel (or with "
     "`hcs-studio train-classifier`) on example objects: random forest or histogram gradient "
     "boosting on the measured features. With `plate_robust_z` normalisation each plate's "

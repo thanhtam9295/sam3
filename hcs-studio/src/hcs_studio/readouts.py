@@ -437,6 +437,26 @@ def _builtin() -> list[ReadoutSpec]:
         ),
         # table steps (Phase 8)
         ReadoutSpec(
+            "qc_{labels}_outlier_count",
+            "{labels}: QC outliers",
+            "objects",
+            w,
+            "down",
+            "none",
+            "objects flagged by object QC (likely segmentation errors)",
+            "object_qc",
+        ),
+        ReadoutSpec(
+            "qc_{labels}_outlier_fraction",
+            "{labels}: QC outlier fraction",
+            "fraction",
+            w,
+            "down",
+            "none",
+            "fraction of objects flagged by object QC",
+            "object_qc",
+        ),
+        ReadoutSpec(
             "gate_{name}_count",
             "gate {name}: count",
             "objects",

@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from hcs_studio.gui.param_form import ParamForm, format_errors
 from hcs_studio.pipeline.schema import Pipeline, PipelineStep
 from hcs_studio.processing.base import MODULES, ImageData, load_builtin_modules
+from hcs_studio.qc.rules import QcRules, default_rules, load_rules
 
 DISPLAY_ONLY_NOTICE = (
     "Steps marked ◐ change intensities non-linearly. Their output is for viewing and "
@@ -51,6 +52,18 @@ class PipelinePanel(QWidget):
         self._loading = False
 
         self.name_edit = QLineEdit("pipeline")
+        #: Image QC rules of the pipeline (Phase 18); kept when the pipeline is edited.
+        self.qc_rules: QcRules | None = None
+        self.qc_check = QCheckBox("Image QC before processing")
+        self.qc_check.setToolTip(
+            "Check every field of the raw plate (focus, saturation, bubbles, debris …) before "
+            "segmentation; excluded fields and failed wells are left out of the results."
+        )
+        self.qc_check.toggled.connect(self._toggle_qc)
+        self.qc_rules_button = QPushButton("QC rules…")
+        self.qc_rules_button.setToolTip("Load a QC rules file (YAML); see the Image QC guide.")
+        self.qc_rules_button.clicked.connect(self._choose_qc_rules)
+        self.qc_label = QLabel("")
         self.steps = QListWidget()
         self.steps.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.steps.setToolTip("Drag steps to reorder them; untick a step to skip it.")
@@ -138,6 +151,7 @@ class PipelinePanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.addLayout(row(QLabel("Name"), self.name_edit, self.load_button, self.save_button))
+        layout.addLayout(row(self.qc_check, self.qc_rules_button, self.qc_label))
         layout.addWidget(self.steps, 2)
         layout.addLayout(row(self.module_combo, self.add_button))
         layout.addLayout(row(self.remove_button, self.up_button, self.down_button))
@@ -269,12 +283,37 @@ class PipelinePanel(QWidget):
             return Pipeline(
                 name=self.name_edit.text().strip() or "pipeline",
                 steps=[PipelineStep(**step) for step in steps],
+                qc=self.qc_rules if self.qc_check.isChecked() else None,
             )
         except ValidationError as exc:
             raise ValueError(format_errors(exc)) from None
 
+    def set_qc_rules(self, rules: QcRules | None) -> None:
+        """Turn image QC on with these rules (None = off)."""
+        self.qc_rules = rules
+        if rules is not None:
+            self._last_qc_rules = rules
+        self.qc_check.blockSignals(True)
+        self.qc_check.setChecked(rules is not None)
+        self.qc_check.blockSignals(False)
+        self.qc_label.setText(f"{rules.name} v{rules.version}" if rules is not None else "")
+
+    def _toggle_qc(self, on: bool) -> None:
+        last = getattr(self, "_last_qc_rules", None)
+        self.set_qc_rules((last or default_rules()) if on else None)
+
+    def _choose_qc_rules(self) -> None:
+        file, _ = QFileDialog.getOpenFileName(self, "QC rules", "", "YAML (*.yaml *.yml)")
+        if not file:
+            return
+        try:
+            self.set_qc_rules(load_rules(Path(file)))
+        except (OSError, ValueError) as exc:
+            self.error.setText(f"QC rules: {exc}")
+
     def set_pipeline(self, pipeline: Pipeline) -> None:
         self.name_edit.setText(pipeline.name)
+        self.set_qc_rules(pipeline.qc)
         self._steps = [step.model_dump() for step in pipeline.steps]
         self._rebuild()
         self.error.setText("")

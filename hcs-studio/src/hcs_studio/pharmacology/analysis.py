@@ -155,8 +155,19 @@ def fit_single_agents(data: Normalized, options: PharmOptions) -> list[CurveResu
                 "well": group["well"].to_numpy(str),
             }
         )
+        if "qc_flags" in group:
+            points["qc_flags"] = group["qc_flags"].fillna("").astype(str).to_numpy()
         used = points[~points["excluded"]]
         fit = fit_curve(used["conc"], used["normalized"], **_curve_kwargs(options))
+        for artifact in ("autofluorescence", "precipitation"):
+            hits = points[points.get("qc_flags", pd.Series("", index=points.index)).str.contains(
+                artifact, regex=False
+            )]  # fmt: skip
+            if len(hits):
+                lowest = float(hits["conc"].min())
+                fit.flags.append(
+                    f"image QC: {artifact} in {len(hits)} well(s), from {lowest:.3g} M"
+                )
         levels, means, _, _ = concentration_means(used["conc"], used["normalized"])
         _, effect_means, _, _ = concentration_means(used["conc"], used["effect"])
         if method == "percent_inhibition":

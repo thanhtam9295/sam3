@@ -635,6 +635,13 @@ cell lines. Runs enter it with **Scan folder…** (or `hcs-studio db scan`); sca
 reads and can be repeated. Data roots let every computer find the same files; every change
 is recorded with who made it and why. Details: [registry.md](registry.md).
 
+## Image QC
+
+`hcs-studio qc <plate> --output <folder>` checks every field of a plate from the raw images
+(focus, saturation, background, illumination gradient, bubbles, out-of-well imaging, debris,
+fibers, scratches, empty fields, autofocus failures), applies a versioned rules file, and
+writes field flags and well / plate decisions to `qc/`. Details: [image_qc.md](image_qc.md).
+
 ## ilastik
 
 Projects trained in ilastik (`.ilp`) will run as pipeline steps, like Cellpose and SAM 3.

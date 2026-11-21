@@ -241,6 +241,50 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Automatic image QC (Phase 18a)
+
+Labeled synthetic plate (`synthetic.artifacts.qc_plate`): 256 × 256 px fields with 70–140
+nuclei, background 100, noise SD 5; artifacts drawn with known positions: blur (Gaussian
+σ 2–3 px), saturation (half the nuclei at the 16-bit maximum), bubble (dark disc of 15–22 %
+of the field width with a bright rim), debris (bright irregular blob of 300–600 px), empty
+field, gradient (illumination 1.0 → 0.3 across the field), out-of-well (dark region beyond
+an arc covering 25–40 % of the field), scratch (cell-free band 22–30 % of the field wide) and
+fiber (thin bright line). Default rules, nucleus diameter 4.55 µm.
+
+| Check | Result | Test |
+|---|---|---|
+| Each artifact class: sensitivity (≥ 95 % required) and false positives on clean fields (≤ 5 %) | CI plate (20 fields per class, 102 clean): 100 % for every class, 0 % false positives per class (1 clean field carried the informational background flag, not excluded). Second plate (seed 7, 40 per class, 204 clean): 100 % for all classes except scratch 97.5 %; 0 % false positives | `test_each_artifact_class_is_detected_with_few_false_positives` |
+| Exclusions | blur, saturation, bubble and out-of-well fields excluded, with reasons and severity; gradient, debris, fiber, scratch and empty fields flagged only | `test_decisions_and_files` |
+| PLLS and Laplacian focus | blurring a field lowers both; constant image → NaN | `test_plls_follows_the_cellprofiler_definition_and_falls_with_blur` |
+| Saturation level | 12-bit metadata → 4095; a 12-bit camera in a 16-bit container recognised by its maximum | `test_saturation_level_uses_metadata_or_a_camera_maximum` |
+| Autofocus | best plane following a tilt across the plate is not flagged; two wells 4 planes off are | `test_plate_relative_conditions_and_autofocus_trend` |
+| Well and plate decisions | too few good fields, failed controls, Z′ below the limit | `test_well_and_plate_decisions` |
+| Speed | about 0.12 s per 256 × 256 two-channel field on one CPU thread; 564 fields in 34 s with 4 threads; 3.5 s per 2048 × 2048 two-channel field on one thread (after replacing a large dilation by a distance transform: was 17.8 s) | — |
+
+The PLLS follows CellProfiler's definition (`centrosome.radial_power_spectrum.rps`, source read
+2026-11-21): the image divided by its median absolute deviation from the mean, FFT power
+summed in rings of radius 2 … min(H, W)/8, least-squares slope of log power on log radius.
+The object ellipse axes used for debris and fibers equal scikit-image `regionprops` values
+(checked to 1e-12).
+
+### Step 18b: QC in runs, object QC, compound artifacts, propagation
+
+| Check | Result | Test |
+|---|---|---|
+| QC before segmentation | in a run with QC rules, `qc_finished` precedes the first `well_started`; blur and bubble fields excluded from counts and object statistics; the report lists them with reasons | `test_qc_runs_before_segmentation_and_excludes_fields` |
+| 384-well plate in the job queue (done-when) | QC of 384 fields (80 × 80 px) finishes in a real queue job before segmentation starts; the two blurred wells' fields are excluded; QC took 15 s of a 41 s run (2 workers) | `test_qc_of_a_384_well_plate_runs_in_the_queue_before_segmentation` |
+| Fail fast | a plate that fails QC with `stop_run` stops before processing (status `qc_failed`) | `test_a_plate_that_fails_qc_can_stop_the_run` |
+| Excluded wells and IC50 fits (done-when) | three Drug D wells at 10 and 3.3 µM with corrupted readouts: with image QC their EC50 equals the fit with the wells excluded by hand (to 1e-6) and differs from the corrupted fit by > 0.1 log; the wells are hollow, listed in `excluded_wells.csv` and the HTML report with "image QC: …" | `test_wells_failing_image_qc_leave_ic50_fits_and_are_listed` |
+| Control levels | a QC-failed vehicle well is left out of the vehicle median (with a note) | `test_failed_controls_do_not_set_control_levels` |
+| Object QC | of 400 nuclei, a merged object (5× area, solidity 0.7), a fragment (1/10 area) and a 20× bright object are flagged (≤ 5 flagged in all); statistics without them | `test_object_qc_flags_merged_cells_and_fragments` |
+| Compound artifacts | autofluorescence rising with dose in channel 2 flags the high doses of that compound only; precipitation (brightfield particles at ≥ 3 µM) flags that compound's top doses; a clean compound and the controls are not flagged | `test_compound_autofluorescence_and_precipitation_follow_the_dose` |
+| Registry | run QC summary stored; QC-failed wells flagged `qc_failed` and left out of cross-run queries | `test_registry_keeps_the_run_qc_and_skips_failed_wells` |
+
+Not yet checked: real bad and good fields (thresholds were set on synthetic artifacts;
+20–50 bad fields with reasons and ~50 good fields per instrument are needed to tune them);
+speed on full-size fields (2048² and larger, 4 channels); bubbles and out-of-well regions in
+brightfield or phase contrast.
+
 ## Assay monitoring (Phase 17c)
 
 | Check | Result | Test |

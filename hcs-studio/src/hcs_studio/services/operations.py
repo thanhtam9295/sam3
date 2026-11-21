@@ -196,6 +196,29 @@ def run_profiling(
     return result
 
 
+# ---------------------------------------------------------------- image QC
+
+
+@service("qc.run", object_type="plate")
+def run_image_qc(ctx: ServiceContext, plate: Plate, rules: Any, output: Path, **kwargs: Any) -> Any:
+    """Image QC of a plate from raw data; writes ``<output>/qc/`` (Phase 18)."""
+    from hcs_studio.qc.run import run_qc
+
+    result = run_qc(plate, rules, Path(output), **kwargs)
+    ctx.note(
+        object_id=object_id(plate.path),
+        after={
+            "output": object_id(output),
+            "rules": rules.describe(),
+            "passed": result.plate["passed"],
+            "fields": result.plate["fields"],
+            "excluded_fields": result.plate["excluded_fields"],
+            "failed_wells": result.plate["failed_wells"],
+        },
+    )
+    return result
+
+
 # -------------------------------------------------------------------- models
 
 

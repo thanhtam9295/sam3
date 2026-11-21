@@ -354,6 +354,13 @@ class RunResults:
             )
         return result
 
+    def image_qc_wells(self) -> pd.DataFrame | None:
+        """Image QC per well (``qc/well_qc.csv``), indexed by well; None without QC."""
+        from hcs_studio.output.tables import image_qc_wells
+
+        qc = image_qc_wells(self.folder)
+        return qc.set_index("well") if qc is not None else None
+
     def well_flags(self, well: str) -> list[str]:
         """QC flags of a well, as short phrases."""
         flags = []
@@ -369,6 +376,18 @@ class RunResults:
                     flags.append(f"{count} {text}{'s' if count > 1 else ''}")
             if "low_count_well" in rows and bool(rows["low_count_well"].any()):
                 flags.append("low count")
+            if "image_qc_excluded" in rows:
+                for _, row in rows[rows["image_qc_excluded"].astype(bool)].iterrows():
+                    flags.append(f"field {int(row['field'])} excluded by image QC: "
+                                 f"{row.get('image_qc_reasons', '')}")  # fmt: skip
+        qc = self.image_qc_wells()
+        if qc is not None and well in qc.index:
+            entry = qc.loc[well]
+            if bool(entry["qc_failed"]):
+                flags.append(f"well failed image QC: {entry['qc_reasons']}")
+            compound = [f for f in str(entry["qc_flags"]).split(";")
+                        if f in ("autofluorescence", "precipitation")]  # fmt: skip
+            flags.extend(f"image QC: {f}" for f in compound)
         error = self.well_summary(well).get("error") if well in self.wells else None
         if error:
             flags.append(f"failed: {error}")

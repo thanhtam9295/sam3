@@ -10,6 +10,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from hcs_studio.processing.base import MODULES, Module, load_builtin_modules
+from hcs_studio.qc.rules import QcRules
 
 FORMAT_VERSION = 1
 
@@ -53,6 +54,8 @@ class Pipeline(BaseModel):
     name: str = Field(default="pipeline", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$", max_length=60)
     format_version: int = FORMAT_VERSION
     steps: list[PipelineStep] = Field(default_factory=list)
+    #: Image QC rules: QC runs on the raw images before any field is processed (Phase 18).
+    qc: QcRules | None = None
 
     @model_validator(mode="after")
     def _check(self) -> Pipeline:
@@ -80,7 +83,10 @@ class Pipeline(BaseModel):
         return [s for s in self.enabled_steps() if s.is_run_step()]
 
     def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")
+        data = self.model_dump(mode="json")
+        if data.get("qc") is None:
+            data.pop("qc", None)  # pipelines without QC stay as they were
+        return data
 
     def to_yaml(self) -> str:
         return yaml.safe_dump(self.to_dict(), sort_keys=False, allow_unicode=True)

@@ -135,6 +135,7 @@ WRAPPED = {
     "hcs_studio.analysis.classifier": {"save_classifier"},
     "hcs_studio.segmentation.cellpose_backend": {"fine_tune"},
     "hcs_studio.analysis.profiling": {"run_profiling"},
+    "hcs_studio.qc.run": {"run_qc"},
 }
 ALLOWED = {
     # read-only exploration (write=False) is not a change

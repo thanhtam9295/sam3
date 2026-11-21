@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### Phase 18b — image QC in runs, object QC, compound artifacts, exclusions everywhere
+- Pipelines carry QC rules (`qc:` section; pipeline panel: **Image QC before processing**,
+  **QC rules…**). Runs check every field from the raw images before fitting and
+  segmentation (also in the job queue; events `qc_started` / `qc_finished`), write
+  `<run>/qc/`, record the outcome in the manifest and performance, reuse QC on resume, and
+  can stop a failing plate (`plate.stop_run`, status `qc_failed`). QC rules are not part of
+  the pipeline hash.
+- Exclusions propagate: excluded fields leave counts and statistics (`qc_flags.csv` →
+  `image_qc_*`); per-well `qc_failed`, `qc_flags`, `qc_reasons`; pharmacology leaves failed
+  wells out of fits (hollow points, "image QC: …" reasons) and control levels; failed wells
+  hatched on the Results plate map and in `index.html`; reports list every exclusion; the
+  methods text states the QC rules.
+- Object-level QC table step `object_qc` (robust outliers in size, shape, intensity →
+  `qc_outlier`, `qc_excluded`, `qc_reason`; left out of statistics and later table steps).
+- Compound artifacts: autofluorescence (background rising with dose) and precipitation
+  (brightfield `particle_fraction` at the top doses), flagged per well and on curves.
+- Registry: `run.image_qc` (migration 0004); QC-failed wells (`qc_flag = qc_failed`) are left
+  out of cross-run queries. QC metrics 5× faster on large fields.
+
+### Phase 18a — automatic image QC: field metrics, rules and decisions
+- `qc/` (headless): field metrics on raw data — focus (power log-log slope as in CellProfiler,
+  normalized variance, Laplacian variance), saturation (detector maximum from metadata or a
+  recognised camera maximum), background and percentiles, illumination gradient (robust
+  surface), objects and area, cell-free gaps, debris, fibers, bubbles, out-of-well regions,
+  best-focus plane against the plate trend.
+- Versioned YAML rules (`hcs-studio-qc-rules/1`): absolute and plate-relative conditions
+  (robust Z, ratio to the plate median), field exclusion, well decisions (good fields, cells)
+  and plate decisions (failed wells, failed controls, Z′). Outputs `qc/field_qc.parquet`,
+  `qc/well_qc.csv`, `qc/plate_qc.json`, `qc/rules.yaml`.
+- `hcs-studio qc` (recorded as `qc.run`); labeled synthetic artifact plates
+  (`synthetic.artifacts`). Docs: image_qc.md, validation.md.
+
 ### Phase 17c — assay monitoring
 - `monitoring/` (headless): Levey–Jennings **control charts** with configurable rules
   (`1_3s`, `2of3_2s`, `7x`, `6t` and general forms), limits from a baseline of runs, and

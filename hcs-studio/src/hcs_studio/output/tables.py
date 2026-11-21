@@ -129,7 +129,7 @@ _SKIP_STATS = {
     "well_x_um",
     "well_y_um",
 }
-_LABEL_PREFIXES = ("centroid_", "gate_", "class_", "cluster_", "spatial_")
+_LABEL_PREFIXES = ("centroid_", "gate_", "class_", "cluster_", "spatial_", "qc_")
 
 
 def object_statistics(
@@ -153,6 +153,12 @@ def object_statistics(
     duplicate = objects.get("in_overlap_duplicate")
     if duplicate is not None:
         objects = objects[~duplicate.fillna(False).astype(bool)]
+        # stitched wells: counts of unique objects (object QC does not change counts)
+        sizes = objects.groupby(["well", "object_type"]).size()
+        for key, size in zip(sizes.index.tolist(), sizes.tolist(), strict=True):
+            unique_counts[(str(key[0]), str(key[1]))] = int(size)
+    if "qc_excluded" in objects:  # object QC outliers: out of the feature statistics
+        objects = objects[~objects["qc_excluded"].fillna(False).astype(bool)]
     numeric = [
         c
         for c in objects.select_dtypes("number").columns
@@ -162,8 +168,6 @@ def object_statistics(
         well, kind = str(keys[0]), str(keys[1])
         row = rows.setdefault(well, {"well": well})
         row[f"{kind}_objects_measured"] = len(group)
-        if duplicate is not None:
-            unique_counts[(well, kind)] = len(group)
         stats = group[numeric].agg(["mean", "median", "std"])
         for column in numeric:
             if group[column].notna().any():
@@ -182,6 +186,52 @@ def coloc_statistics(coloc: pd.DataFrame) -> dict[str, dict[str, Any]]:
             if metric in group:
                 row[f"coloc_{a}_{b}_{metric}_median"] = float(group[metric].median())
     return rows
+
+
+def merge_image_qc(flags: pd.DataFrame, folder: Path) -> pd.DataFrame:
+    """Field exclusions of image QC (``qc/field_qc.parquet``, Phase 18) joined to the field
+    flags: ``image_qc_excluded``, ``image_qc_flags``, ``image_qc_reasons``; excluded fields
+    are left out of counts and statistics like out-of-focus fields."""
+    path = Path(folder) / "qc" / "field_qc.parquet"
+    if not path.exists():
+        return flags
+    qc = pd.read_parquet(path, columns=["well", "field", "excluded", "flags", "reasons"])
+    qc = qc.rename(
+        columns={
+            "excluded": "image_qc_excluded",
+            "flags": "image_qc_flags",
+            "reasons": "image_qc_reasons",
+        }
+    )
+    qc["well"] = qc["well"].astype(str)
+    qc["field"] = qc["field"].astype(int)
+    out = flags.drop(columns=[c for c in qc.columns if c.startswith("image_qc")], errors="ignore")
+    out = out.merge(qc, on=["well", "field"], how="left")
+    out["image_qc_excluded"] = out["image_qc_excluded"].fillna(False).astype(bool)
+    out["image_qc_flags"] = out["image_qc_flags"].fillna("")
+    out["image_qc_reasons"] = out["image_qc_reasons"].fillna("")
+    out["excluded"] = out["excluded"].astype(bool) | out["image_qc_excluded"]
+    return out
+
+
+#: Per-well image QC columns of ``per_well_summary.csv``.
+IMAGE_QC_COLUMNS = ("qc_failed", "qc_flags", "qc_reasons")
+
+
+def image_qc_wells(folder: Path) -> pd.DataFrame | None:
+    """``qc/well_qc.csv`` as ``well``, ``qc_failed``, ``qc_flags``, ``qc_reasons``."""
+    path = Path(folder) / "qc" / "well_qc.csv"
+    if not path.exists():
+        return None
+    wells = pd.read_csv(path, keep_default_na=False, na_values=[""])
+    return pd.DataFrame(
+        {
+            "well": wells["well"].astype(str),
+            "qc_failed": wells["failed"].astype(bool),
+            "qc_flags": wells.get("flags", pd.Series("", index=wells.index)).fillna(""),
+            "qc_reasons": wells.get("reasons", pd.Series("", index=wells.index)).fillna(""),
+        }
+    )
 
 
 def _excluded_fields(flags: pd.DataFrame | None) -> set[tuple[str, int]]:
@@ -297,7 +347,7 @@ def aggregate_run(
     fields = pd.concat(fields_parts, ignore_index=True) if fields_parts else None  # 1 row/field
     flags = None
     if fields is not None:
-        flags = qc_flags(fields, params)
+        flags = merge_image_qc(qc_flags(fields, params), folder)
         fields.to_csv(tables / "per_field.csv", index=False)
     # Objects and colocalization rows are summarised one well at a time (plates can hold
     # 10⁷ objects); coloc_all.csv is written by appending.
@@ -349,6 +399,12 @@ def aggregate_run(
             summary = summary.merge(extra, on="well", how="left")
             front = ["well", *[c for c in extra.columns if c != "well"]]
             summary = summary[front + [c for c in summary.columns if c not in front]]
+    image_qc = image_qc_wells(folder)
+    if image_qc is not None and not summary.empty:
+        summary = summary.drop(columns=list(IMAGE_QC_COLUMNS), errors="ignore")
+        summary = summary.merge(image_qc, on="well", how="left")
+        summary["qc_failed"] = summary["qc_failed"].fillna(False).astype(bool)
+        summary[["qc_flags", "qc_reasons"]] = summary[["qc_flags", "qc_reasons"]].fillna("")
     if flags is not None:
         well_flags = summary.set_index("well")["low_count"] if "low_count" in summary else None
         flags["low_count_well"] = flags.well.map(well_flags) if well_flags is not None else False

@@ -367,7 +367,7 @@ def readout_over_time(
         .join(Plate, Plate.id == Run.plate_id)
         .join(PlateWell, (PlateWell.plate_id == Plate.id) & (PlateWell.well == WellResult.well))
         .where(WellResult.readout_id == readout)
-        .where(WellResult.qc_flag != "excluded")
+        .where(WellResult.qc_flag.notin_(("excluded", "qc_failed")))
     )
     if cell_line:
         stmt = stmt.where(PlateWell.cell_line == cell_line)

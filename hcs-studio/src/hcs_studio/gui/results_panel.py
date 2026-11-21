@@ -395,6 +395,13 @@ class ResultsPanel(QWidget):
             hi = lo + 1
         stops = DIVERGING if z else VIRIDIS
         fills, tips = {}, {}
+        image_qc = self.results.image_qc_wells()
+        failed = (
+            {str(w): str(r) for w, r in image_qc.loc[image_qc["qc_failed"], "qc_reasons"].items()}
+            if image_qc is not None
+            else {}
+        )
+        self.plate.set_hatched({parse_well_name(w) for w in failed})
         for well, value in self.values.items():
             key = parse_well_name(well)
             if math.isfinite(value):
@@ -404,6 +411,8 @@ class ResultsPanel(QWidget):
             extra = ""
             if annotation:
                 extra = "\n" + annotation.label()
+            if well in failed:
+                extra += f"\nfailed image QC: {failed[well]}"
             tips[key] = f"{well}: {fmt(raw)}" + (f" (Z {fmt(value)})" if z else "") + extra
         self.plate.set_fills(fills, tips)
         self._draw_colorbar(stops)

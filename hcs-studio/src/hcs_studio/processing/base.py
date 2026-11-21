@@ -258,6 +258,7 @@ def load_builtin_modules() -> None:
         flatfield,
         projection,
     )
+    from hcs_studio.qc import objects as _object_qc  # noqa: F401
     from hcs_studio.segmentation import (  # noqa: F401
         cellpose_backend,
         classical,

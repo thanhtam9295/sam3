@@ -85,6 +85,7 @@ Rows of other object types, and overlap duplicates, are empty.
 | `spatial_nn_um` | spatial | distance to the nearest object |
 | `spatial_voronoi_area_um2`, `spatial_local_density_per_mm2` | spatial | Voronoi cell area and its inverse; empty at the edge of the imaged area |
 | `spatial_delaunay_neighbours` | spatial | Delaunay neighbours; empty at the edge |
+| `qc_outlier`, `qc_excluded`, `qc_reason` | object QC | likely segmentation error; left out of statistics; which features (see Image QC) |
 
 ## Profiles (`advanced/`, Phase 9)
 
@@ -115,11 +116,15 @@ for every numeric feature `<label set>_<feature>_mean / _median / _std`, plus th
 of each colocalization statistic per channel pair. In stitched wells, counts include each
 object once and the area is that of the fields together (overlaps once).
 
+With image QC (Phase 18), fields excluded by QC count as excluded fields, and each well has
+`qc_failed`, `qc_flags` and `qc_reasons` (see the Image QC guide).
+
 Table steps add:
 
 | Column | Meaning |
 |---|---|
 | `gate_<name>_count`, `_fraction` | objects inside the gate, and their fraction |
+| `qc_<type>_outlier_count`, `_fraction` | objects flagged by object QC |
 | `class_<name>_<class>_count`, `_fraction` | objects per class |
 | `cluster_<name>_<k>_count`, `_fraction` | objects per cluster (`noise` for -1) |
 | `spatial_objects`, `spatial_density_per_mm2` | objects analysed and their density in the imaged area |

@@ -221,6 +221,8 @@ class Run(Base):
     actor: Mapped[str] = mapped_column(String(256), default="")
     fingerprint: Mapped[str] = mapped_column(String(64), default="")  # what was indexed
     indexed_at: Mapped[datetime] = mapped_column(default=utcnow)
+    #: Image QC of the run (Phase 18): passed, reasons, counts, rules; empty without QC.
+    image_qc: Mapped[dict[str, Any]] = mapped_column(default=dict)
     plate: Mapped[Plate | None] = relationship(back_populates="runs")
     acquisitions: Mapped[list[Acquisition]] = relationship(secondary=run_acquisition)
 

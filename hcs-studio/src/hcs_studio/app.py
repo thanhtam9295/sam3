@@ -189,6 +189,17 @@ def build_parser() -> argparse.ArgumentParser:
     ilastik_cmd.add_argument(
         "--save", action="store_true", help="save the given settings (and the paths found)"
     )
+    qc_cmd = sub.add_parser(
+        "qc", help="image QC of a plate from raw data (focus, saturation, artifacts …)"
+    )
+    qc_cmd.add_argument("input", nargs="?", type=Path, help="raw plate (folder or file)")
+    qc_cmd.add_argument("--output", type=Path, help="folder that receives qc/ (not in raw data)")
+    qc_cmd.add_argument("--rules", type=Path, help="QC rules YAML (default: the shipped rules)")
+    qc_cmd.add_argument("--wells", default="all", help="e.g. A01-H12 or A01,B03")
+    qc_cmd.add_argument("--workers", type=int, default=4, help="threads reading fields")
+    qc_cmd.add_argument("--write-rules", type=Path, help="write the default rules here and exit")
+    qc_cmd.add_argument("--reason", default="", help="why (recorded)")
+
     selftest = sub.add_parser(
         "selftest", help="check this installation on a small synthetic plate (about a minute)"
     )
@@ -455,6 +466,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "analyze":
         return _analyze(args)
+    if args.command == "qc":
+        return _qc(args)
     if args.command == "annotate":
         return _annotate(args)
     if args.command == "layout":
@@ -672,6 +685,47 @@ def _run_jobs(
         if result.failed_wells:
             code = max(code, 1)
     return code
+
+
+def _qc(args: argparse.Namespace) -> int:
+    from hcs_studio.io.base import open_plate
+    from hcs_studio.pipeline.executor import parse_wells
+    from hcs_studio.qc.rules import default_rules, load_rules, save_rules
+    from hcs_studio.services.operations import run_image_qc
+
+    try:
+        rules = load_rules(args.rules) if args.rules else default_rules()
+        if args.write_rules:
+            print(f"Rules: {save_rules(rules, args.write_rules)}")
+            return 0
+        if args.input is None or args.output is None:
+            print("Error: give a plate and --output (or --write-rules)")
+            return 2
+        plate = open_plate(args.input)
+        wells = parse_wells(args.wells, plate)
+
+        def progress(done: int, total: int) -> None:
+            if done == total or done % 50 == 0:
+                print(f"  {done}/{total} fields", flush=True)
+
+        result = run_image_qc(
+            _ctx(args), plate, rules, args.output, wells=wells, workers=args.workers,
+            progress=progress,
+        )  # fmt: skip
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    summary = result.plate
+    print(f"Fields: {summary['fields']}, excluded {summary['excluded_fields']}")
+    for flag, count in summary["flag_counts"].items():
+        if count:
+            print(f"  {flag}: {count}")
+    print(f"Wells failed: {summary['failed_wells']} of {summary['wells']}")
+    print(
+        "Plate: " + ("passed" if summary["passed"] else "FAILED — " + "; ".join(summary["reasons"]))
+    )
+    print(f"Files: {Path(args.output) / 'qc'}")
+    return 0 if summary["passed"] else 1
 
 
 def _analyze(args: argparse.Namespace) -> int:

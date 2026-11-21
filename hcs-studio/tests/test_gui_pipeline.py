@@ -214,3 +214,25 @@ def test_live_preview_and_failures(window: MainWindow, qtbot: QtBot) -> None:
     window.metadata_panel.edits["pixel_size_um"].setText("0.5")
     window.metadata_panel.save()
     assert window._fit_cache == {}, "changed metadata must invalidate cached estimates"
+
+
+def test_panel_keeps_the_image_qc_rules_of_a_pipeline(qtbot: QtBot, tmp_path: Path) -> None:
+    from hcs_studio.gui.pipeline_panel import PipelinePanel
+    from hcs_studio.qc.rules import default_rules, save_rules
+
+    panel = PipelinePanel()
+    qtbot.addWidget(panel)
+    assert panel.pipeline().qc is None
+    panel.qc_check.setChecked(True)
+    assert panel.pipeline().qc == default_rules() and panel.qc_label.text() == "default v1"
+    custom = default_rules(content_channel=2).model_copy(update={"name": "lab", "version": 3})
+    path = save_rules(custom, tmp_path / "rules.yaml")
+    panel.set_qc_rules(custom)
+    panel.save_file(tmp_path / "p.yaml")
+    panel.qc_check.setChecked(False)
+    assert panel.pipeline().qc is None
+    panel.load_file(tmp_path / "p.yaml")
+    assert panel.qc_check.isChecked() and panel.pipeline().qc == custom
+    panel.qc_check.setChecked(False)
+    panel.qc_check.setChecked(True)  # the last rules come back
+    assert panel.pipeline().qc == custom and path.exists()
