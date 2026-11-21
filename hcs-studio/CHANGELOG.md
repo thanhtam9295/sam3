@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Phase 20b — DNA-damage foci
+- `detect_foci` (image step): foci inside nuclei (LoG or white top-hat, local-maxima split,
+  size filter), threshold calibrated on the vehicle wells (median + k robust SD of the response
+  over vehicle nuclei), 3D detection with Z stacks; label set `foci` with the nuclei as parents.
+- `foci` (assay step): foci per nucleus, % foci-positive, pan-nuclear nuclei apart (calibrated
+  on vehicle nuclear intensity), focus area and intensity, fold vs vehicle, breakdown by
+  cell-cycle phase; projection warning; report `assays/foci/`.
+- Preset (`hcs-studio assay preset foci`), readouts, docs. The assay wizard handles any assay
+  (channel roles per assay, generic calibration preview).
+
 ### Phase 20a — assay framework and cell cycle
 - `assays/`: assay modules are table steps with channel roles, a preset pipeline, calibration
   on the run's control wells (from the layout; stored in the run), registered readouts, QC

@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20a built
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20a, 20b built
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -549,6 +549,14 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   wizard…); CLI `hcs-studio assay list|preset|run`. New assays: register in
   `processing/base.load_builtin_modules`, readouts in `readouts.py`, methods `DESCRIPTIONS`,
   `gen_processing_docs.NOTES`, docs/assays.md.
+- **Phase 20b (built)**: `assays/foci.py`: image step `detect_foci` (fit on vehicle fields via
+  `context.sample(n, wells)`; `spot_response` 2D/3D, `find_foci` = threshold ∩ nuclei, watershed at
+  local maxima, size filter; max area defaults to π·diameter²; label set `foci`, parent nuclei →
+  `measure_objects` gives `foci_count` per nucleus, missing = 0) and table step `foci` (prefix
+  `dd_`; pan-nuclear = nuclear mean ≥ pan_factor × vehicle median; `cc_phase` breakdown when
+  cell_cycle ran first). `AssayModule.describe_state` returns the state; `preview_values(state)`
+  feeds the wizard's plot (assay-generic). Synthetic `synthetic/foci.py` (`FociNuclei`, per-nucleus
+  truth).
 
 ## Commands
 

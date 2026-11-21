@@ -32,6 +32,11 @@ DESCRIPTIONS = {
     "qc": "field quality control (focus, saturation) and counts",
     "stitch_well": "stitching of the fields of each well (stage positions refined by phase correlation)",
     "gate_objects": "gating of objects",
+    "detect_foci": "detection of DNA-damage foci inside nuclei (Laplacian-of-Gaussian band "
+    "pass, threshold = median + k robust SD of the vehicle nuclei's filter response, split at "
+    "local maxima, size filter; 3D with Z stacks)",
+    "foci": "foci per nucleus and well (pan-nuclear nuclei — mean intensity ≥ a multiple of the "
+    "vehicle median — reported apart)",
     "cell_cycle": "cell-cycle analysis from integrated nuclear DNA stain (vehicle G1 peak scaled "
     "to 2N; Dean–Jett–Fox-style fit of G1, S and G2/M; sub-G1 and > 4N by DNA content; EdU and "
     "pH3 thresholds from the vehicle wells)",

@@ -241,6 +241,20 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## DNA-damage foci (Phase 20b)
+
+| Check | Result | Test |
+|---|---|---|
+| Synthetic plate: 432 nuclei (radius 10 px) with 0–12 Gaussian foci (σ 1 px, ≥ 5 px apart; vehicle Poisson 0.5, treated Poisson 8) and 15 % pan-nuclear nuclei in the treated wells, through the preset pipeline | every focal nucleus within ±1 of its true count (seen: all 397 exact); all pan-nuclear nuclei recognised, no false pan-nuclear; vehicle 0.45 vs treated 6.3 foci per nucleus; threshold calibrated on the vehicle wells | `test_foci_counts_per_nucleus_from_images` |
+| Two foci 8 planes apart above each other | 3D detection counts 2, a max projection 1 | `test_3d_detection_counts_foci_a_max_projection_merges` |
+| Foci by cell-cycle phase (foci only above 2.6N) | G1 < 0.6, G2/M ≈ 6 foci per nucleus; % positive in G2/M as expected from Poisson(6) ≥ 5; pan-nuclear 1 %; projection warning | `test_foci_step_breaks_down_by_cell_cycle_and_warns_on_projections` |
+
+Found while building: a fixed 3 µm² maximum focus area dropped real foci whose thresholded
+response covered ~3 µm²; the default now follows the focus diameter.
+
+Not yet checked: real γH2AX / 53BP1 / RAD51 plates (irradiated or etoposide-treated vs vehicle);
+touching or clustered foci (counts of merged foci); foci at 20× vs 40×/60×.
+
 ## Cell cycle assay (Phase 20a)
 
 | Check | Result | Test |

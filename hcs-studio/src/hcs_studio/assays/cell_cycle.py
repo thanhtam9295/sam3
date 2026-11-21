@@ -349,6 +349,12 @@ class CellCycle(AssayModule):
             state["vehicle_g2m_pct"] = vehicle_fit.fractions.get("g2m", math.nan)
         return state
 
+    def preview_values(self, state: Any) -> tuple[Any, str]:
+        vehicle = self.control_objects(VEHICLE_ROLES, [state["dna_column"]])
+        if vehicle.empty:
+            return np.array([]), "DNA content (N)"
+        return vehicle[state["dna_column"]].to_numpy(float) * state["scale_to_n"], "DNA content (N)"
+
     def describe_state(self, state: Any) -> dict[str, Any]:
         return {k: v for k, v in state.items() if k != "vehicle_fit"} | {
             "vehicle_fractions_pct": state["vehicle_fit"]["fractions"]

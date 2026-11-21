@@ -192,6 +192,25 @@ Smoothing filters. Output is still treated as measurement-grade, but median and 
 | `median_size_px` | 3 | Median window in pixels (odd). |
 | `nlm_strength` | 1.0 | Non-local means strength, in units of the noise level. |
 
+## Assay: detect DNA-damage foci (`detect_foci`)
+
+Assay (Phase 20b): DNA-damage foci inside nuclei. The foci channel is band-pass filtered (Laplacian of Gaussian × σ², or a white top-hat); pixels above the threshold inside nuclei are split at local maxima (seeded watershed) and kept when their size is plausible. The threshold is calibrated on the vehicle wells (median + threshold_sd × robust SD of the response over the vehicle nuclei) unless fixed. With Z planes the detection is 3D. Writes the label set `foci` (parents: nuclei); measure_objects then gives `foci_count` per nucleus. See the Assays guide.
+
+Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel` | required | Foci channel (γH2AX, 53BP1, RAD51 …). |
+| `nuclei` | 'nuclei' | Nuclear label set (the foci's parents). |
+| `output` | 'foci' | Name of the foci label set. |
+| `diameter_um` | 0.7 | Typical focus diameter in µm. |
+| `method` | 'log' | Laplacian of Gaussian, or white top-hat. |
+| `threshold` | None | Fixed filter-response threshold; empty = from vehicle wells. |
+| `threshold_sd` | 5.0 | Calibration: median + this × robust SD of vehicle nuclei. |
+| `min_area_um2` | 0.05 | Smallest focus (µm²; per plane). |
+| `max_area_um2` | None | Largest focus (µm²; per plane); empty = a disc twice the focus diameter. |
+| `calibration_fields` | 24 | Vehicle fields sampled. |
+
 ## Spot detection (LoG / DoG) (`detect_spots`)
 
 Finds sub-cellular spots with a Laplacian-of-Gaussian or difference-of-Gaussians filter tuned to the spot size, thresholded at a multiple of the robust noise level. Each spot is linked to the cell under its centre; spots outside cells are dropped unless `only_inside_parent` is off.
@@ -262,6 +281,20 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | `profile_fit` | 'polynomial' | Smooth surface fitted to the median: 2D polynomial, or Gaussian blur. |
 | `polynomial_degree` | 4 | Degree of the 2D polynomial surface. |
 | `smoothing_fraction` | 0.05 | Gaussian smoothing of the profile, as a fraction of the image width. |
+
+## Assay: DNA-damage foci (γH2AX, 53BP1, RAD51) (`foci`)
+
+Assay (Phase 20b): per well the mean foci per nucleus, % nuclei with ≥ positive_min_foci foci, focus area and intensity, and pan-nuclear nuclei (mean intensity ≥ pan_factor × the vehicle median) reported apart; by cell-cycle phase when the cell-cycle step ran first. Writes `dd_` columns and `assays/foci/`. Warns about Z projections.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `foci_channel` | 'gH2AX' | Foci channel name (as on the plate). |
+| `foci` | 'foci' | Label set of the foci (detect_foci output). |
+| `positive_min_foci` | 5 | A nucleus is foci-positive with at least this many foci. |
+| `pan_factor` | 4.0 | Pan-nuclear: mean nuclear intensity ≥ this × vehicle median. |
 
 ## Gate objects (`gate_objects`)
 

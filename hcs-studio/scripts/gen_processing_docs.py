@@ -115,6 +115,17 @@ NOTES = {
     "gate_objects": "Marks objects of one type whose features lie inside thresholds (min "
     "and/or max per feature, all or any rule), e.g. drawn on a histogram or scatter plot in "
     "the Classify panel. Writes `gate_<name>` per object and the count and fraction per well.",
+    "detect_foci": "Assay (Phase 20b): DNA-damage foci inside nuclei. The foci channel is band-"
+    "pass filtered (Laplacian of Gaussian × σ², or a white top-hat); pixels above the threshold "
+    "inside nuclei are split at local maxima (seeded watershed) and kept when their size is "
+    "plausible. The threshold is calibrated on the vehicle wells (median + threshold_sd × robust "
+    "SD of the response over the vehicle nuclei) unless fixed. With Z planes the detection is 3D. "
+    "Writes the label set `foci` (parents: nuclei); measure_objects then gives `foci_count` per "
+    "nucleus. See the Assays guide.",
+    "foci": "Assay (Phase 20b): per well the mean foci per nucleus, % nuclei with ≥ "
+    "positive_min_foci foci, focus area and intensity, and pan-nuclear nuclei (mean intensity ≥ "
+    "pan_factor × the vehicle median) reported apart; by cell-cycle phase when the cell-cycle "
+    "step ran first. Writes `dd_` columns and `assays/foci/`. Warns about Z projections.",
     "cell_cycle": "Assay (Phase 20a): cell cycle from the integrated nuclear intensity of a DNA "
     "stain, scaled so the vehicle wells' G1 peak is 2N; per well a Dean–Jett–Fox-style fit "
     "(Gaussian G1 and G2/M peaks with a shared CV, uniform broadened S phase) gives % G1, S and "

@@ -149,8 +149,12 @@ class AssayWizard(QDialog):
             )
 
     def params(self) -> dict[str, Any]:
+        """``<role>_channel`` for the roles the assay's parameters take."""
+        fields = self._module().Params.model_fields
         return {
-            f"{key}_channel": combo.currentText().strip() for key, combo in self.role_combos.items()
+            f"{key}_channel": combo.currentText().strip()
+            for key, combo in self.role_combos.items()
+            if f"{key}_channel" in fields
         }
 
     # --------------------------------------------------------------- actions
@@ -166,33 +170,34 @@ class AssayWizard(QDialog):
             module = cls(cls.Params.model_validate(params))
             module.run_folder = folder
             state = module.fit_table(pd.DataFrame(columns=["object_type"]))
-            vehicle = module.control_objects(("negative_control",), [state["dna_column"]])
-            values = (
-                vehicle[state["dna_column"]].to_numpy(float) * state["scale_to_n"]
-                if not vehicle.empty
-                else np.array([])
-            )
-            return module.describe_state(state), values
+            values, label = module.preview_values(state)
+            return module.describe_state(state), (values, label)
 
         def done(result: tuple[dict[str, Any], Any]) -> None:
-            state, values = result
+            state, (values, label) = result
             self.calibration = state
             self.plot.clear()
+            self.plot.setLabel("bottom", label)
             if len(values):
-                counts, edges = np.histogram(values, np.linspace(0, 8, 161))
+                dna = label.startswith("DNA")
+                top = 8.0 if dna else max(float(np.nanmax(values)), 1.0) + 1
+                bins = np.linspace(0, 8, 161) if dna else np.arange(0, top + 1) - 0.5
+                counts, edges = np.histogram(values, bins)
                 self.plot.plot(
                     edges, counts, stepMode="center", fillLevel=0, brush=(80, 120, 200, 120)
                 )
-                for x in (2, 4):
+                for x in (2, 4) if dna else ():
                     self.plot.addItem(
                         pg.InfiniteLine(
                             x, angle=90, pen=pg.mkPen("#999", style=Qt.PenStyle.DashLine)
                         )
                     )
-            fractions = state.get("vehicle_fractions_pct", {})
+            fractions = state.get("vehicle_fractions_pct") or {
+                k: v for k, v in state.items() if isinstance(v, float) and k.startswith("vehicle")
+            }
             source, nuclei = state.get("calibrated_on"), state.get("vehicle_nuclei")
             text = f"Calibrated on {source} ({nuclei} nuclei). Vehicle: " + ", ".join(
-                f"{k} {v:.1f} %" for k, v in fractions.items()
+                f"{k} {v:.3g}" for k, v in fractions.items()
             )
             if state.get("warnings"):
                 text += (

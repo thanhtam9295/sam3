@@ -649,7 +649,9 @@ classifier. Details: [image_qc.md](image_qc.md).
 
 **Tools → Assay wizard…** runs a calibrated assay on the run open in Results: choose the assay,
 map its channels, check the control wells, preview the calibration, apply. Available: cell cycle
-(DNA content with a Dean–Jett–Fox-style fit, EdU gating, pH3 mitotic index). Details:
+(DNA content with a Dean–Jett–Fox-style fit, EdU gating, pH3 mitotic index) and DNA-damage
+foci (γH2AX, 53BP1, RAD51: foci per nucleus with a threshold calibrated on vehicle wells,
+pan-nuclear nuclei apart, 3D counting with Z stacks). Details:
 [assays.md](assays.md).
 
 ## ilastik

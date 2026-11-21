@@ -115,6 +115,17 @@ class AssayModule(TableModule):
                 "and that measure_objects ran on these objects"
             )
 
+    def describe_state(self, state: Any) -> dict[str, Any]:
+        """The calibration, as stored in ``analysis_summary.json``."""
+        return dict(state) if isinstance(state, dict) else {}
+
+    def preview_values(self, state: Any) -> tuple[Any, str]:
+        """Values of the vehicle objects to plot in the wizard's calibration preview, and the
+        axis label (none by default)."""
+        import numpy as np
+
+        return np.array([]), ""
+
     def run_warnings(self) -> list[str]:
         """Checks of the acquisition and processing (overridden by assays)."""
         return []

@@ -108,6 +108,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # µ and × are intended in scientific 
 "src/hcs_studio/monitoring/report.py" = ["E501"]  # HTML page template
 "src/hcs_studio/qc/report.py" = ["E501"]  # HTML page template
 "src/hcs_studio/assays/cell_cycle.py" = ["E501"]  # HTML page template
+"src/hcs_studio/assays/foci.py" = ["E501"]  # HTML page template
 
 [tool.mypy]
 python_version = "3.11"

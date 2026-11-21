@@ -5,7 +5,7 @@ Each assay is a step that runs after segmentation and measurement (it reads the 
 so it can be applied to a finished run without reprocessing images). It needs a plate layout
 with **vehicle** (negative-control) wells; without one it calibrates on all wells and says so.
 
-Available: **cell cycle** (20a). Coming: DNA-damage foci (20b), apoptosis (20c), nuclear
+Available: **cell cycle** (20a), **DNA-damage foci** (20b). Coming: apoptosis (20c), nuclear
 translocation (20d), proliferation markers (20e).
 
 ## The assay wizard
@@ -79,6 +79,47 @@ ratio at its limit, fewer than `min_nuclei` (200) nuclei.
 | `cc_mitotic_index_pct` | % pH3-positive |
 | `cc_g1_peak_n`, `cc_g1_cv_pct`, `cc_nuclei`, `cc_warnings` | fit quality |
 | per nucleus: `cc_dna_n`, `cc_phase`, `cc_edu_positive`, `cc_ph3_positive` | |
+
+## DNA-damage foci (γH2AX, 53BP1, RAD51 …)
+
+Two steps: **`detect_foci`** finds the foci in the images (it must run before
+`measure_objects`, so it is part of the pipeline — a finished run without it cannot be
+analysed for foci), and **`foci`** summarises them per nucleus and well.
+
+```bash
+hcs-studio assay preset foci --map dna=DAPI --map foci=gH2AX --channels DAPI,gH2AX --output foci.yaml
+```
+
+**Detection** (`detect_foci`): the foci channel is band-pass filtered — Laplacian of Gaussian
+scaled by σ² (default) or a white top-hat — with σ from `diameter_um` (typical focus diameter,
+default 0.7 µm). Pixels above the threshold inside nuclei are split at local maxima (seeded
+watershed) and kept when their size is plausible (`min_area_um2`; `max_area_um2`, by default a
+disc twice the focus diameter). Each focus belongs to its nucleus, so `measure_objects` reports
+`foci_count`, `foci_mean_area_um2` and the foci's total intensity per nucleus.
+
+**Threshold**: calibrated on the vehicle wells — median + `threshold_sd` (5) × robust SD
+(1.4826 × MAD) of the filter response over the vehicle nuclei's pixels, from up to
+`calibration_fields` (24) fields; the MAD ignores the few foci vehicle nuclei have. It is stored
+in the run (manifest → `fitted_state`). Set `threshold` to use a fixed value instead.
+
+**Z stacks**: without a projection the detection is 3D (the Z sigma follows the pixel size /
+Z step), so a focus spanning several planes counts once and two foci above each other count
+twice. A maximum projection merges foci at different depths into one: the foci step warns when
+the run used a projection.
+
+**Per well** (`foci` step):
+
+| Readout | Meaning |
+|---|---|
+| `dd_foci_per_nucleus`, `dd_foci_per_nucleus_median` | foci per nucleus (pan-nuclear nuclei left out) |
+| `dd_positive_pct` | % nuclei with ≥ `positive_min_foci` (5) foci |
+| `dd_pan_nuclear_pct` | % pan-nuclear nuclei: mean nuclear intensity of the foci channel ≥ `pan_factor` (4) × the vehicle nuclei's median — bright, diffuse γH2AX (apoptosis, replication stress), not counted as focal |
+| `dd_focus_area_um2`, `dd_foci_intensity` | mean focus area; summed foci intensity per nucleus (nuclei with foci) |
+| `dd_foci_fold_vs_vehicle` | foci per nucleus / vehicle foci per nucleus |
+| `dd_foci_per_nucleus_<g1|s|g2m>`, `dd_positive_<g1|s|g2m>_pct` | by cell-cycle phase, when the `cell_cycle` step runs first (RAD51 foci are expected in S/G2) |
+| per nucleus: `dd_foci`, `dd_positive`, `dd_pan_nuclear` | |
+
+For cell-cycle-aware foci, put `cell_cycle` before `foci` among the table steps.
 
 ## Validating on your plates
 
