@@ -737,6 +737,7 @@ Table step: runs on the object tables after all wells are processed, and can be 
 | `division_radius_um` | 20.0 | Daughters within this. |
 | `max_daughter_ratio` | 0.8 | Daughters smaller than this × the mother's area. |
 | `min_track_frames` | 3 | Shorter tracks are not summarised. |
+| `min_cycle_h` | 4.0 | A cell born less than this ago does not divide. |
 
 ## Assay: nuclear translocation (`translocation`)
 
