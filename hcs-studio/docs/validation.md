@@ -241,6 +241,34 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Live-cell kinetics: kinetic analysis (Phase 22b)
+
+| Check | Result | Test |
+|---|---|---|
+| Poisson counts (N₀ 2000, 13 time points over 72 h): exponential (Td 20 h), lag 12 h + Td 18 h, logistic (Td 16 h, K 30 000) | right model chosen by AICc; doubling time within 5 % (seen ≤ 2 % exponential, 6 % before the noise was realistic for logistic); lag within 2.5 h; capacity within 10 % | `test_growth_models_recover_doubling_time` |
+| Flat, dying, two-point wells | `constant` / `shrinking` / too few points, no doubling time; death rate within 10 % | `test_flat_and_dying_wells_have_no_doubling_time` |
+| **Done-when**: segmented nuclei of a time-lapse plate (9 time points, 48 h), doubling 18, 24, 36 h | within 5 % (seen 18.06, 23.99, 36.17 h) through the `kinetics` step | `test_doubling_time_from_images` |
+| Dose–response plate (9 concentrations × 3, 6 vehicle wells; drug lowers the growth rate, Emax 1.5, EC50 100 nM): IC50(t) = EC50·o/(1 − o), o = ln 2/(μ₀ Emax t) | IC50 at 24, 48, 72 h within 10 % (seen ≤ 5 %), falling with time; GR50 constant over time = 38 nM within 15 %; GRinf −0.29 within 0.05; vehicle GR ≈ 1 | `test_ic50_and_gr_over_time_known_answers` |
+| Drug acting 36 h after treatment, GR over 24 h intervals | GR ≈ 1 in [0, 24], 2^(μ(c)/μ₀) − 1 in [48, 72] (within 0.06); no GR50 early; GR from treatment still diluted at 48 h | `test_gr_over_intervals_shows_a_late_effect` |
+| Three separate acquisitions (0, 24, 48 h) through the CLI | doubling 24 h within 5 % (AIC: three points) | `test_kinetics_cli_on_separate_acquisitions` |
+
+GR formula: the endpoint form GR = 2^(log2(x/x₀)/log2(x_ctrl/x₀)) − 1 matches the reference code
+(GRmetrics `GRcalculate.R`, datarail gr_metrics and sorgerlab gr50_tools READMEs). The GRmetrics
+vignette says time-course calculations are not implemented there. Hafner et al.'s own
+time-dependent definition (Nat Methods 2016, online methods) could not be read: NCBI, Europe PMC
+and grcalculator.org are not reachable from the cloud environment. GR over an interval with the
+interval's start as time zero equals 2^(k(c)/k_ctrl) − 1 exactly, so only the choice of intervals
+(consecutive / ≥ interval_h, reported at the midpoint) is unchecked against the paper.
+
+Found while building: GR50 from 3 vehicle wells with one noisy count each before treatment came
+out 20 % low (the control growth was over-estimated); exact without noise → tests use 6 vehicle
+wells, the docs recommend ≥ 4. Flat dose responses took 3–6 s per 4PL fit (the optimiser wanders
+on a flat line), against 0.02 s for real curves → flat time points are detected (range of
+concentration means ≤ 3 × replicate SD) and not fitted.
+
+Not yet checked: a real kinetic plate (IC50(t) and GR on an Incucyte / ImageXpress / Nikon
+time-lapse plate with its treatment time) — the Phase 22 done-when needs one.
+
 ## Live-cell kinetics: time-course data (Phase 22a)
 
 | Check | Result | Test |

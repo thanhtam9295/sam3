@@ -638,6 +638,16 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   treatment time. CLI `hcs-studio kinetics table`. Synthetic: `SyntheticPlate(timepoints,
   time_points_s, acquired_at)`, `FieldContext.timepoint/time_s`, `synthetic/kinetics.py`
   (`GrowingCells`, `exponential`); `write_imagexpress_plate(timepoints=…)`.
+- **Phase 22b (built)**: `kinetics/growth.py` (`fit_growth` on log y: exponential, lag
+  (exact profile over a λ grid), logistic (least_squares); AICc, AIC when n ≤ k + 1; `constant`
+  when a flat line is as good; `curve_metrics`). `kinetics/response.py` (`conditions(layout)`,
+  `ic50_over_time` (% of same-time vehicle median, `fit_curve`), `gr_over_time` (x₀ = each well's
+  value at the last time point ≤ 0 h since treatment), `gr_intervals`; `responds()` skips flat
+  series — the pharmacology 4PL takes seconds on flat data). `kinetics/analysis.py` (table step
+  `kinetics`, `finish_table` builds the time course itself; `analyse`, `write_kinetics`,
+  `analyse_runs`; `kn_` per-well values, readouts in readouts.py). CLI `hcs-studio kinetics
+  analyse`. Synthetic `response_course` (+ `onset_h`), `drug_rate`. The time-dependent GR
+  definition of Hafner et al. was not readable (NCBI/EBI blocked): interval convention unchecked.
 
 ## Commands
 
@@ -658,7 +668,7 @@ Run from this folder (`hcs-studio/`).
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
-- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; assays: `hcs-studio assay list | preset cell_cycle --map dna=DAPI [--map edu=EdU] --channels … --output p.yaml | run <run> cell_cycle --map dna=DAPI`; kinetics: `hcs-studio kinetics table <run> [<run>… --output c.csv] [--treated-at ISO]`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
+- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; assays: `hcs-studio assay list | preset cell_cycle --map dna=DAPI [--map edu=EdU] --channels … --output p.yaml | run <run> cell_cycle --map dna=DAPI`; kinetics: `hcs-studio kinetics table <run> [<run>… --output c.csv] [--treated-at ISO]` | `analyse <run> [<run>…] [--readout R --interval-h H --output dir]`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`

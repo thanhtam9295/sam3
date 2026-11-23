@@ -1623,6 +1623,25 @@ def _builtin() -> list[ReadoutSpec]:
             ReadoutSpec("confluence_area_um2", "area covered by cells", "µm²", level,
                         "either", "none", f"area covered by cells ({where})", kin),
         ]  # fmt: skip
+    kinetic: dict[str, tuple[str, str, Direction, str]] = {
+        "doubling_h": ("doubling time", "h", "up", "ln 2 / growth rate of the chosen growth model"),
+        "growth_rate_per_h": ("growth rate", "1/h", "down", "specific growth rate μ (natural log)"),
+        "lag_h": ("lag", "h", "up", "time before exponential growth (lag-exponential model)"),
+        "capacity": ("capacity", "", "either", "plateau of the logistic model"),
+        "n0": ("initial value", "", "either", "fitted value at the first time point"),
+        "r2": ("growth fit R²", "", "none", "R² of the growth fit on the log scale"),
+        "auc": ("area under the curve", "", "down", "trapezoid AUC of the readout over time"),
+        "auc_vs_vehicle_pct": ("AUC vs vehicle", "%", "down", "AUC as % of the vehicle wells'"),
+        "mean_fold": ("mean fold change", "", "down", "AUC of value / first value per hour"),
+        "fold_change": ("final fold change", "", "down", "last value / first value"),
+        "time_to_fold_h": ("time to fold change", "h", "up", "first time the readout reaches "
+                           "fold × its first value"),
+        "time_to_level_h": ("time to level", "h", "either", "first time the readout reaches "
+                            "the given level"),
+        "gr_final": ("GR at the end", "", "down", "GR value from treatment, last time point"),
+    }  # fmt: skip
+    for name, (display, unit, direction, text) in kinetic.items():
+        specs.append(ReadoutSpec(f"kn_{name}", display, unit, w, direction, "none", text, kin))
     specs += [
         ReadoutSpec("timepoint", "time point", "", w, "none", "none",
                     "index of the time point (0 = first)", kin),

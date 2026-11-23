@@ -247,6 +247,20 @@ def build_parser() -> argparse.ArgumentParser:
         "the layout's treatment time, else the plate.dispensed event)",
     )  # fmt: skip
     kinetics_table.add_argument("--output", type=Path, default=None, help="CSV to write")
+    kinetics_analyse = kinetics_sub.add_parser(
+        "analyse", help="growth fits, doubling times, IC50 and GR over time (one time-lapse run, "
+        "or several acquisitions of the same plate)",
+    )  # fmt: skip
+    kinetics_analyse.add_argument("folders", type=Path, nargs="+", help="run folder(s)")
+    kinetics_analyse.add_argument("--readout", default="auto")
+    kinetics_analyse.add_argument("--treated-at", default=None)
+    kinetics_analyse.add_argument("--interval-h", type=float, default=None)
+    kinetics_analyse.add_argument(
+        "--models", default=",".join(("exponential", "lag_exponential", "logistic"))
+    )
+    kinetics_analyse.add_argument(
+        "--output", type=Path, default=None, help="folder (default: <run>/kinetics)"
+    )
 
     selftest = sub.add_parser(
         "selftest", help="check this installation on a small synthetic plate (about a minute)"
@@ -832,6 +846,8 @@ def _kinetics(args: argparse.Namespace) -> int:
     from hcs_studio.kinetics.timecourse import assemble, build_time_course, time_info
 
     folders: list[Path] = list(args.folders)
+    if args.kinetics_command == "analyse":
+        return _kinetics_analyse(args, folders)
     try:
         if len(folders) == 1:
             table = build_time_course(folders[0], treated_at=args.treated_at)
@@ -856,6 +872,29 @@ def _kinetics(args: argparse.Namespace) -> int:
           f"{info['acquired_at'] or 'unknown'}; treated {info['treated_at'] or 'unknown'}"
           + (f" ({info['treatment_source']})" if info["treatment_source"] else ""))  # fmt: skip
     print(f"Time course: {output} ({table['well'].nunique()} wells, {len(table)} rows)")
+    return 0
+
+
+def _kinetics_analyse(args: argparse.Namespace, folders: list[Path]) -> int:
+    from hcs_studio.kinetics.analysis import KineticsParams, analyse_runs
+    from hcs_studio.processing.base import ModuleError
+
+    output = args.output or folders[0] / "kinetics"
+    try:
+        params = KineticsParams(
+            readout=args.readout,
+            treated_at=args.treated_at,
+            interval_h=args.interval_h,
+            models=[m.strip() for m in args.models.split(",") if m.strip()],
+        )
+        result, files = analyse_runs(folders, params, output)
+    except (OSError, ValueError, KeyError, ModuleError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    for note in result.notes:
+        print(f"Note: {note}")
+    print(f"Readout: {result.readout}; {len(result.fits)} wells; files in {output}: "
+          + ", ".join(files))  # fmt: skip
     return 0
 
 

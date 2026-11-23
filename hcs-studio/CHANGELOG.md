@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Phase 22b — live-cell kinetics: kinetic analysis
+- `kinetics` (table step; CLI `hcs-studio kinetics analyse` for one run or separate
+  acquisitions): growth fits per well on the log scale (exponential, lag-exponential, logistic;
+  AICc, AIC with few time points) → doubling time, growth rate, lag, capacity; AUC (and vs
+  vehicle), fold changes, time to a fold change or level; `kn_` per-well readouts.
+- IC50 at each time point (% of the same-time vehicle median); GR values from treatment with each
+  well's own pre-treatment value as time zero; GR over intervals; GR50/GRmax/GR_AOC per compound
+  and time. Flat time points are reported without a fit.
+- `kinetics/` files: growth fits, IC50 and GR tables, `kinetics.json`, growth-curve and
+  potency-over-time figures. Synthetic `response_course` (known IC50(t) and GR50).
+
 ### Phase 22a — live-cell kinetics: time-course data
 - Real times per time point from the readers (ImageXpress image timestamps, ND2 frame events,
   OME-Zarr `t` scale / plate attributes), or the Metadata panel's **time interval**; recorded in

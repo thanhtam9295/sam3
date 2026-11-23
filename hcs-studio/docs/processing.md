@@ -391,6 +391,25 @@ Table step: runs on the object tables after all wells are processed, and can be 
 | `rules` | [] | Feature thresholds (min and/or max, inclusive). |
 | `combine` | 'all' | Inside the gate when all rules hold, or any. |
 
+## Kinetics (growth, IC50(t), GR) (`kinetics`)
+
+Kinetics (Phase 22b): table step for time-lapse runs. Per well a growth fit on the log of the readout (exponential, lag_exponential, logistic; AICc) → `kn_doubling_h`, `kn_growth_rate_per_h`, `kn_lag_h`, `kn_capacity`, plus AUC, fold changes and times to a fold change or level. With compounds in the layout: IC50 per time point, GR from treatment (each well's own value before treatment as time zero) and GR over intervals (interval_h, else consecutive time points); GR50/GRmax per compound and time. Writes `kinetics/`. See the Kinetics guide.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `readout` | 'auto' | Time-course column to analyse; auto: the object count (<labels>_objects_measured), else confluence_pct. |
+| `models` | ['exponential', 'lag_exponential', 'logistic'] | Growth models to compare. |
+| `fit_window_h` | None | Fit only this time range (h; since treatment when known). |
+| `fold` | 2.0 | Report the time to this fold change. |
+| `level` | None | Report the time to reach this value. |
+| `dose_response` | True | IC50(t) and GR when compounds exist. |
+| `interval_h` | None | GR over intervals of at least this length (None: consecutive time points). |
+| `min_control_doublings` | 0.25 | GR from treatment is undefined where the controls grew less (doublings). |
+| `min_interval_doublings` | 0.1 | GR over an interval is undefined where the controls grew less in it (doublings). |
+| `treated_at` | None | Treatment time (ISO 8601); default: layout, then registry. |
+
 ## Measure: objects (`measure_objects`)
 
 Measures every object of the chosen label sets on the linear image (never on contrast/CLAHE/clarity output): morphology in µm, intensity per channel, radial distribution, Haralick texture, granularity, optional Zernike moments, counts of child objects (e.g. spots per cell), nuclear/cytoplasmic ratios and neighbours. Writes `objects.parquet` per well. Column reference: [measurements.md](measurements.md).

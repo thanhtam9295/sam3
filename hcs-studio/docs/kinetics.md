@@ -3,7 +3,8 @@
 Time-lapse plates (Incucyte-style live imaging, or one plate imaged repeatedly by the scheduler)
 are analysed on **real times**, never on frame numbers. This guide covers the time-course data
 (Phase 22a): where the times come from, the treatment time, drift correction, confluence and the
-time-course table. Growth-curve fits, IC50 over time and GR values follow in Phase 22b.
+time-course table (Phase 22a), and the kinetic analysis: growth curves, doubling times, IC50
+over time and GR values (Phase 22b).
 
 ## Times
 
@@ -95,10 +96,92 @@ Runs are ordered by `acquired_at`; times count from the first acquisition; each 
 For one time-lapse run, `hcs-studio kinetics table <run>` rewrites its `time_course.csv` (e.g.
 with another `--treated-at`).
 
+## Kinetic analysis (`kinetics`)
+
+Add the **kinetics** table step to a time-lapse pipeline (after `measure_objects` or
+`confluence`), or run it on finished runs:
+
+```bash
+hcs-studio kinetics analyse runs/P001_timelapse
+hcs-studio kinetics analyse runs/P001_0h runs/P001_24h runs/P001_48h --output P001_kinetics
+```
+
+The readout is the object count (`nuclei_objects_measured`) by default, else confluence; set
+`readout` for anything else in the time course. Times are hours since treatment when the
+treatment time is known (otherwise since the first time point, with a note).
+
+### Growth curves and doubling time
+
+Every well is fitted on the **log** of its readout (counting noise and growth are
+multiplicative, so each time point weighs the same) with three models:
+
+| Model | Curve | Use |
+|---|---|---|
+| exponential | ln y = ln N₀ + μt | unlimited growth |
+| lag_exponential | flat until the lag λ, then exponential | recovery after seeding or treatment |
+| logistic | y = K / (1 + (K/N₀ − 1)·e^(−μt)) | growth slowing towards a capacity K (confluence) |
+
+The model with the lowest AICc wins (plain AIC when there are too few time points for AICc, e.g.
+three acquisitions); a flat line must do worse, otherwise the well is reported as `constant`
+(not growing). μ is the specific growth rate per hour; the doubling time is ln 2/μ (for the
+logistic model the initial doubling time, while cells are sparse). Wells whose readout falls are
+flagged `shrinking`, with no doubling time. `fit_window_h` restricts the fit to a time range.
+
+Model-free values: AUC (trapezoid, readout × h), AUC as % of the vehicle wells, mean fold change,
+final fold change, the time to reach `fold` × the first value (default 2: an empirical doubling
+time) and the time to reach a `level` (e.g. 80 % confluence). In `per_well_summary.csv` they
+carry the prefix `kn_` (`kn_doubling_h`, `kn_model`, `kn_auc_vs_vehicle_pct` …).
+
+### IC50 over time
+
+At each time point after treatment the readout is expressed as % of the median of the vehicle
+wells **at the same time point** (same cell line), and a 4PL is fitted per compound (as in the
+pharmacology module). Potency usually grows with exposure: the IC50 of a cytostatic drug falls
+with time even though the drug does the same thing all along — one reason to prefer GR.
+
+### GR values
+
+GR (Hafner et al. 2016) separates the drug's effect from the cells' division rate:
+
+GR(c, t) = 2^( log2(x(c, t)/x₀) / log2(x_ctrl(t)/x₀,ctrl) ) − 1
+
+GR = 1: no effect; 0: complete cytostasis; < 0: cell death. On a live-cell plate every well is
+imaged before the drug is added, so x₀ is **each well's own value** at the last time point at or
+before treatment (no separate time-zero plate), and the control term is the median over the
+vehicle wells. GR values from treatment are reported for every later time point, with GR50,
+GRmax, GR_AOC and GRinf per compound and time.
+
+**GR over intervals** apply the same formula with the start of each interval as time zero; for
+an interval [t₁, t₂] this is GR = 2^(k(c)/k_ctrl) − 1 with k = log2(x(t₂)/x(t₁))/(t₂ − t₁), the
+growth rate during the interval. They show *when* a drug acts — an effect that starts late or
+wears off — which GR from treatment averages out. Intervals are consecutive time points, or with
+`interval_h` the first later time point at least that far (non-overlapping); each is reported at
+its midpoint.
+
+GR is undefined when the controls do not grow: no GR where the vehicle wells grew less than
+`min_control_doublings` (0.25) since treatment, or `min_interval_doublings` (0.1) in an interval.
+A time point at which no concentration differs from the others by more than 3 × the replicate SD
+is reported as flat and not fitted.
+
+The endpoint formula is checked against the GR reference code (GRmetrics, gr_metrics); the
+interval form follows from it algebraically. The paper's own time-dependent definition could
+not be read from this environment, so the choice of intervals is HCS Studio's convention (see
+Validation).
+
+### Files
+
+`kinetics/` (in the run folder, or `--output`): `growth_fits.csv` (one row per well),
+`ic50_over_time.csv`, `gr_values.csv` and `gr_metrics_over_time.csv` (from treatment),
+`gr_interval_values.csv` and `gr_interval_metrics.csv`, `kinetics.json` (readout, times,
+treatment time and its source, notes), `growth_curves.png` (each compound with vehicle wells in
+black, concentrations light to dark) and `potency_over_time.png` (IC50 and GR50 against time).
+
 ## Synthetic data
 
 `hcs_studio.synthetic.kinetics.GrowingCells` draws cells growing with a known count per time
 (e.g. `exponential(n0, doubling_h)`), nuclei on one channel and textured cell bodies on a
 brightfield-like channel, with an optional drift per time; the truth per time point is the
 count, the confluence and the drift. `SyntheticPlate(timepoints=…, time_points_s=…,
-acquired_at=…)` writes a time-lapse OME-Zarr plate with those times.
+acquired_at=…)` writes a time-lapse OME-Zarr plate with those times. `response_course` writes
+a time-course table of a dose–response plate with known IC50(t) and GR50 (a drug that lowers the
+growth rate, optionally after a delay).

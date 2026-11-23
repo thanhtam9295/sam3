@@ -10,11 +10,13 @@ cells, confluence (% of the field covered by bodies) and the drift in pixels.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 
 def exponential(n0: float, doubling_h: float, cap: int | None = None) -> Callable[..., int]:
@@ -83,3 +85,44 @@ class GrowingCells:
             image[self.body_channel] += plane[None]
         return {"count": n, "confluence_pct": 100 * float(bodies.mean()),
                 "drift_px": [round(dy, 4), round(dx, 4)]}  # fmt: skip
+
+
+def drug_rate(rate_per_h: float, conc: float, emax: float, ec50: float, hill: float = 1.0) -> float:
+    """Growth rate under a drug that lowers it by ``emax`` × the Hill occupancy (emax > 1:
+    the cells die at high doses): μ(c) = μ₀ · (1 − emax · cʰ / (cʰ + EC50ʰ))."""
+    occupancy = conc**hill / (conc**hill + ec50**hill) if conc > 0 else 0.0
+    return rate_per_h * (1 - emax * occupancy)
+
+
+def response_course(
+    wells: dict[str, tuple[str, float]],
+    times_h: list[float],
+    *,
+    n0: float = 400.0,
+    doubling_h: float = 24.0,
+    emax: float = 1.5,
+    ec50: float = 1e-7,
+    hill: float = 1.0,
+    treated_h: float = 0.0,
+    onset_h: float = 0.0,
+    seed: int = 0,
+) -> pd.DataFrame:
+    """A time-course table with known answers: each well (role, concentration in M) grows
+    exponentially until ``treated_h`` + ``onset_h`` (the drug acts after a delay), then at the
+    drug's rate (Poisson counts). Exponential
+    growth gives a GR that does not change with time:
+    GR(c) = 2^(μ(c)/μ₀) − 1, and % of control exp((μ(c) − μ₀)(t − treated))."""
+    rng = np.random.default_rng(seed)
+    rate0 = math.log(2) / doubling_h
+    rows = []
+    for well, (role, conc) in wells.items():
+        rate = drug_rate(rate0, conc, emax, ec50, hill) if role == "sample" else rate0
+        for i, t in enumerate(times_h):
+            start = treated_h + onset_h
+            before = min(t, start)
+            after = max(t - start, 0.0)
+            mean = n0 * math.exp(rate0 * before + rate * after)
+            rows.append({"well": well, "timepoint": i, "time_h": t,
+                         "hours_since_treatment": t - treated_h,
+                         "nuclei_objects_measured": float(rng.poisson(mean))})  # fmt: skip
+    return pd.DataFrame(rows)

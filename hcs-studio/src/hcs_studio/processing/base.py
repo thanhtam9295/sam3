@@ -258,6 +258,7 @@ def load_builtin_modules() -> None:
     from hcs_studio.assays import proliferation as _proliferation  # noqa: F401
     from hcs_studio.assays import spheroids as _spheroids  # noqa: F401
     from hcs_studio.assays import translocation as _translocation  # noqa: F401
+    from hcs_studio.kinetics import analysis as _kinetics  # noqa: F401
     from hcs_studio.kinetics import confluence as _confluence  # noqa: F401
     from hcs_studio.kinetics import drift as _drift  # noqa: F401
     from hcs_studio.processing import (  # noqa: F401
