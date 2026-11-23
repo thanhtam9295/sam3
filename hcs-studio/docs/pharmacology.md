@@ -58,8 +58,12 @@ Prism's parametrisation:
 - 3PL: Bottom (0; −1 for GR) or Top (100; 1 for GR) fixed.
 
 Top ≥ Bottom is reported; a falling curve has a negative Hill slope (as in Prism).
-Least squares (`scipy.optimize.least_squares`, several starting points), optionally
-robust (soft L1). 95 % intervals: covariance matrix with the t distribution (n − p
+Least squares (`scipy.optimize.least_squares`, six starting points), optionally
+robust (soft L1). Each start first gets 60 evaluations; starts still running then are
+restarted with up to 4000, unless the best fit so far is already a *flat response* (below):
+then the search stops there and the fit counts as converged. Sigmoidal curves converge long
+before that and are fitted exactly as with 4000 evaluations; a flat response takes about
+0.1 s instead of seconds (its slope and midpoint are not determined by the data anyway). 95 % intervals: covariance matrix with the t distribution (n − p
 degrees of freedom; EC50 intervals computed on log10 and therefore asymmetric), the delta
 method for the absolute IC50, or a bootstrap (resampling within concentrations).
 

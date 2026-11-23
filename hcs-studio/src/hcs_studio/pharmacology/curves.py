@@ -17,6 +17,7 @@ bootstrap when asked.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -58,7 +59,7 @@ class CurveFit:
     n_points: int = 0
     n_concentrations: int = 0
     n_replicates: int = 0
-    converged: bool = False
+    converged: bool = False  # also True when the search stopped at a flat fit (see _solve)
     flat_p: float = math.nan  # F test against a horizontal line
     log_range: tuple[float, float] = (math.nan, math.nan)
     ci_method: str = "covariance"
@@ -91,6 +92,11 @@ class CurveFit:
 # ----------------------------------------------------------------------- fitting
 
 _NAMES = ("bottom", "top", "log_center", "hill", "s")
+# Sigmoidal data converge in tens of evaluations per starting point. A flat response does not:
+# with nothing to fit, the optimiser creeps along the Hill slope and LogEC50 (towards a step at
+# the slope bound) for thousands of evaluations, seconds per curve.
+_QUICK_NFEV = 60
+_MAX_NFEV = 4000
 
 
 def _unpack(
@@ -115,17 +121,25 @@ def _solve(
     starts: list[dict[str, float]],
     bounds: dict[str, tuple[float, float]],
     robust: bool,
-) -> tuple[Any, float] | None:
+    flat: Callable[[Any, float], bool],
+) -> tuple[Any, float, bool] | None:
+    """Best fit over the starting points: (least_squares result, SSR, stopped as flat).
+
+    Every start first runs with ``_QUICK_NFEV`` evaluations. Starts still running then are
+    restarted from the beginning with ``_MAX_NFEV``, so every result is that of one
+    uninterrupted run (``max_nfev`` only ends the search, it does not change its path):
+    curves are fitted exactly as with one ``_MAX_NFEV`` run per start. The exception is a best
+    fit that is already ``flat`` (not better than a horizontal line): further iterations
+    only move parameters a flat response does not determine, so the search stops there."""
     from scipy.optimize import least_squares
 
-    best: tuple[Any, float] | None = None
     lower = np.array([bounds[n][0] for n in free])
     upper = np.array([bounds[n][1] for n in free])
 
     def residuals(theta: Array) -> Array:
         return np.asarray(logistic(logx, *_unpack(theta, free, fixed)) - y, dtype=np.float64)
 
-    for start in starts:
+    def run(start: dict[str, float], max_nfev: int) -> tuple[Any, float] | None:
         x0 = np.clip([start[n] for n in free], lower + 1e-9, upper - 1e-9)
         try:
             result = least_squares(
@@ -135,14 +149,44 @@ def _solve(
                 loss="soft_l1" if robust else "linear",
                 f_scale=max(float(np.std(y)) * 0.1, 1e-9) if robust else 1.0,
                 x_scale="jac",
-                max_nfev=4000,
+                max_nfev=max_nfev,
             )
         except (ValueError, FloatingPointError):
-            continue
-        ssr = float(np.sum(result.fun**2))
-        if best is None or ssr < best[1]:
-            best = (result, ssr)
-    return best
+            return None
+        return result, float(np.sum(result.fun**2))
+
+    def best_of(runs: list[tuple[Any, float] | None]) -> tuple[Any, float] | None:
+        best: tuple[Any, float] | None = None
+        for item in runs:  # in start order, first of equal SSRs wins
+            if item is not None and (best is None or item[1] < best[1]):
+                best = item
+        return best
+
+    runs = [run(start, _QUICK_NFEV) for start in starts]
+    unfinished = [k for k, item in enumerate(runs) if item is not None and item[0].status == 0]
+    best = best_of(runs)
+    if not unfinished or best is None:
+        return None if best is None else (*best, False)
+    if flat(*best):
+        return (*best, True)
+    for k in unfinished:
+        runs[k] = run(starts[k], _MAX_NFEV)
+    best = best_of(runs)
+    return None if best is None else (*best, False)
+
+
+def _flat_p(total: float, ssr: float, p: int, df: int) -> float:
+    """p of the F test of a ``p``-parameter curve against a horizontal line."""
+    from scipy import stats
+
+    f_value = ((total - ssr) / (p - 1)) / (ssr / df) if ssr > 0 else math.inf
+    return float(stats.f.sf(f_value, p - 1, df)) if math.isfinite(f_value) else 0.0
+
+
+def _is_flat(flat_p: float, change: float, rmse: float) -> bool:
+    """The flat-response rule: F test p > 0.05, or a change over the tested range of less
+    than 3 × RMSE."""
+    return flat_p > 0.05 or change < 3 * rmse
 
 
 def fit_curve(
@@ -213,11 +257,22 @@ def fit_curve(
             starts.append(
                 {"bottom": bottom, "top": top, "log_center": center, "hill": sign, "s": 1.0}
             )
-    best = _solve(logx, y, free, fixed, starts, bounds, robust)
+    n, p = y.size, len(free)
+    df = n - p
+    total = float(np.sum((y - y.mean()) ** 2))
+
+    def flat(result: Any, ssr: float) -> bool:
+        if df <= 0 or total <= 0:
+            return False
+        params = _unpack(result.x, free, fixed)
+        change = abs(float(logistic(xhi, *params)) - float(logistic(xlo, *params)))
+        return _is_flat(_flat_p(total, ssr, p, df), change, math.sqrt(ssr / n))
+
+    best = _solve(logx, y, free, fixed, starts, bounds, robust, flat)
     if best is None:
         fit.flags.append("curve not converged")
         return fit
-    result, ssr = best
+    result, ssr, stopped_flat = best
     bottom, top, center, hill, s = _unpack(result.x, free, fixed)
     if top < bottom and "bottom" not in fixed and "top" not in fixed and s == 1.0:
         bottom, top, hill = top, bottom, -hill  # same curve, Prism's orientation
@@ -227,18 +282,16 @@ def fit_curve(
         fit.log_ec50 = center + math.log10(2 ** (1 / s) - 1) / hill if hill else math.nan
     else:
         fit.log_ec50 = center
-    fit.converged = bool(result.status > 0)
+    # a search stopped at a flat fit counts as converged: the answer (flat) is settled
+    fit.converged = bool(result.status > 0) or stopped_flat
     if not fit.converged:
         fit.flags.append("curve not converged")
     fit.ssr = ssr
-    n, p = y.size, len(free)
     fit.rmse = math.sqrt(ssr / n)
-    total = float(np.sum((y - y.mean()) ** 2))
     fit.r2 = 1 - ssr / total if total > 0 else math.nan
     fit.log_abs_ic50 = fit.inverse(half)
 
     # covariance-based intervals
-    df = n - p
     if df > 0:
         t = float(stats.t.ppf(0.975, df))
         try:
@@ -283,10 +336,9 @@ def fit_curve(
 
     # flat response: F test of the curve against a horizontal line
     if df > 0 and total > 0:
-        f_value = ((total - ssr) / (p - 1)) / (ssr / df) if ssr > 0 else math.inf
-        fit.flat_p = float(stats.f.sf(f_value, p - 1, df)) if math.isfinite(f_value) else 0.0
+        fit.flat_p = _flat_p(total, ssr, p, df)
         change = abs(float(fit.predict(xhi)) - float(fit.predict(xlo)))
-        if fit.flat_p > 0.05 or change < 3 * fit.rmse:
+        if _is_flat(fit.flat_p, change, fit.rmse):
             fit.flags.append("flat response (curve not better than a horizontal line)")
     if math.isfinite(fit.log_ec50) and not xlo <= fit.log_ec50 <= xhi:
         fit.flags.append("EC50 extrapolated beyond the tested range")

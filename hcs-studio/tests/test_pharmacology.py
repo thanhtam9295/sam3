@@ -138,6 +138,65 @@ def test_curve_flags_auc_activity_and_f_test() -> None:
     assert compare_ec50(CONC, y, CONC, same)["p"] > 0.05
 
 
+def test_flat_fits_are_fast_and_real_curves_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    import scipy.optimize
+
+    from hcs_studio.pharmacology import curves
+
+    calls: list[int] = []
+    least_squares = scipy.optimize.least_squares
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        calls.append(int(kwargs["max_nfev"]))
+        return least_squares(*args, **kwargs)
+
+    monkeypatch.setattr(scipy.optimize, "least_squares", counted)
+    # real curves: the values from before the quick first pass (one search of up to 4000
+    # evaluations per start), to 1e-6
+    rng = np.random.default_rng(7)
+    y = logistic(np.log10(CONC), 10, 100, -7.0, -1.2) + rng.normal(0, 2, CONC.size)
+    fit = fit_curve(CONC, y)
+    assert (fit.log_ec50, fit.hill) == pytest.approx(
+        (-6.991512156512019, -1.2555636342337904), abs=1e-6
+    )
+    assert calls and set(calls) == {curves._QUICK_NFEV}  # converged in the quick pass
+    calls.clear()
+    # steep, at the top of the range: starts run past the quick pass and are restarted
+    rng = np.random.default_rng(0)
+    y = logistic(np.log10(CONC), 10, 100, -4.6, -3.0) + rng.normal(0, 4, CONC.size)
+    fit = fit_curve(CONC, y)
+    assert (fit.log_ec50, fit.hill) == pytest.approx(
+        (-4.890337660013594, -9.999984615553162), abs=1e-6
+    )
+    assert curves._MAX_NFEV in calls
+    assert not any("flat" in f for f in fit.flags)
+
+    # flat responses (% of control 96–104, GR 0.9–1.1): these took 5.6, 1.5 and 1.1 s
+    def timed(function: Any) -> tuple[float, Any]:
+        times, out = [], None
+        for _ in range(3):  # best of 3: a busy machine should not fail the test
+            started = time.perf_counter()
+            out = function()
+            times.append(time.perf_counter() - started)
+        return min(times), out
+
+    percent = np.clip(np.random.default_rng(0).normal(100, 2, CONC.size), 96, 104)
+    rng = np.random.default_rng(1)
+    rng.normal(size=CONC.size)
+    gr = np.clip(rng.normal(1, 0.05, CONC.size), 0.9, 1.1)
+    gr_other = np.clip(rng.normal(1, 0.05, CONC.size), 0.9, 1.1)
+    for seconds, flat in (
+        timed(lambda: fit_curve(CONC, percent)),
+        timed(lambda: fit_curve(CONC, gr, fix_top=1.0, half=0.5)),
+    ):
+        assert seconds < 0.3
+        assert "flat response (curve not better than a horizontal line)" in flat.flags
+        assert flat.converged
+    seconds, metrics = timed(lambda: gr_metrics(CONC, gr_other))
+    assert seconds < 0.3
+    assert metrics["GRmax"] == pytest.approx(1, abs=0.1)
+
+
 def test_gr_metrics_from_doubling_time() -> None:
     """GR from a known GR curve: x = x0 · 2^(log2(xctrl/x0) · log2(GR + 1))."""
     plate = layout()

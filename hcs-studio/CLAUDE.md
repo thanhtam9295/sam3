@@ -192,6 +192,10 @@ PlateLayout (model/annotation.py)
 - Concentrations are fitted in base units (M); display units only for labels and CSVs.
   `effect` (% inhibition scale) is what synergy models use.
 - Vehicles in % and treatments of control wells are not drugs (`drug_treatments`).
+- `fit_curve` / `_solve`: a quick pass (`_QUICK_NFEV`) per start, then unfinished starts are
+  restarted with `_MAX_NFEV` unless the best fit is already flat (`_is_flat`, the same rule as
+  the flag). `max_nfev` only ends a scipy search, so converged and restarted starts match one
+  full run exactly; keep it that way (no warm restarts from a capped result).
 - Keep synergy definitions in step with docs/pharmacology.md; the reference-data tests in
   `tests/data/pharmacology/` (Prism, SynergyFinder) run when files are present.
 - GUI: `gui/pharmacology_panel.py`; analysis runs in a `BackgroundTask` (thread), not in
@@ -643,7 +647,7 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   when a flat line is as good; `curve_metrics`). `kinetics/response.py` (`conditions(layout)`,
   `ic50_over_time` (% of same-time vehicle median, `fit_curve`), `gr_over_time` (x₀ = each well's
   value at the last time point ≤ 0 h since treatment), `gr_intervals`; `responds()` skips flat
-  series — the pharmacology 4PL takes seconds on flat data). `kinetics/analysis.py` (table step
+  series, which have no IC50 to report). `kinetics/analysis.py` (table step
   `kinetics`, `finish_table` builds the time course itself; `analyse`, `write_kinetics`,
   `analyse_runs`; `kn_` per-well values, readouts in readouts.py). CLI `hcs-studio kinetics
   analyse`. Synthetic `response_course` (+ `onset_h`), `drug_rate`. The time-dependent GR

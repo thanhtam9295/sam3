@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Pharmacology — fast fits of flat responses
+- `fit_curve` stops searching once the best fit is a flat response (not better than a
+  horizontal line): inactive compounds fit in ~0.1 s instead of 1–6 s (single agents, GR
+  metrics, kinetics, bootstrap). Each start gets 60 evaluations first; unfinished starts of
+  non-flat data are restarted with the full 4000, so sigmoidal curves give identical results
+  (regression baseline unchanged). Flat fits are still flagged and count as converged.
+
 ### Phase 22b — live-cell kinetics: kinetic analysis
 - `kinetics` (table step; CLI `hcs-studio kinetics analyse` for one run or separate
   acquisitions): growth fits per well on the log scale (exponential, lag-exponential, logistic;

@@ -89,7 +89,7 @@ def responds(conc: Any, values: Any) -> bool:
     """Whether the concentrations differ: the range of the concentration means exceeds
     3 × the pooled SD of replicates (the spread of the means when there are no replicates is
     compared with the median absolute step between neighbouring concentrations). Flat series
-    are not fitted: a 4PL on a flat line has no answer, and searching for one is slow."""
+    are not fitted: a 4PL on a flat line has no answer."""
     frame = pd.DataFrame({"c": np.asarray(conc, float), "v": np.asarray(values, float)}).dropna()
     if frame["c"].nunique() < 3:
         return False
