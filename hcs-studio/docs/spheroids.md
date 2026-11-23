@@ -120,8 +120,11 @@ whose cards show the field with the most organoid area.
 ## Confocal Z stacks (3D)
 
 ```python
-preset({"fluorescence": "Hoechst", "dead": "EthD1", "nuclei": "Hoechst"},
-       channels=["Hoechst", "EthD1"], z_planes=60)
+preset(
+    {"fluorescence": "Hoechst", "dead": "EthD1", "nuclei": "Hoechst"},
+    channels=["Hoechst", "EthD1"],
+    z_planes=60,
+)
 ```
 
 gives `attenuation` → `detect_spheroids` (3D) → [`segment_cellpose` 3D nuclei with
