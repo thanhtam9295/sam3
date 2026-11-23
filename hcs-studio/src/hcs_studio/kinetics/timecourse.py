@@ -8,7 +8,9 @@ over the well's fields), plus:
 - ``time_s`` / ``time_h``: since the first time point, from the instrument's timestamps (or the
   user's time interval) recorded in the run manifest — never frame numbers; a run without times
   gets no time columns and a note;
-- ``hours_since_treatment``: from the treatment time (``treatment_time``) when known.
+- ``hours_since_treatment``: from the treatment time (``treatment_time``) when known;
+- ``fields_imaged``: fields with data at the time point (objects counted as 0 where a field was
+  imaged and nothing was found; a time point without fields stays missing).
 
 ``assemble([...])`` joins the time courses or per-well summaries of several runs — a plate
 imaged repeatedly as separate acquisitions (scheduler re-imaging) — on their acquisition times.
@@ -121,6 +123,7 @@ def build_time_course(
                 for t, group in numeric.groupby(keep["timepoint"]):
                     means = group.drop(columns="timepoint").mean(numeric_only=True)
                     values = {str(k): float(v) for k, v in means.items()}
+                    values["fields_imaged"] = float(len(group))
                     per_t.setdefault(int(str(t)), {}).update(values)
         for t in range(n_t):
             values = dict(per_t.get(t, {}))
@@ -129,6 +132,10 @@ def build_time_course(
     table = pd.DataFrame(rows)
     if table.empty:
         return table
+    if "fields_imaged" in table:  # imaged without objects: a count of 0, not a missing value
+        imaged = table["fields_imaged"].fillna(0) > 0
+        for column in [c for c in table.columns if str(c).endswith("_objects_measured")]:
+            table.loc[imaged & table[column].isna(), column] = 0.0
     times = plate.get("time_points_s")
     if times and len(times) == n_t:
         table.insert(2, "time_s", [float(times[int(t)]) for t in table["timepoint"]])

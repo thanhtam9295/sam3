@@ -70,7 +70,8 @@ DESCRIPTIONS = {
     "exponential, lag-exponential or logistic chosen by AICc, doubling time ln 2 / growth rate; "
     "AUC; IC50 at each time point from % of the same-time vehicle median; GR values from "
     "treatment with each well's own pre-treatment value as time zero and over intervals, "
-    "Hafner et al. 2016)",
+    "Hafner et al. 2016; kinetic QC of acquisition gaps, focus drift, edge evaporation and "
+    "vehicle growth against earlier runs)",
     "cytoplasm": "a cytoplasm compartment per nucleus (a ring between gap_um and gap_um + "
     "width_um from the nuclear edge, assigned to the nearest nucleus and, with a cell segmentation, "
     "kept inside the cell; or the cell minus its nucleus)",

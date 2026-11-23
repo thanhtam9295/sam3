@@ -393,7 +393,7 @@ Table step: runs on the object tables after all wells are processed, and can be 
 
 ## Kinetics (growth, IC50(t), GR) (`kinetics`)
 
-Kinetics (Phase 22b): table step for time-lapse runs. Per well a growth fit on the log of the readout (exponential, lag_exponential, logistic; AICc) → `kn_doubling_h`, `kn_growth_rate_per_h`, `kn_lag_h`, `kn_capacity`, plus AUC, fold changes and times to a fold change or level. With compounds in the layout: IC50 per time point, GR from treatment (each well's own value before treatment as time zero) and GR over intervals (interval_h, else consecutive time points); GR50/GRmax per compound and time. Writes `kinetics/`. See the Kinetics guide.
+Kinetics (Phase 22b): table step for time-lapse runs. Per well a growth fit on the log of the readout (exponential, lag_exponential, logistic; AICc) → `kn_doubling_h`, `kn_growth_rate_per_h`, `kn_lag_h`, `kn_capacity`, plus AUC, fold changes and times to a fold change or level. With compounds in the layout: IC50 per time point, GR from treatment (each well's own value before treatment as time zero) and GR over intervals (interval_h, else consecutive time points); GR50/GRmax per compound and time. Kinetic QC (Phase 22c): gaps and missing time points, focus drift, edge evaporation, vehicle growth vs the registry history (`kn_qc_flags`). Writes `kinetics/` with `report.html` (plate map with sparklines, condition × time heat map, curve overlays, QC). See the Kinetics guide.
 
 Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
 

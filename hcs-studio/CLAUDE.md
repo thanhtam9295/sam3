@@ -648,6 +648,14 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `analyse_runs`; `kn_` per-well values, readouts in readouts.py). CLI `hcs-studio kinetics
   analyse`. Synthetic `response_course` (+ `onset_h`), `drug_rate`. The time-dependent GR
   definition of Hafner et al. was not readable (NCBI/EBI blocked): interval convention unchecked.
+- **Phase 22c (built)**: `kinetics/qc.py` (`kinetic_qc` → `KineticQc` with checks pass/warn/fail/
+  not assessed + `well_flags` + `timeline`; `check_time_points`, `check_focus` (needs the `qc`
+  step's `focus_score`), `check_edges` (condition key role|cell line|compound|conc on edge and
+  inside), `check_controls`, `control_history` (registry: `kn_doubling_h` of `PlateWell` vehicle
+  wells per run, given rooted folders excluded)); `analyse(course, layout, params, plate_shape,
+  history)`; `kn_qc_flags`. `kinetics/report.py` (`report_data`, `write_report` →
+  self-contained `kinetics/report.html`, `heatmap_figure`); linked in `output/report.report_links`.
+  Time course `fields_imaged`; `_objects_measured` = 0 where imaged without objects.
 
 ## Commands
 

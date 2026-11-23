@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Phase 22c — live-cell kinetics: views and QC
+- Kinetic QC in the `kinetics` step: acquisition gaps and missing time points, focus drift (per
+  well and plate-wide), edge evaporation (edge vs interior wells of the same condition over
+  time), vehicle growth (non-growing and outlying wells, and against earlier runs of the cell
+  line in the registry). Statuses in `kinetics.json`, flags in `kn_qc_flags` / `qc_wells.csv`.
+- `kinetics/report.html` (linked from `index.html`): plate map with a sparkline per well,
+  condition × time heat map, curve overlays per compound, QC panel; `heatmap.png`.
+- Time courses count 0 objects in imaged fields (`fields_imaged`) instead of a missing value.
+
 ### Phase 22b — live-cell kinetics: kinetic analysis
 - `kinetics` (table step; CLI `hcs-studio kinetics analyse` for one run or separate
   acquisitions): growth fits per well on the log scale (exponential, lag-exponential, logistic;

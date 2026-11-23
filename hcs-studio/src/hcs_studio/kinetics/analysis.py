@@ -73,6 +73,7 @@ class KineticsResult:
     gr_interval_values: pd.DataFrame = field(default_factory=pd.DataFrame)
     gr_interval_metrics: pd.DataFrame = field(default_factory=pd.DataFrame)
     notes: list[str] = field(default_factory=list)
+    qc: Any = None  # kinetics.qc.KineticQc
     #: Wells × times matrix of the readout and the wells' conditions (for figures).
     matrix: pd.DataFrame = field(default_factory=pd.DataFrame)
     conditions: pd.DataFrame = field(default_factory=pd.DataFrame)
@@ -82,6 +83,9 @@ class KineticsResult:
         for row in self.fits.to_dict("records"):
             values = {f"{PREFIX}{k}": v for k, v in row.items() if k not in ("well", "n_points")}
             out[str(row["well"])] = values
+        if self.qc is not None:
+            for well in out:
+                out[well][f"{PREFIX}qc_flags"] = "; ".join(self.qc.well_flags.get(well, []))
         if not self.gr_values.empty:
             last = self.gr_values.sort_values("time_h").groupby("well").tail(1)
             for row in last.to_dict("records"):
@@ -102,8 +106,16 @@ def choose_readout(course: pd.DataFrame, readout: str) -> str:
     raise ModuleError("No object counts or confluence in the time course: set the readout")
 
 
-def analyse(course: pd.DataFrame, layout: Any, params: KineticsParams) -> KineticsResult:
-    """Growth fits and dose–response over time of a time-course table (see module docs)."""
+def analyse(
+    course: pd.DataFrame,
+    layout: Any,
+    params: KineticsParams,
+    plate_shape: tuple[int, int] | None = None,
+    history: dict[str, list[float]] | None = None,
+) -> KineticsResult:
+    """Growth fits, dose–response over time and kinetic QC of a time-course table (see module
+    docs). ``plate_shape`` (rows, cols) enables the edge check; ``history``: earlier vehicle
+    doubling times per cell line (``qc.control_history``)."""
     from hcs_studio.kinetics.response import (
         conditions,
         gr_intervals,
@@ -140,6 +152,16 @@ def analyse(course: pd.DataFrame, layout: Any, params: KineticsParams) -> Kineti
     result = KineticsResult(readout, time, fits, notes=notes, matrix=matrix, conditions=info)
     if not info.empty:
         _auc_vs_vehicle(result, info)
+    from hcs_studio.kinetics.qc import kinetic_qc
+
+    if plate_shape is None and layout is not None:
+        plate_shape = (int(layout.rows), int(layout.cols))
+    if plate_shape is None:
+        from hcs_studio.model.plate import parse_well_name
+
+        keys = [parse_well_name(str(w)) for w in course["well"].unique()]
+        plate_shape = (max(r for r, _ in keys) + 1, max(c for _, c in keys) + 1)
+    result.qc = kinetic_qc(course, result.fits, info, readout, time, plate_shape, history=history)
     has_doses = not info.empty and bool((info["concentration"] > 0).any())
     if params.dose_response and has_doses:
         result.ic50 = ic50_over_time(course, info, readout, notes)
@@ -188,15 +210,28 @@ def write_kinetics(result: KineticsResult, out: Path, info: dict[str, Any]) -> l
             files.append(name)
         else:
             (out / name).unlink(missing_ok=True)
+    if result.qc is not None:
+        result.qc.wells_table().to_csv(out / "qc_wells.csv", index=False)
+        files.append("qc_wells.csv")
+        if not result.qc.timeline.empty:
+            result.qc.timeline.to_csv(out / "qc_timeline.csv", index=False)
+            files.append("qc_timeline.csv")
     summary = {
         "readout": result.readout,
         "time": result.time_column,
         "notes": result.notes,
+        "qc": {"status": result.qc.status, "checks": result.qc.checks} if result.qc else None,
         **info,
         "files": files,
     }
     (out / "kinetics.json").write_text(json.dumps(summary, indent=1, default=_json), "utf-8")
     files += _figures(result, out)
+    from hcs_studio.kinetics.report import heatmap_figure, write_report
+
+    if heatmap_figure(result, out / "heatmap.png"):
+        files.append("heatmap.png")
+    write_report(result, out, info)
+    files.append("report.html")
     return files
 
 
@@ -308,10 +343,37 @@ class Kinetics(TableModule):
         course = build_time_course(folder, treated_at=params.treated_at)
         if course is None:
             raise ModuleError("kinetics needs a time-lapse run (more than one time point)")
-        result = analyse(course, _layout(folder), params)
+        layout = _layout(folder)
+        history = _history([folder], layout)
+        shape = _plate_shape(folder)
+        result = analyse(course, layout, params, shape, history)
         for well, values in result.per_well().items():
             per_well.setdefault(well, {}).update(values)
-        write_kinetics(result, Path(folder) / "kinetics", time_info(folder, params.treated_at))
+        info = time_info(folder, params.treated_at)
+        if shape is not None:
+            info.update(rows=shape[0], cols=shape[1])
+        write_kinetics(result, Path(folder) / "kinetics", info)
+
+
+def _plate_shape(folder: Path) -> tuple[int, int] | None:
+    try:
+        plate = json.loads((Path(folder) / "run_manifest.json").read_text("utf-8"))["plate"]
+        return (int(plate["rows"]), int(plate["cols"])) if plate.get("rows") else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _history(folders: list[Path], layout: Any) -> dict[str, list[float]]:
+    """Earlier vehicle doubling times of the layout's cell lines (these runs left out)."""
+    from hcs_studio.kinetics.qc import control_history
+    from hcs_studio.kinetics.response import conditions
+    from hcs_studio.output.manifest import rooted_text
+
+    info = conditions(layout)
+    if info.empty:
+        return {}
+    lines = sorted({str(c) for c in info.loc[info["role"] == "negative_control", "cell_line"]})
+    return control_history(lines, {rooted_text(Path(f)) for f in folders}) if lines else {}
 
 
 def analyse_runs(
@@ -321,7 +383,12 @@ def analyse_runs(
     from hcs_studio.kinetics.timecourse import _layout, assemble, time_info
 
     course = assemble(folders, treated_at=params.treated_at)
-    result = analyse(course, _layout(folders[0]), params)
+    layout = _layout(folders[0])
+    history = _history(folders, layout)  # none of the runs joined here counts as history
+    shape = _plate_shape(folders[0])
+    result = analyse(course, layout, params, shape, history)
     info = time_info(folders[0], params.treated_at)
     info["runs"] = [Path(f).name for f in folders]
+    if shape is not None:
+        info.update(rows=shape[0], cols=shape[1])
     return result, write_kinetics(result, output, info)

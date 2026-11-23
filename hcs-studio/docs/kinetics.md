@@ -3,8 +3,9 @@
 Time-lapse plates (Incucyte-style live imaging, or one plate imaged repeatedly by the scheduler)
 are analysed on **real times**, never on frame numbers. This guide covers the time-course data
 (Phase 22a): where the times come from, the treatment time, drift correction, confluence and the
-time-course table (Phase 22a), and the kinetic analysis: growth curves, doubling times, IC50
-over time and GR values (Phase 22b).
+time-course table (Phase 22a), the kinetic analysis: growth curves, doubling times, IC50
+over time and GR values (Phase 22b), and the views and quality control of a time-lapse plate
+(Phase 22c).
 
 ## Times
 
@@ -168,13 +169,47 @@ interval form follows from it algebraically. The paper's own time-dependent defi
 not be read from this environment, so the choice of intervals is HCS Studio's convention (see
 Validation).
 
+### Kinetic QC
+
+Problems that only show over time are checked every time `kinetics` runs; the status of each
+check is in `kinetics.json` and at the top of the kinetics report, and wells get flags
+(`kn_qc_flags` in `per_well_summary.csv`, `qc_wells.csv`):
+
+| Check | What it finds | Rule |
+|---|---|---|
+| Time points | the instrument skipped acquisitions; wells without a value at some time point | an interval > 1.5 × the median interval; a missing value where the plate has one |
+| Focus drift | autofocus failing at some time points, or the plate drifting out of focus over days | each field's focus score (the `qc` step) relative to the same well's median over time: < 0.5 flags the time point; the plate's median relative focus in the last third < 0.8 × the first third warns |
+| Edge evaporation | outer wells losing medium: their cells grow differently as time goes on | for each condition imaged both on the edge and inside, the log2 fold change since the first time point of the edge wells minus the interior wells' median; the median over conditions beyond log2 1.25 (±25 %) at the end warns, and edge wells that far from their condition are flagged. Not assessed when no condition is on both (edges left empty on purpose) |
+| Control growth | vehicle wells that do not grow, or grow unlike the others or unlike earlier runs | no growing vehicle well fails; a vehicle doubling time > 1.5 × off the vehicle median flags the well; the vehicle median outside the median ± 3 robust SD (at least ±15 %) of earlier runs of the same cell line in the registry warns (needs ≥ 3 earlier runs indexed with `hcs-studio db scan`) |
+
+Zero objects in an imaged field count as 0 (`fields_imaged` in the time course), so an empty
+well at the end of a cytotoxic series is not mistaken for a missing time point.
+
+### The kinetics report
+
+`kinetics/report.html` (linked from the run's `index.html`) is self-contained like `index.html`:
+
+- **QC**: each check with its status, and the focus and edge-effect timelines;
+- **plate map with sparklines**: every well's readout over time on one shared scale (log when all
+  values are positive), coloured by compound with darker shades for higher concentrations and
+  vehicle in black; wells with QC flags have a red border (hover for the flags and the doubling
+  time); clicking wells adds them to the overlay;
+- **curves**: the median curve of each concentration of a compound, vehicle in black;
+- **conditions over time**: a heat map with one row per condition (vehicle, then each compound
+  by concentration) and one column per time point — log2 vs the vehicle at the same time point,
+  or log2 fold change since the first time point.
+
+`heatmap.png` is the same heat map for documents.
+
 ### Files
 
 `kinetics/` (in the run folder, or `--output`): `growth_fits.csv` (one row per well),
 `ic50_over_time.csv`, `gr_values.csv` and `gr_metrics_over_time.csv` (from treatment),
 `gr_interval_values.csv` and `gr_interval_metrics.csv`, `kinetics.json` (readout, times,
 treatment time and its source, notes), `growth_curves.png` (each compound with vehicle wells in
-black, concentrations light to dark) and `potency_over_time.png` (IC50 and GR50 against time).
+black, concentrations light to dark) and `potency_over_time.png` (IC50 and GR50 against time),
+`heatmap.png`, `qc_wells.csv` (flags per well), `qc_timeline.csv` (relative focus and edge
+effect per time point) and `report.html`.
 
 ## Synthetic data
 

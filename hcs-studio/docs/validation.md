@@ -241,6 +241,25 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Live-cell kinetics: views and QC (Phase 22c)
+
+| Check | Result | Test |
+|---|---|---|
+| Clean dose–response time course (33 wells, 9 time points) | all four checks pass, no well flagged | `test_clean_plate_passes_every_check` |
+| Planted: two acquisitions skipped (18 → 36 h), one well missing 12 h, one well out of focus at 6 h, the plate's focus × 0.6 from 36 h, row A (edge) growing 30 % less by 48 h, a vehicle well not growing | every check warns; gap (18, 36); edge effect log2 0.7 within 0.03; the four wells flagged; interior wells not flagged as edge | `test_planted_problems_are_found` |
+| No condition on both edge and interior; vehicle wells without data | edge and control checks "not assessed" | `test_edges_not_assessed_without_a_condition_on_both` |
+| Registry with 5 earlier runs (vehicle doubling 19.5–21 h, one excluded) | history read per run and cell line (sample wells ignored); 20.4 h passes, 30 h warns, no growing vehicle fails | `test_control_growth_against_history` |
+| Kinetics report in Chromium, offline | no script errors; 33 sparklines; the flagged well outlined; heat map rows = vehicle + 9 concentrations; clicking a well adds its curve; linked from `index.html` | `test_report_page_works_offline_in_a_browser`, `test_report_page_and_link`, `test_doubling_time_from_images` |
+
+Found while building: wells with no objects at a time point (empty after a cytotoxic dose) had
+no count at all in the time course and would read as missing time points → objects counted as
+0 where a field was imaged. The focus score comes from the `qc` step (not `measure_objects`):
+without it the focus check is not assessed.
+
+Not yet checked: the thresholds (gap 1.5 ×, focus 0.5 / 0.8, edge ±25 %, history ± 3 robust SD)
+on real time-lapse plates; edge evaporation on a real plate (needs a layout with the same
+condition on the edge and inside).
+
 ## Live-cell kinetics: kinetic analysis (Phase 22b)
 
 | Check | Result | Test |
