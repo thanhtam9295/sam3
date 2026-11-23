@@ -664,6 +664,21 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `tracking` (prefix `trk_` in ANNOTATION_PREFIXES and `_LABEL_PREFIXES`; times from the
   manifest; ids field × 100 000 + track; `tracking/tracks.csv`). Synthetic `simulate_lineages`,
   `MovingCells` (per-field cache; truth `cells` with id/parent/y/x).
+- **Phase 23 plan** (2026-11-24): (a) scoring + hit calling — built; (b) review views (screen
+  report: plate heat maps, score vs plate order, distribution, replicate scatter; hit gallery
+  via Phase 14 compare; GUI tab); (c) Echo pick list (configurable columns), confirmation
+  layouts pre-registered, `cherrypick.request`, screen summary. Ask for: a library plate map, a
+  sample Echo pick list, current hit-calling rules; RDKit (PAINS) only if approved.
+- **Phase 23a (built)**: package `screening/`: `scores.py` (`plate_scores` → pct/z/b/ssmd_single
+  + Z′ via `normalization.plate.normalize_plate`; `ssmd`), `rules.py` (AST whitelist evaluator),
+  `screen.py` (`ScreenConfig` pydantic, `score_screen` → wells/compounds/plates, `_artifacts` from
+  `qc_failed`/`low_count`/`qc_flags`, `finalize` with `Override`s from `overrides.json`,
+  `run_screen`, `write_screen`), `library.py` (`read_library_map`, `read_transfers`,
+  `assay_layouts` stamp/quadrants/echo onto a control template). `db/library.py`
+  (`import_library`, `library_map`). Services `operations.run_screen`/`review_hit`,
+  `registry.import_library_map` (core functions in `WRAPPED`). CLI `hcs-studio screen
+  score|review|library|layouts`. Synthetic `synthetic/screening.write_screen`. The positional
+  guard skips single-concentration compounds (speed).
 
 ## Commands
 

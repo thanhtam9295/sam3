@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Phase 23a — primary screens: scoring and hit calling
+- Library plate maps (CSV/XLSX, flexible columns and units) into the registry (`hcs-studio screen
+  library`); assay-plate layouts from a control template by stamping, 4 × 96 → 384 quadrants or
+  an Echo transfer file, optionally pre-registered by barcode (`hcs-studio screen layouts`).
+- Per plate and readout: % activity, robust Z, B-score (guard rail: robust Z on non-randomised
+  plates), SSMD*; Z′ and robust Z′; SSMD (MM, UMVUE, robust) over replicates.
+- Hit rules as safe expressions over the scores (multi-readout, e.g. active and not
+  cytotoxic), image-QC artefact filters, replicate rules, ranked hits, manual include/exclude
+  with a reason (`hcs-studio screen score|review`; services `screen.score`, `screen.review`).
+- The positional guard rail skips single-concentration compounds (a 384-well screen plate is
+  scored 6 × faster). Synthetic screen with seeded hits, cytotoxic and autofluorescent compounds
+  and a positional artefact (`synthetic.screening`). Docs: screening.md.
+
 ### Phase 22d — live-cell kinetics: cell tracking
 - `tracking` (table step, scipy only): nuclei linked between time points by optimal assignment
   on the distance to their predicted positions (persistent motion; track ends/starts at the

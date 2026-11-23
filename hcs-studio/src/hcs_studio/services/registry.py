@@ -273,3 +273,14 @@ def write_bridging_report(
     files = write(result, Path(folder))
     ctx.note(object_id=str(files[0]), after=summary(result) | {"files": [p.name for p in files]})
     return files
+
+
+@service("registry.library", object_type="library")
+def import_library_map(ctx: ServiceContext, library: Any, name: str = "") -> dict[str, Any]:
+    """Store library plate maps (plates already known are replaced)."""
+    from hcs_studio.db.library import import_library
+
+    counts = import_library(library, name)
+    plates = sorted({str(p) for p in library["library_plate"]})
+    ctx.note(object_id=",".join(plates)[:200], after=counts)
+    return counts

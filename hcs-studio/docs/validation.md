@@ -241,6 +241,29 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Primary screens: scoring and hit calling (Phase 23a)
+
+| Check | Result | Test |
+|---|---|---|
+| **Done-when**: synthetic screen, 4 libraries × 2 replicates (384 wells), 40 seeded hits (−35 %, noise 6 %), a row gradient (±15 %) and an edge offset (−25 %) differing per plate | with B-score 39/40 (97.5 %) hits recovered and no other compound called; robust Z alone: 12/40 and 7 edge-well false hits | `test_seeded_hits_recovered_and_artifact_makes_no_false_hits` |
+| 16 cytotoxic compounds (both readouts down), 12 autofluorescent compounds (flagged by image QC) | without the count rule / QC filter they are called; with them none is | `test_cytotoxic_and_artifact_compounds_are_kept_out` |
+| Replicate rules all / at least 2 / any | all = 2 ≤ any | `test_replicate_rules` |
+| Manual exclude / include with a reason (CLI → service) | hit list rewritten, reason stored; no reason refused | `test_manual_review_needs_a_reason` |
+| SSMD of d = (−3, −4, −5); Z′ of known controls | MM −4, UMVUE −4/√π, robust −4/1.4826; Z′ and robust Z′ exact | `test_ssmd_and_z_prime_known_values` |
+| Rule language | chained comparisons, `not`, `abs`; attribute access, calls, strings, unknown names refused | `test_rules_language` |
+| Dose series along rows | B-score blocked, robust Z used with a note | `test_b_score_refused_on_a_dose_response_plate` |
+| Library maps (units in values / header), quadrants, stamp, Echo transfer file with a preamble; registry import and re-import; layouts registered by barcode | placement and concentrations exact (Echo: 10 mM × 80 nL / 40.08 µL); compounds on control wells refused | `test_library_maps_and_assay_layouts`, `test_library_registry_and_registered_layouts` |
+
+Found while building: (1) the cell-count readout defaulted to % inhibition against a positive
+control that does not change cell count, so "not cytotoxic" rejected almost every compound (12/40
+recovered) → `activity: percent_of_control` for such readouts, documented. (2) The positional
+guard rail built a table per compound — 13 s of 15 s on 8 plates → single-concentration
+compounds are skipped (same result).
+
+SSMD formulas follow Zhang (2007, 2011) as summarised in the literature; not yet checked against
+the papers (NCBI is not reachable from the cloud environment). Not yet checked: a real library
+plate map, a real Echo transfer file, the user's hit-calling rules.
+
 ## Live-cell kinetics: cell tracking (Phase 22d)
 
 | Check | Result | Test |

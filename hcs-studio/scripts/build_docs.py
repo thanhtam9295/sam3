@@ -30,6 +30,7 @@ PAGES = [
     ("assays.md", "Oncology assays"),
     ("spheroids.md", "Spheroids and organoids"),
     ("kinetics.md", "Live-cell kinetics"),
+    ("screening.md", "Primary screens"),
     ("validation.md", "Validation"),
 ]
 TEMPLATE = """<!doctype html>

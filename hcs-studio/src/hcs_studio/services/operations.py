@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from hcs_studio.services import ServiceContext, service
 
@@ -364,3 +364,38 @@ def resume_job(ctx: ServiceContext, queue: Any, job_id: str) -> str | None:
     new = queue.resume(job_id)
     ctx.note(object_id=job_id, after={"resume_job": new})
     return new  # type: ignore[no-any-return]
+
+
+@service("screen.score", object_type="screen")
+def run_screen(ctx: ServiceContext, folders: list[Path], config: Any, output: Path) -> Any:
+    """Score a screen and write its hit list (manual decisions already made are kept)."""
+    from hcs_studio.screening.screen import run_screen as score
+
+    result = score([Path(f) for f in folders], config, Path(output))
+    ctx.note(object_id=object_id(output), after={"plates": len(result.plates),
+                                                  "hits": len(result.hits)})  # fmt: skip
+    return result
+
+
+@service("screen.review", object_type="screen", reason_required=True)
+def review_hit(
+    ctx: ServiceContext, output: Path, compound: str, action: Literal["include", "exclude"]
+) -> Any:
+    """Include or exclude a compound from the hits (a reason is required); the hit list is
+    rewritten from the screen's runs and configuration."""
+    import json
+
+    from hcs_studio.screening.screen import Override, ScreenConfig, add_override
+    from hcs_studio.screening.screen import run_screen as score
+
+    output = Path(output)
+    summary = json.loads((output / "screen.json").read_text(encoding="utf-8"))
+    hits = output / "hits.csv"
+    before = compound in hits.read_text(encoding="utf-8") if hits.exists() else None
+    add_override(output, Override(compound=compound, action=action, reason=ctx.reason or "",
+                                  actor=ctx.actor.id))  # fmt: skip
+    config = ScreenConfig.model_validate(summary["config"])
+    result = score([Path(f) for f in summary["runs"]], config, output)
+    ctx.note(object_id=f"{object_id(output)}:{compound}", before={"listed": before},
+             after={"action": action, "hits": len(result.hits)})  # fmt: skip
+    return result

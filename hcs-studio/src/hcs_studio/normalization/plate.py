@@ -192,6 +192,8 @@ def positional_guard(wells: Sequence[WellInfo], min_points: int = 3) -> Guard:
             if conc > 0:
                 by_compound.setdefault(name, []).append((r, c, float(conc)))
     for name, points in sorted(by_compound.items()):
+        if len({conc for _, _, conc in points}) < min_points:
+            continue  # a single-concentration compound (library screens) is never a series
         frame = pd.DataFrame(points, columns=["row", "col", "conc"])
         for axis, along in (("row", "col"), ("col", "row")):
             for line, group in frame.groupby(axis):

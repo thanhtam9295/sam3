@@ -137,6 +137,8 @@ WRAPPED = {
     "hcs_studio.analysis.profiling": {"run_profiling"},
     "hcs_studio.qc.run": {"run_qc"},
     "hcs_studio.qc.review": {"apply_override"},
+    "hcs_studio.screening.screen": {"run_screen", "add_override"},
+    "hcs_studio.db.library": {"import_library"},
 }
 ALLOWED = {
     # read-only exploration (write=False) is not a change

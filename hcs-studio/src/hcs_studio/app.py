@@ -262,6 +262,52 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", type=Path, default=None, help="folder (default: <run>/kinetics)"
     )
 
+    screen = sub.add_parser("screen", help="primary screens: hit calling, library maps")
+    screen_sub = screen.add_subparsers(dest="screen_command", required=True)
+    screen_score = screen_sub.add_parser("score", help="score plates and call hits")
+    screen_score.add_argument("folders", type=Path, nargs="+", help="run folders of the screen")
+    screen_score.add_argument("--config", type=Path, required=True, help="screen YAML/JSON")
+    screen_score.add_argument("--output", type=Path, required=True, help="screen folder")
+    screen_score.add_argument("--reason", default="")
+    screen_review = screen_sub.add_parser("review", help="include or exclude a hit by hand")
+    screen_review.add_argument("output", type=Path, help="screen folder")
+    screen_review.add_argument("--compound", required=True, help="compound name or key")
+    screen_review.add_argument("--action", choices=["include", "exclude"], required=True)
+    screen_review.add_argument("--reason", required=True, help="why (recorded)")
+    screen_library = screen_sub.add_parser("library", help="store library plate maps")
+    screen_library.add_argument("map", type=Path, help="library map CSV/XLSX")
+    screen_library.add_argument("--name", default="", help="library name")
+    screen_library.add_argument("--reason", default="")
+    screen_layouts = screen_sub.add_parser(
+        "layouts", help="assay-plate layouts from library maps (stamp, quadrants, Echo)"
+    )
+    screen_layouts.add_argument("map", type=Path, help="library map CSV/XLSX")
+    screen_layouts.add_argument(
+        "--template", type=Path, required=True, help="layout with the controls (JSON/CSV/XLSX)"
+    )
+    screen_layouts.add_argument("--rule", choices=["stamp", "quadrants", "echo"], required=True)
+    screen_layouts.add_argument(
+        "--dest",
+        action="append",
+        default=[],
+        metavar="LIBRARY=ASSAY",
+        help="assay barcode per library plate (stamp; quadrants: one)",
+    )
+    screen_layouts.add_argument("--sources", default="", help="quadrants: four library plates")
+    screen_layouts.add_argument(
+        "--dilution",
+        type=float,
+        default=1.0,
+        help="final / library concentration (stamp, quadrants)",
+    )
+    screen_layouts.add_argument("--transfers", type=Path, help="echo: transfer file")
+    screen_layouts.add_argument("--assay-volume-ul", type=float, help="echo: assay volume")
+    screen_layouts.add_argument("--output", type=Path, required=True, help="folder for layouts")
+    screen_layouts.add_argument(
+        "--register", action="store_true", help="save as layout versions keyed by barcode"
+    )
+    screen_layouts.add_argument("--reason", default="")
+
     selftest = sub.add_parser(
         "selftest", help="check this installation on a small synthetic plate (about a minute)"
     )
@@ -532,6 +578,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _qc(args)
     if args.command == "assay":
         return _assay(args)
+    if args.command == "screen":
+        return _screen(args)
     if args.command == "kinetics":
         return _kinetics(args)
     if args.command == "qc-review":
@@ -895,6 +943,81 @@ def _kinetics_analyse(args: argparse.Namespace, folders: list[Path]) -> int:
         print(f"Note: {note}")
     print(f"Readout: {result.readout}; {len(result.fits)} wells; files in {output}: "
           + ", ".join(files))  # fmt: skip
+    return 0
+
+
+def _screen(args: argparse.Namespace) -> int:
+    from hcs_studio.processing.base import ModuleError
+
+    try:
+        if args.screen_command == "score":
+            from hcs_studio.screening.screen import ScreenConfig
+            from hcs_studio.services.operations import run_screen
+
+            result = run_screen(
+                _ctx(args), list(args.folders), ScreenConfig.load(args.config), args.output
+            )
+        elif args.screen_command == "review":
+            from hcs_studio.services.operations import review_hit
+
+            result = review_hit(_ctx(args), args.output, args.compound, args.action)
+        elif args.screen_command == "library":
+            from hcs_studio.screening.library import read_library_map
+            from hcs_studio.services.registry import import_library_map
+
+            counts = import_library_map(_ctx(args), read_library_map(args.map), args.name)
+            print(
+                f"Library: {counts['plates']} plate(s), {counts['wells']} wells, "
+                f"{counts['new_compounds']} new compound(s)"
+            )
+            return 0
+        else:
+            return _screen_layouts(args)
+    except (OSError, ValueError, KeyError, ModuleError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    for note in result.notes:
+        print(f"Note: {note}")
+    print(
+        f"Screen: {len(result.plates)} plates, {len(result.compounds)} compounds, "
+        f"{len(result.hits)} hits → {args.output / 'hits.csv'}"
+    )
+    return 0
+
+
+def _screen_layouts(args: argparse.Namespace) -> int:
+    from hcs_studio.io.layout_io import load_layout, save_layout
+    from hcs_studio.io.layout_store import LayoutStore, plate_key
+    from hcs_studio.screening.library import assay_layouts, read_library_map, read_transfers
+    from hcs_studio.services.operations import save_layout_version
+
+    library = read_library_map(args.map)
+    template = load_layout(args.template).layout
+    destinations = dict(item.split("=", 1) for item in args.dest)
+    transfers = read_transfers(args.transfers) if args.transfers else None
+    layouts = assay_layouts(
+        library,
+        template,
+        args.rule,
+        destinations=destinations,
+        sources=[s for s in args.sources.split(",") if s] or None,
+        dilution=args.dilution,
+        transfers=transfers,
+        assay_volume_ul=args.assay_volume_ul,
+    )
+    args.output.mkdir(parents=True, exist_ok=True)
+    ctx = _ctx(args)
+    for barcode, layout in layouts.items():
+        save_layout(layout, args.output / f"{barcode}.json")
+        if args.register:
+            saved = save_layout_version(
+                ctx,
+                LayoutStore(plate_key(barcode=barcode)),
+                layout,
+                f"screen layout from {args.map.name}",
+            )
+            print(f"Registered {barcode} as version {saved.version}")
+    print(f"Layouts: {len(layouts)} → {args.output}")
     return 0
 
 
