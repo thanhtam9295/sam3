@@ -267,6 +267,7 @@ def test_user_guide_builds_as_html(tmp_path: Path) -> None:
         "image_qc.html",
         "assays.html",
         "spheroids.html",
+        "kinetics.html",
         "validation.html",
     }
     for page in pages:

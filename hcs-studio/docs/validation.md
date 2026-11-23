@@ -241,6 +241,26 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Live-cell kinetics: time-course data (Phase 22a)
+
+| Check | Result | Test |
+|---|---|---|
+| Synthetic time-lapse plate: 3 wells growing from 12 cells (doubling 20 h, 30 h, none), 5 uneven time points over 24 h, stage drift 0.4 / −0.25 µm per hour (15 × 9 px at 24 h) | nucleus counts per time point exact; drift per time point within 0.3 px (seen ≤ 0.2 px); times from the plate's timestamps; hours since treatment from the layout's treatment time; confluence rises with the count | `test_time_lapse_run_counts_drift_and_time_course` |
+| Textured texture shifted by 1.3 / −0.7 … 4.1 / −2.6 px | within 0.1 px (windowed; unwindowed 0.25 px short: image edges pull towards 0); 30 µm stage jump reported, not applied, later drift still corrected | `test_drift_shifts_recover_subpixel_drift_and_skip_jumps`, `test_register_timepoints_reports_stage_jumps` |
+| Brightfield-like cells (r 16 px, texture SD 60, background noise SD 8) at 0–48 % confluence, calibrated on the pooled fields | within 12 % of the truth (≥ 1 pp): seen +5 % (isolated cells) to +11 % (48 %: 4 px gaps between cells count as covered); empty well 0 %; noise-only plate reported and ≈ 0 % | `test_confluence_accuracy_from_texture`, `test_confluence_on_an_empty_plate_is_not_noise` |
+| Times from ImageXpress (`acquisition-time-local`), ND2 frame events, OME-Zarr; the Metadata interval when absent | exact | `test_imagexpress_time_points_from_image_timestamps`, `test_nd2_time_points_from_frame_events`, `test_ome_zarr_times_and_the_metadata_interval` |
+| Treatment time from an argument, the layout, a `plate.dispensed` event; separate acquisitions joined | precedence as documented; acquisitions ordered by time, 6 h apart; other plates refused | `test_treatment_time_sources`, `test_separate_acquisitions_are_joined_on_their_times` |
+
+Found while building: texture confluence (local SD of a difference of Gaussians, as for
+spheroids) read 2–6 × the true confluence: the cell outlines respond far more strongly than the
+texture inside cells, and the response spreads a window's width outside → texture of the image
+minus its median filter (outlines removed) and an erosion computed from the noise and texture
+levels. The first time-lapse prototype lost cells drifting out of the field and filled the edge
+with repeated pixels → fields cropped to the area every time point sees.
+
+Not yet checked: real time-lapse plates (Incucyte, ImageXpress, Nikon), real phase-contrast
+halos, focus drift over days, the treatment time from a real dispenser event.
+
 ## Confocal 3D spheroids (Phase 21c)
 
 | Check | Result | Test |

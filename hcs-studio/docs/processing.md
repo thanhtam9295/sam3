@@ -186,6 +186,22 @@ Run step: runs once on the finished run (after all wells, the tables and the rep
 | `split_channels` | False | Each channel in grayscale + merge. |
 | `compounds` | [] | Only these; empty = all. |
 
+## Confluence (`confluence`)
+
+Kinetics (Phase 22a): % of the field covered by cells, per field and time point (`confluence_pct`, `confluence_area_um2`; per-well means in the summary). texture (brightfield/phase): local SD of the image minus its median filter, threshold calibrated on fields pooled across the plate and time points, mask edge corrected for the window (gaps narrower than ~3 × texture_um count as covered). threshold: a fluorescent stain. labels: the area of a label set. See the Kinetics guide.
+
+Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel` | 1 | Brightfield/phase or stain channel. |
+| `method` | 'texture' | texture: brightfield/phase; threshold: a fluorescent stain; labels: area of a label set. |
+| `labels` | 'cells' | labels: the label set. |
+| `texture_um` | 1.0 | texture: σ of the window. |
+| `threshold` | None | Fixed level (no calibration). |
+| `min_area_um2` | 20.0 | Smaller specks/holes removed. |
+| `calibration_fields` | 24 | Fields sampled for the level. |
+
 ## Contrast (percentile rescale, gamma) (`contrast`) — **display only**
 
 Rescales each channel to 0-1 between two percentiles and applies gamma.
@@ -549,6 +565,17 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | `shifts_um` | {} | Per channel number: [dy, dx] (or [dz, dy, dx]) in µm to apply. |
 | `reference_channel` | 1 | Channel the others are aligned to. |
 | `bead_image` | None | Image of multicolour beads to estimate the shifts from (overrides shifts_um). |
+
+## Register time points (drift) (`register_timepoints`)
+
+Kinetics (Phase 22a): drift between the time points of each field, measured by phase cross-correlation of consecutive time points (mean-subtracted, Hann-windowed, sub-pixel) on `channel` and accumulated; each time point is moved back onto the first and the field is cropped to the area seen at every time point (counts then cover the same area throughout). A jump between two time points larger than max_shift_um is a stage move: not corrected, reported. Cannot be combined with stitch_well. Put it first. See the Kinetics guide.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel` | 1 | Channel used to measure the drift. |
+| `max_size` | 512 | Downsample to at most this (px). |
+| `max_shift_um` | 50.0 | Larger jumps are stage moves, not drift: not applied. |
+| `upsample` | 10 | Sub-pixel precision 1/n px. |
 
 ## Segmentation: Cellpose (`segment_cellpose`)
 

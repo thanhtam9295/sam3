@@ -253,6 +253,26 @@ def _excluded_fields(flags: pd.DataFrame | None) -> set[tuple[str, int]]:
     return {(str(w), int(f)) for w, f in flags[flags.excluded][["well", "field"]].to_numpy()}
 
 
+#: Per-field measurements (measurement steps writing to the fields table) averaged per well.
+FIELD_MEASUREMENT_PREFIXES = ("confluence_",)
+
+
+def field_means(
+    fields: pd.DataFrame | None, excluded: set[tuple[str, int]]
+) -> dict[str, dict[str, Any]]:
+    """Per-well mean of the per-field measurements over the fields kept by QC (all time points
+    of a time-lapse plate; the time course has them per time point)."""
+    if fields is None or fields.empty:
+        return {}
+    columns = [c for c in fields.columns if c.startswith(FIELD_MEASUREMENT_PREFIXES)]
+    if not columns:
+        return {}
+    keep = [(str(w), int(f)) not in excluded for w, f in fields[["well", "field"]].to_numpy()]
+    used = fields[keep]
+    means = used.groupby("well")[columns].mean(numeric_only=True)
+    return {str(w): {str(k): float(v) for k, v in row.items()} for w, row in means.iterrows()}
+
+
 def well_summary(
     objects: pd.DataFrame | None,
     flags: pd.DataFrame | None,
@@ -367,7 +387,7 @@ def aggregate_run(
     from hcs_studio.analysis.table_steps import read_well_objects
 
     excluded = _excluded_fields(flags)
-    object_rows: dict[str, dict[str, Any]] = {}
+    object_rows: dict[str, dict[str, Any]] = field_means(fields, excluded)
     unique_counts: dict[tuple[str, str], int] = {}
     coloc_rows: dict[str, dict[str, Any]] = {}
     coloc_file = tables / "coloc_all.csv"
@@ -376,7 +396,8 @@ def aggregate_run(
     for d in well_dirs:
         if (d / "objects.parquet").exists():
             rows, counts = object_statistics(read_well_objects(d), excluded)
-            object_rows.update(rows)
+            for well, values in rows.items():
+                object_rows.setdefault(well, {}).update(values)
             unique_counts.update(counts)
         if (d / "coloc.csv").exists():
             coloc = pd.read_csv(d / "coloc.csv")
@@ -424,4 +445,10 @@ def aggregate_run(
         flags.to_csv(tables / "qc_flags.csv", index=False)
     if not summary.empty:
         summary.to_csv(tables / "per_well_summary.csv", index=False)
+    from hcs_studio.kinetics.timecourse import build_time_course
+
+    course = build_time_course(folder, excluded)  # time-lapse runs: readouts per time point
+    if course is not None and not course.empty:
+        course.to_parquet(tables / "time_course.parquet", index=False)
+        course.to_csv(tables / "time_course.csv", index=False)
     return {str(r["well"]): r for r in summary.to_dict("records")} if not summary.empty else {}

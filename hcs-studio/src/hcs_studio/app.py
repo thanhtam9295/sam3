@@ -235,6 +235,19 @@ def build_parser() -> argparse.ArgumentParser:
     assay_run.add_argument("--map", action="append", default=[], metavar="ROLE=CHANNEL")
     assay_run.add_argument("--reason", default="")
 
+    kinetics = sub.add_parser("kinetics", help="time courses of time-lapse plates")
+    kinetics_sub = kinetics.add_subparsers(dest="kinetics_command", required=True)
+    kinetics_table = kinetics_sub.add_parser(
+        "table", help="readouts per well and time point (one time-lapse run, or several "
+        "acquisitions of the same plate joined on their times)",
+    )  # fmt: skip
+    kinetics_table.add_argument("folders", type=Path, nargs="+", help="run folder(s)")
+    kinetics_table.add_argument(
+        "--treated-at", default=None, help="when the compounds were added (ISO 8601; default: "
+        "the layout's treatment time, else the plate.dispensed event)",
+    )  # fmt: skip
+    kinetics_table.add_argument("--output", type=Path, default=None, help="CSV to write")
+
     selftest = sub.add_parser(
         "selftest", help="check this installation on a small synthetic plate (about a minute)"
     )
@@ -505,6 +518,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _qc(args)
     if args.command == "assay":
         return _assay(args)
+    if args.command == "kinetics":
+        return _kinetics(args)
     if args.command == "qc-review":
         return _qc_review(args)
     if args.command == "qc-train":
@@ -810,6 +825,37 @@ def _assay(args: argparse.Namespace) -> int:
         print(f"Error: {exc}")
         return 2
     print(f"Report: {args.folder / 'assays' / args.name / 'report.html'}")
+    return 0
+
+
+def _kinetics(args: argparse.Namespace) -> int:
+    from hcs_studio.kinetics.timecourse import assemble, build_time_course, time_info
+
+    folders: list[Path] = list(args.folders)
+    try:
+        if len(folders) == 1:
+            table = build_time_course(folders[0], treated_at=args.treated_at)
+            if table is None:
+                print("Error: a single time point; give several runs of the plate to join them")
+                return 2
+        else:
+            table = assemble(folders, treated_at=args.treated_at)
+        info = time_info(folders[0], args.treated_at)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Error: {exc}")
+        return 2
+    output = args.output
+    if output is None:
+        if len(folders) > 1:
+            print("Error: give --output to join several runs")
+            return 2
+        output = folders[0] / "tables" / "time_course.csv"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    table.to_csv(output, index=False)
+    print(f"Times: {info['time_source'] or 'separate acquisitions'}; started "
+          f"{info['acquired_at'] or 'unknown'}; treated {info['treated_at'] or 'unknown'}"
+          + (f" ({info['treatment_source']})" if info["treatment_source"] else ""))  # fmt: skip
+    print(f"Time course: {output} ({table['well'].nunique()} wells, {len(table)} rows)")
     return 0
 
 

@@ -93,6 +93,7 @@ def build_manifest(
             "metadata_overrides": overrides,
             "reader_notes": list(plate.notes),
             "source": plate.source,
+            **_times(plate),
         },
         "pipeline": pipeline,
         "fitted_state": fitted,
@@ -101,6 +102,19 @@ def build_manifest(
         "failed_wells": failures,
         "inputs": inputs,
         "input_checksums": "sha256" if checksums else "not computed (size and time only)",
+    }
+
+
+def _times(plate: Any) -> dict[str, Any]:
+    """Time points of the plate (seconds since the first), their source and the start."""
+    from hcs_studio.model.plate import plate_times
+
+    times, source = plate_times(plate)
+    return {
+        "timepoints": plate.shape_tczyx[0] if plate.shape_tczyx else 1,
+        "time_points_s": list(times) if times is not None else None,
+        "time_source": source,
+        "acquired_at": plate.acquired_at,
     }
 
 

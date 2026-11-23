@@ -199,6 +199,8 @@ class PlateLayout:
     assay: str = ""
     date: str = ""
     operator: str = ""
+    #: When the compounds were added (ISO 8601; kinetics count hours from it). Empty = unknown.
+    treated_at: str = ""
     #: Order of user-defined columns (custom fields), for tables and the editor.
     custom_fields: tuple[str, ...] = ()
     version: int = 0
@@ -306,6 +308,7 @@ class PlateLayout:
                 "assay": self.assay,
                 "date": self.date,
                 "operator": self.operator,
+                **({"treated_at": self.treated_at} if self.treated_at else {}),
                 "custom_fields": list(self.custom_fields),
                 "version": self.version,
                 "parent_version": self.parent_version,
@@ -344,6 +347,7 @@ class PlateLayout:
             assay=plate.get("assay", ""),
             date=plate.get("date", ""),
             operator=plate.get("operator", ""),
+            treated_at=str(plate.get("treated_at", "") or ""),
             custom_fields=tuple(plate.get("custom_fields", [])),
             version=int(plate.get("version", 0)),
             parent_version=plate.get("parent_version"),

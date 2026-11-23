@@ -269,6 +269,7 @@ def layout_from_records(
         assay=metadata.get("assay", ""),
         date=metadata.get("date", ""),
         operator=metadata.get("operator", ""),
+        treated_at=metadata.get("treated_at", ""),
         custom_fields=tuple(declared + [c for c in custom_order if c not in declared]),
     )
     return LayoutImport(layout, dict(mapping), notes)
@@ -448,6 +449,8 @@ def long_records(layout: PlateLayout, derived_groups: bool = False) -> list[dict
 
 def _metadata(layout: PlateLayout) -> dict[str, str]:
     values = {name: str(getattr(layout, name)) for name in METADATA}
+    if layout.treated_at:
+        values["treated_at"] = layout.treated_at
     if layout.custom_fields:
         values["custom_fields"] = "|".join(layout.custom_fields)
     return values

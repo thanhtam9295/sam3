@@ -172,6 +172,19 @@ NOTES = {
     "present. Micronuclei per 100 nuclei and % with micronuclei; multinucleated and binucleated "
     "cells; fold vs vehicle; Z′. Writes `pf_` columns and `assays/proliferation/` (control "
     "histograms and per-well intensity distributions). See the Assays guide.",
+    "register_timepoints": "Kinetics (Phase 22a): drift between the time points of each "
+    "field, measured by phase cross-correlation of consecutive time points (mean-subtracted, "
+    "Hann-windowed, sub-pixel) on `channel` and accumulated; each time point is moved back onto "
+    "the first and the field is cropped to the area seen at every time point (counts then "
+    "cover the same area throughout). A jump between two time points larger than max_shift_um "
+    "is a stage move: not corrected, reported. Cannot be combined with stitch_well. Put it "
+    "first. See the Kinetics guide.",
+    "confluence": "Kinetics (Phase 22a): % of the field covered by cells, per field and time "
+    "point (`confluence_pct`, `confluence_area_um2`; per-well means in the summary). texture "
+    "(brightfield/phase): local SD of the image minus its median filter, threshold calibrated "
+    "on fields pooled across the plate and time points, mask edge corrected for the window "
+    "(gaps narrower than ~3 × texture_um count as covered). threshold: a fluorescent stain. "
+    "labels: the area of a label set. See the Kinetics guide.",
     "cytoplasm": "Assay (Phase 20d): a cytoplasm label set with the nucleus IDs, for nuclear "
     "translocation. ring: pixels between gap_um and gap_um + width_um from the nuclear edge that "
     "are closer to this nucleus than to any other (never inside a neighbour); with cells (grown "

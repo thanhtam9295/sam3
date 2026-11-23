@@ -1613,6 +1613,28 @@ def _builtin() -> list[ReadoutSpec]:
             pharm,
         ),
     ]
+    kin = "kinetics"
+    levels: tuple[Level, ...] = ("field", "well")
+    for level in levels:
+        where = "of the field" if level == "field" else "mean of the well's fields"
+        specs += [
+            ReadoutSpec("confluence_pct", "confluence", "%", level, "either", "none",
+                        f"% of the area covered by cells ({where})", kin),
+            ReadoutSpec("confluence_area_um2", "area covered by cells", "µm²", level,
+                        "either", "none", f"area covered by cells ({where})", kin),
+        ]  # fmt: skip
+    specs += [
+        ReadoutSpec("timepoint", "time point", "", w, "none", "none",
+                    "index of the time point (0 = first)", kin),
+        ReadoutSpec("time_s", "time", "s", w, "none", "none",
+                    "time since the first time point (instrument timestamps)", kin),
+        ReadoutSpec("time_h", "time", "h", w, "none", "none",
+                    "time since the first time point (instrument timestamps)", kin),
+        ReadoutSpec("hours_since_treatment", "time since treatment", "h", w, "none", "none",
+                    "time since the compounds were added", kin),
+        ReadoutSpec("acquisition", "acquisition", "", w, "none", "none",
+                    "separate acquisition of the plate (assembled time courses)", kin),
+    ]  # fmt: skip
     return specs
 
 

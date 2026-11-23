@@ -211,6 +211,8 @@ class MeasureContext:
     corrected: ImageData
     #: Segmentations available at this point in the pipeline.
     labels: tuple[LabelSet, ...]
+    #: The step's fitted plate-level state (``fit``), if it has one.
+    state: Any = None
 
     def check_shapes(self) -> None:
         for label_set in self.labels:
@@ -256,6 +258,8 @@ def load_builtin_modules() -> None:
     from hcs_studio.assays import proliferation as _proliferation  # noqa: F401
     from hcs_studio.assays import spheroids as _spheroids  # noqa: F401
     from hcs_studio.assays import translocation as _translocation  # noqa: F401
+    from hcs_studio.kinetics import confluence as _confluence  # noqa: F401
+    from hcs_studio.kinetics import drift as _drift  # noqa: F401
     from hcs_studio.processing import (  # noqa: F401
         attenuation,
         autofluorescence,

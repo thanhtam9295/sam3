@@ -147,11 +147,15 @@ def make_imagexpress(
 class FakeND2:
     """Stand-in for ``nd2.ND2File`` exposing the attributes the reader uses."""
 
-    def __init__(self, sizes: dict[str, int], position_names: list[str], data: Any) -> None:
+    def __init__(
+        self, sizes: dict[str, int], position_names: list[str], data: Any,
+        frame_times_s: list[float] | None = None,
+    ) -> None:  # fmt: skip
         from types import SimpleNamespace as NS
 
         self.sizes = sizes
         self._data = data
+        self._frame_times = frame_times_s
         points = [
             NS(name=n, stagePositionUm=(100.0 * i, -50.0, 0.0))
             for i, n in enumerate(position_names)
@@ -178,6 +182,14 @@ class FakeND2:
             ]
         )
         self.attributes = NS(bitsPerComponentSignificant=12)
+
+    def events(self, orient: str = "records") -> list[dict[str, Any]]:
+        """Frame events like nd2's: one record per frame with its T index and time."""
+        if self._frame_times is None:
+            raise AttributeError("events")
+        return [{"T Index": t, "P Index": p, "Time [s]": time + 0.5 * p}
+                for t, time in enumerate(self._frame_times)
+                for p in range(self.sizes.get("P", 1))]  # fmt: skip
 
     def voxel_size(self) -> Any:
         from types import SimpleNamespace as NS

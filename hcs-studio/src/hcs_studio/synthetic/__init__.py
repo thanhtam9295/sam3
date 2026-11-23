@@ -79,6 +79,9 @@ class FieldContext:
     rng: np.random.Generator
     pixel_size_um: float
     z_step_um: float = 1.0
+    #: Time point (from 0) and its time in seconds, for time-lapse plates.
+    timepoint: int = 0
+    time_s: float = 0.0
 
     @property
     def well(self) -> str:
@@ -159,6 +162,10 @@ class SyntheticPlate:
     size: int = 96
     planes: int = 1
     z_step_um: float = 1.0
+    #: Time-lapse: number of time points and their times (s since the first; hourly default).
+    timepoints: int = 1
+    time_points_s: tuple[float, ...] | None = None
+    acquired_at: str | None = None
     n_fields: int = 1
     pixel_size_um: float = 0.65
     plate_size: tuple[int, int] = (16, 24)
@@ -176,14 +183,28 @@ class SyntheticPlate:
             "wells": {},
         }
 
+        times = list(self.time_points_s or [3600.0 * t for t in range(self.timepoints)])
+        if self.timepoints > 1:
+            truth["time_points_s"] = times
+
         def image(row: int, col: int, f: int) -> NDArray[np.uint16]:
-            rng = np.random.default_rng([self.seed, row, col, f])
-            data = np.zeros((len(self.channels), self.planes, self.size, self.size))
-            ctx = FieldContext(row, col, f, data, rng, self.pixel_size_um, self.z_step_um)
-            per_field = {feature.name: feature.draw(ctx) for feature in self.features}
-            well = truth["wells"].setdefault(ctx.well, {"fields": {}})
-            well["fields"][str(f + 1)] = per_field
-            return np.asarray(np.clip(data, 0, 65535), dtype=np.uint16)
+            stack = []
+            per_t: list[dict[str, Any]] = []
+            for t in range(self.timepoints):
+                rng = np.random.default_rng(
+                    [self.seed, row, col, f, t] if t else [self.seed, row, col, f]
+                )
+                data = np.zeros((len(self.channels), self.planes, self.size, self.size))
+                ctx = FieldContext(row, col, f, data, rng, self.pixel_size_um, self.z_step_um,
+                                   t, times[t])  # fmt: skip
+                per_t.append({feature.name: feature.draw(ctx) for feature in self.features})
+                stack.append(np.asarray(np.clip(data, 0, 65535), dtype=np.uint16))
+            well = truth["wells"].setdefault(well_name(row, col), {"fields": {}})
+            if self.timepoints == 1:
+                well["fields"][str(f + 1)] = per_t[0]
+                return stack[0]
+            well["fields"][str(f + 1)] = {"timepoints": per_t}
+            return np.stack(stack)
 
         plate = write_ome_zarr_plate(
             root / "plate.zarr",
@@ -195,6 +216,9 @@ class SyntheticPlate:
             z_step_um=self.z_step_um,
             plate_size=self.plate_size,
             name=self.name,
+            timepoints=self.timepoints,
+            time_points_s=times if self.timepoints > 1 else None,
+            acquired_at=self.acquired_at,
         )
         for well in truth["wells"].values():  # per-well totals of countable features
             totals: dict[str, int] = {}

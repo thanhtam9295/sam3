@@ -11,6 +11,7 @@ from hcs_studio.io.base import READERS, PlateReader, ReaderError
 from hcs_studio.model.plate import ChannelInfo, Field, ImageMetadata, Plate, Well, parse_well_name
 
 _UNIT_UM = {"micrometer": 1.0, "nanometer": 1e-3, "millimeter": 1e3, "meter": 1e6}
+_UNIT_S = {"second": 1.0, "millisecond": 1e-3, "minute": 60.0, "hour": 3600.0, "day": 86400.0}
 
 
 def _attrs(group: Any) -> dict[str, Any]:
@@ -51,6 +52,7 @@ class OmeZarrPlateReader(PlateReader):
         wells: dict[tuple[int, int], Well] = {}
         metadata: ImageMetadata | None = None
         shape: tuple[int, int, int, int, int] | None = None
+        time_step: float | None = None
         for entry in plate_meta.get("wells", []):
             well_path = str(entry["path"])
             row_name, col_name = well_path.split("/")
@@ -89,10 +91,20 @@ class OmeZarrPlateReader(PlateReader):
                         pixel_size_um=scale.get("x"),
                         z_step_um=scale.get("z") if shape[2] > 1 else None,
                     )
+                    time_step = scale.get("t")
             if fields:
                 wells[position] = Well(row=position[0], col=position[1], fields=tuple(fields))
         if not wells or metadata is None:
             raise ReaderError(f"{path.name}: the plate contains no images")
+        # times: an explicit list (irregular intervals) or the NGFF scale of the t axis
+        extra = _attrs(root).get("hcs_studio") or {}
+        times = extra.get("time_points_s")
+        n_t = shape[0] if shape else 1
+        time_points: tuple[float, ...] | None = None
+        if isinstance(times, list) and len(times) == n_t:
+            time_points = tuple(float(x) for x in times)
+        elif n_t > 1 and time_step:
+            time_points = tuple(i * time_step for i in range(n_t))
         return Plate(
             name=str(plate_meta.get("name") or path.stem),
             path=path,
@@ -102,6 +114,8 @@ class OmeZarrPlateReader(PlateReader):
             wells=wells,
             metadata=metadata,
             shape_tczyx=shape,
+            time_points_s=time_points,
+            acquired_at=str(extra["acquired_at"]) if extra.get("acquired_at") else None,
         )
 
     @staticmethod
@@ -120,6 +134,10 @@ class OmeZarrPlateReader(PlateReader):
         for transform in dataset.get("coordinateTransformations", []):
             if transform.get("type") == "scale":
                 for axis, value in zip(axes_meta, transform["scale"], strict=True):
+                    if isinstance(axis, dict) and axis.get("type") == "time":
+                        unit = axis.get("unit", "second")
+                        if unit in _UNIT_S:
+                            scale["t"] = float(value) * _UNIT_S[unit]
                     if isinstance(axis, dict) and axis.get("type") == "space":
                         unit = axis.get("unit", "micrometer")
                         if unit not in _UNIT_UM:

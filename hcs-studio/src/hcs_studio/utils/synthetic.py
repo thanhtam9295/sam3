@@ -63,7 +63,11 @@ def make_cell_field(
 # ------------------------------------------------------- synthetic plate on disk
 
 
-def _metaseries_description(wave_name: str, wavelength: int, pixel_size: float) -> str:
+def _metaseries_description(
+    wave_name: str, wavelength: int, pixel_size: float, acquired: str | None = None
+) -> str:
+    time = (f'<prop id="acquisition-time-local" type="time" value="{acquired}"/>\n'
+            if acquired else "")  # fmt: skip
     return f"""<MetaData>
 <ApplicationName>MetaMorph</ApplicationName>
 <ApplicationVersion>6.5</ApplicationVersion>
@@ -79,19 +83,22 @@ def _metaseries_description(wave_name: str, wavelength: int, pixel_size: float) 
 <custom-prop id="_MagNA_" type="float" value="0.75"/>
 <custom-prop id="_MagSetting_" type="string" value="20X Plan Apo"/>
 <custom-prop id="Exposure Time" type="string" value="150 ms"/>
-</PlaneInfo>
+{time}</PlaneInfo>
 </MetaData>"""
 
 
 def write_imagexpress_plate(
     root: Path,
     wells: list[tuple[int, int]],
-    image_fn: Callable[[int, int, int, int, int], NDArray[Any]],
+    image_fn: Callable[..., NDArray[Any]],
     *,
     n_sites: int = 2,
     z_steps: int = 1,
     pixel_size_um: float = 0.65,
     plate_size: tuple[int, int] = (8, 12),
+    timepoints: int = 1,
+    time_points_s: Sequence[float] | None = None,
+    start: str = "20260105 09:00:00.000",
 ) -> Path:
     """Write an ImageXpress (MetaXpress) export: ``.HTD`` + GUID-suffixed TIFFs with MetaSeries
     descriptions + thumbnails, and ``ZStep_n`` folders for Z stacks. ``image_fn(row, col,
@@ -104,17 +111,43 @@ def write_imagexpress_plate(
     waves = [("DAPI", 447), ("FITC", 520)]
     guid = "0A1B2C3D-1111-2222-3333-444455556666"
 
+    from datetime import datetime, timedelta
+
+    began = datetime.strptime(start, "%Y%m%d %H:%M:%S.%f")
+    times = (
+        list(time_points_s)
+        if time_points_s is not None
+        else [3600.0 * t for t in range(timepoints)]
+    )
+    current = {"t": 0}
+
     def write(folder: Path, row: int, col: int, s: int, w: int, z: int) -> None:
         stem = f"Plate1_{well_name(row, col)}_s{s + 1}_w{w + 1}"
+        t = current["t"]
+        stamp = (began + timedelta(seconds=times[t])).strftime("%Y%m%d %H:%M:%S.%f")[:-3]
         tifffile.imwrite(
             folder / f"{stem}{guid}.tif",
-            image_fn(row, col, s, w, z),
-            description=_metaseries_description(waves[w][0], waves[w][1], pixel_size_um),
+            image_fn(row, col, s, w, z) if timepoints == 1 else image_fn(row, col, s, w, z, t),
+            description=_metaseries_description(waves[w][0], waves[w][1], pixel_size_um, stamp),
             software="MetaSeries",
             metadata=None,
         )
         tifffile.imwrite(folder / f"{stem}_thumb{guid}.tif", np.zeros((4, 4), dtype=np.uint8))
 
+    for t in range(timepoints):
+        current["t"] = t
+        base = root if timepoints == 1 else root / f"TimePoint_{t + 1}"
+        base.mkdir(exist_ok=True)
+        _write_timepoint(base, wells, n_sites, waves, z_steps, write)
+    lines = _htd_lines(wells, n_sites, waves, z_steps, plate_size, timepoints)
+    (root / "Plate1.HTD").write_text("\r\n".join(lines) + "\r\n", encoding="latin-1")
+    return root
+
+
+def _write_timepoint(
+    root: Path, wells: list[tuple[int, int]], n_sites: int, waves: list[tuple[str, int]],
+    z_steps: int, write: Callable[..., None],
+) -> None:  # fmt: skip
     for row, col in wells:
         for s in range(n_sites):
             for w in range(len(waves)):
@@ -126,10 +159,16 @@ def write_imagexpress_plate(
                         folder = root / f"ZStep_{z}"
                         folder.mkdir(exist_ok=True)
                         write(folder, row, col, s, w, z - 1 if z else 99)
-    lines = [
+
+
+def _htd_lines(
+    wells: list[tuple[int, int]], n_sites: int, waves: list[tuple[str, int]], z_steps: int,
+    plate_size: tuple[int, int], timepoints: int,
+) -> list[str]:  # fmt: skip
+    return [
         '"HTSInfoFile", Version 1.0',
         '"Description", "Screen 7"',
-        '"TimePoints", 1',
+        f'"TimePoints", {timepoints}',
         f'"ZSeries", {"TRUE" if z_steps > 1 else "FALSE"}',
         f'"ZSteps", {z_steps}',
         f'"XWells", {plate_size[1]}',
@@ -148,8 +187,6 @@ def write_imagexpress_plate(
         *[f'"WaveName{i + 1}", "{name}"' for i, (name, _) in enumerate(waves)],
         '"EndFile"',
     ]
-    (root / "Plate1.HTD").write_text("\r\n".join(lines) + "\r\n", encoding="latin-1")
-    return root
 
 
 def write_ome_zarr_plate(
@@ -164,6 +201,8 @@ def write_ome_zarr_plate(
     plate_size: tuple[int, int] = (16, 24),
     name: str = "synthetic",
     timepoints: int = 1,
+    time_points_s: Sequence[float] | None = None,
+    acquired_at: str | None = None,
 ) -> Path:
     """Write an OME-Zarr HCS plate (NGFF 0.4, zarr v2). ``image_fn(row, col, field)`` returns
     one field as a (C, Z, Y, X) uint16 array — or (T, C, Z, Y, X) with ``timepoints`` > 1;
@@ -173,6 +212,15 @@ def write_ome_zarr_plate(
     from hcs_studio.model.plate import row_label
 
     group: Any = zarr.open_group(str(root), mode="w", zarr_format=2)
+    times = list(time_points_s) if time_points_s is not None else None
+    step = float(times[1] - times[0]) if times and len(times) > 1 else 1
+    extra: dict[str, Any] = {}
+    if times is not None:
+        extra["time_points_s"] = [float(x) for x in times]
+    if acquired_at:
+        extra["acquired_at"] = acquired_at
+    if extra:
+        group.attrs["hcs_studio"] = extra
     group.attrs["plate"] = {
         "name": name,
         "version": "0.4",
@@ -209,7 +257,7 @@ def write_ome_zarr_plate(
                             "coordinateTransformations": [
                                 {
                                     "type": "scale",
-                                    "scale": [1] * (timepoints > 1)
+                                    "scale": [step] * (timepoints > 1)
                                     + [1, z_step_um, pixel_size_um, pixel_size_um],
                                 }
                             ],

@@ -60,6 +60,30 @@ class _FileInfo:
     sizes: dict[str, int]
     positions: tuple[_Position, ...]
     metadata: ImageMetadata
+    #: Seconds since the first frame of each time point (from the frame events), if known.
+    time_points_s: tuple[float, ...] | None = None
+
+
+def _frame_times(handle: Any, n_t: int) -> tuple[float, ...] | None:
+    """Time of each T index from the file's frame events (``nd2.ND2File.events``): the earliest
+    frame of the time point, relative to the first. None when the file records no times."""
+    if n_t < 2:
+        return None
+    try:
+        events = handle.events(orient="records")
+    except Exception:  # older nd2 versions, files without events
+        return None
+    first: dict[int, float] = {}
+    for record in events or []:
+        index, seconds = record.get("T Index"), record.get("Time [s]")
+        if index is None or seconds is None:
+            continue
+        index, seconds = int(index), float(seconds)
+        first[index] = min(seconds, first.get(index, seconds))
+    if len(first) != n_t:
+        return None
+    start = first[min(first)]
+    return tuple(first[i] - start for i in sorted(first))
 
 
 def _modality(flags: list[str]) -> Modality:
@@ -132,7 +156,9 @@ def _describe(path: Path) -> _FileInfo:
             pinhole_um=_positive(getattr(microscope, "pinholeDiameterUm", None)),
             bit_depth=int(bits) if bits else None,
         )
-    return _FileInfo(path=path, sizes=sizes, positions=tuple(points), metadata=metadata)
+        times = _frame_times(handle, sizes.get("T", 1))
+    return _FileInfo(path=path, sizes=sizes, positions=tuple(points), metadata=metadata,
+                     time_points_s=times)  # fmt: skip
 
 
 def _loader(path: Path, position: int) -> Any:
@@ -256,4 +282,5 @@ class NikonReader(PlateReader):
             metadata=reference.metadata,
             shape_tczyx=shape,
             notes=tuple(notes),
+            time_points_s=reference.time_points_s,
         )

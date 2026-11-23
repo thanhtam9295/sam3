@@ -60,6 +60,12 @@ DESCRIPTIONS = {
     "thresholds from secondary-only wells, median + 5 robust SD of log intensity, or from the "
     "vehicle nuclei: equal-likelihood point of two log-normal populations, or median + 5 robust "
     "SD for pH3), micronucleus frequency and multinucleated cells",
+    "register_timepoints": "drift between time points corrected per field (phase "
+    "cross-correlation of consecutive time points, sub-pixel, accumulated; jumps larger than "
+    "max_shift_um left uncorrected; each field cropped to the area seen at every time point)",
+    "confluence": "confluence (% of the field covered by cells: local texture of the image minus "
+    "its median filter, thresholded at Otsu's level of fields pooled across the plate and time "
+    "points, edges corrected for the window; or an intensity threshold, or a label set)",
     "cytoplasm": "a cytoplasm compartment per nucleus (a ring between gap_um and gap_um + "
     "width_um from the nuclear edge, assigned to the nearest nucleus and, with a cell segmentation, "
     "kept inside the cell; or the cell minus its nucleus)",

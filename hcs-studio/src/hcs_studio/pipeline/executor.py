@@ -19,6 +19,7 @@ from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -92,15 +93,18 @@ class _Context:
     ) -> Iterator[ImageData]:
         runner = self._runner
         keys = sorted(wells) if wells is not None else sorted(self.plate.wells)
-        fields = [f for k in keys if k in self.plate.wells for f in self.plate.wells[k].fields]
+        # time-lapse plates: fields are sampled across time points too (cells grow, stains fade)
+        n_t = self.plate.shape_tczyx[0] if self.plate.shape_tczyx else 1
+        fields = [(f, t) for k in keys if k in self.plate.wells
+                  for f in self.plate.wells[k].fields for t in range(n_t)]  # fmt: skip
         limit = min(max_fields, runner.fit_field_limit or max_fields)
         if len(fields) > limit:
             picks = np.linspace(0, len(fields) - 1, limit).round().astype(int)
             fields = [fields[i] for i in sorted(set(picks.tolist()))]
-        for item in fields:
+        for item, t in fields:
             runner.check_cancelled()
             try:
-                image = runner.load(item)
+                image = runner.load(item, t)
             except Exception as exc:  # an unreadable field must not stop the whole plate
                 runner.fit_skipped.append(
                     f"{item.sources[0] if item.sources else item.index}: {exc}"
@@ -112,10 +116,17 @@ class _Context:
 def _concat(tables: dict[str, list[Any]]) -> dict[str, Any]:
     import pandas as pd
 
-    return {
-        name: pd.concat(parts, ignore_index=True) if len(parts) > 1 else parts[0]
-        for name, parts in tables.items()
-    }
+    out = {}
+    for name, parts in tables.items():
+        if len(parts) == 1:
+            out[name] = parts[0]
+        elif name == "fields" and all(len(p) == 1 for p in parts):
+            # one row per field: several steps add columns to the same row (first value wins)
+            merged = pd.concat([p.reset_index(drop=True) for p in parts], axis=1)
+            out[name] = merged.loc[:, ~merged.columns.duplicated()]
+        else:
+            out[name] = pd.concat(parts, ignore_index=True)
+    return out
 
 
 class PipelineRunner:
@@ -157,6 +168,12 @@ class PipelineRunner:
                 raise ModuleError(f"Step {number} ({module.title}): {exc}") from None
             metadata = module.output_metadata(metadata)
         self.output_metadata: ImageMetadata = metadata
+        from hcs_studio.kinetics.drift import RegisterTimepoints
+
+        kinds = {type(m) for m in self.modules}
+        if RegisterTimepoints in kinds and StitchWell in kinds:
+            raise ModuleError("Drift correction crops each field: it cannot be combined with "
+                              "stitching")  # fmt: skip
 
     def check_cancelled(self) -> None:
         if self._cancel is not None and self._cancel.is_set():
@@ -222,7 +239,8 @@ class PipelineRunner:
             started = time.perf_counter()
             try:
                 if isinstance(module, MeasurementModule):
-                    context = MeasureContext(raw=raw, corrected=corrected, labels=image.labels)
+                    context = MeasureContext(raw=raw, corrected=corrected, labels=image.labels,
+                                             state=self.states[i])  # fmt: skip
                     context.check_shapes()
                     for name, table in module.measure(context).items():
                         tables.setdefault(name, []).append(table)
@@ -448,6 +466,9 @@ def process_well(
     well_warnings: list[str] = []
     well_tables: dict[str, list[Any]] = {}
     stitcher = next((m for m in runner.modules if isinstance(m, StitchWell)), None)
+    from hcs_studio.kinetics.drift import RegisterTimepoints
+
+    drift = next((m for m in runner.modules if isinstance(m, RegisterTimepoints)), None)
     small: dict[int, Any] = {}  # downsampled fields for stitching
     linear_tiles: dict[int, Any] = {}  # downsampled corrected fields for the mosaic image
     previews: dict[int, Any] = {}
@@ -461,10 +482,20 @@ def process_well(
             runner.check_cancelled()
             finals, correcteds = [], []
             raw_first: ImageData | None = None
+            drift_info = None
+            if drift is not None and n_timepoints > 1:
+                drift_info = drift.shifts(partial(runner.load, item), n_timepoints)
+                for warning in drift_info["warnings"]:
+                    text = f"field {item.index}: {warning}"
+                    if text not in well_warnings:
+                        well_warnings.append(text)
             for t in range(n_timepoints):
                 started = time.perf_counter()
                 raw_image = runner.load(item, t)
                 clock["read"] += time.perf_counter() - started
+                if drift_info is not None and drift is not None:
+                    raw_image = drift.correct(raw_image, drift_info["shifts_px"][t],
+                                              drift_info["crop_px"])  # fmt: skip
                 if t == 0:
                     raw_first = raw_image
                 processed = runner.process(raw_image)
@@ -498,6 +529,8 @@ def process_well(
                 save_images=plan.save_images,
                 image_dtype=plan.image_dtype,
             )
+            if drift_info is not None:
+                record["drift"] = {k: drift_info[k] for k in ("shifts_px", "drift_um", "crop_px")}
             for warning in _field_warnings(record):
                 if warning not in well_warnings:
                     well_warnings.append(warning)
@@ -1057,7 +1090,7 @@ def run_pipeline(
     phase_started = time.monotonic()
     try:
         (folder / "pipeline.yaml").write_text(pipeline.to_yaml(), encoding="utf-8")
-        if document.wells:
+        if document.wells or document.treated_at:
             layout_record = write_run_layout(folder, document, layout_path)
         manifest("running")
         log.info(
@@ -1096,6 +1129,10 @@ def run_pipeline(
         fit_seconds = time.monotonic() - fit_started
         for entry in runner.fitted_summary():
             log.info("Fitted step %s (%s): %s", entry["step"], entry["module"], entry)
+            if entry.get("warning"):
+                text = f"Step {entry['step']} ({entry['module']}): {entry['warning']}"
+                log.warning(text)
+                emit({"type": "log", "level": "warning", "text": text})
         for skipped in runner.fit_skipped:
             log.warning("Plate-level estimate skipped an unreadable field: %s", skipped)
             emit(

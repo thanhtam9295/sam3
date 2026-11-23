@@ -615,6 +615,29 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `stain_threshold` = max(noise floor, half height to the in-object p99). `SpheroidParams.volume`
   `auto`; flag `incomplete_z` (excluded by default). `SyntheticPlate(z_step_um=…)`,
   `FieldContext.z_step_um`; synthetic `ConfocalSpheroid`.
+- **Phase 22 plan** (2026-11-23): (a) time-course data, (b) kinetic analysis (growth fits,
+  doubling time, IC50(t), GR over intervals — check the formula against Hafner et al.), (c) views
+  and QC (sparklines, heat maps, focus drift, missing time points, evaporation), (d) optional
+  tracking (ask before starting; scipy only). Done when: doubling time within 5 % on synthetic
+  data; IC50(t) and GR on a real kinetic plate (asked the user for one per instrument with the
+  treatment time).
+- **Phase 22a (built)**: times: `Plate.time_points_s` / `acquired_at`, `ImageMetadata
+  .time_interval_s`, `plate_times(plate)` → (times, source); readers (ImageXpress
+  `acquisition-time-local`, ND2 `events()`, OME-Zarr t scale + `hcs_studio` plate attrs);
+  manifest `_times`. `kinetics/drift.py` (`register_timepoints`, recognised in `process_well`
+  like `stitch_well`: `shifts()` once per field, `correct(image, shift, crop)`; consecutive
+  pairs, Hann window; jumps > max_shift_um not applied; `common_area` crop; refused with
+  stitching in `PipelineRunner`). `kinetics/confluence.py` (`texture` = local SD of image −
+  median filter; `texture_level` → level/noise/texture/`halo_sigma`; erosion by halo).
+  `_Context.sample` samples (field, time point) pairs. `MeasureContext.state`; `_concat` merges
+  1-row `fields` tables of several steps. `output/tables.field_means` (`FIELD_MEASUREMENT_PREFIXES`)
+  for per-well means of per-field measurements. `kinetics/timecourse.py`
+  (`build_time_course`, `treatment_time` (given > layout `treated_at` > `plate.dispensed`
+  event), `assemble` (identity = barcode else plate name), `readout_matrix`); written by
+  `aggregate_run` as `tables/time_course.*`. The run layout is written when it has wells or a
+  treatment time. CLI `hcs-studio kinetics table`. Synthetic: `SyntheticPlate(timepoints,
+  time_points_s, acquired_at)`, `FieldContext.timepoint/time_s`, `synthetic/kinetics.py`
+  (`GrowingCells`, `exponential`); `write_imagexpress_plate(timepoints=…)`.
 
 ## Commands
 
@@ -635,7 +658,7 @@ Run from this folder (`hcs-studio/`).
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
-- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; assays: `hcs-studio assay list | preset cell_cycle --map dna=DAPI [--map edu=EdU] --channels … --output p.yaml | run <run> cell_cycle --map dna=DAPI`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
+- Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; assays: `hcs-studio assay list | preset cell_cycle --map dna=DAPI [--map edu=EdU] --channels … --output p.yaml | run <run> cell_cycle --map dna=DAPI`; kinetics: `hcs-studio kinetics table <run> [<run>… --output c.csv] [--treated-at ISO]`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`

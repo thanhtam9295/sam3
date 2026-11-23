@@ -70,6 +70,35 @@ def _plane_metadata(path: Path) -> dict[str, Any]:
     return info
 
 
+def _acquisition_time(path: Path) -> Any:
+    """MetaSeries ``acquisition-time-local`` of one TIFF as a datetime, or None."""
+    from datetime import datetime
+
+    value = _plane_metadata(path).get("acquisition-time-local")
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        for pattern in ("%Y%m%d %H:%M:%S.%f", "%Y%m%d %H:%M:%S"):
+            try:
+                return datetime.strptime(value.strip(), pattern)
+            except ValueError:
+                continue
+    return None
+
+
+def time_points(found: list[tuple[Any, ...]], t_index: dict[int, int]) -> tuple[Any, Any]:
+    """(seconds since the first time point, ISO start) from the first image of each time point
+    (lowest well, site, wave), or (None, None) when the TIFFs carry no acquisition times."""
+    first: dict[int, Path] = {}
+    for *_, time_id, _wave, _z, tiff in sorted(found, key=lambda f: f[:5]):
+        first.setdefault(time_id, tiff)
+    stamps = [_acquisition_time(first[t]) for t in sorted(t_index, key=t_index.__getitem__)]
+    if not stamps or any(s is None for s in stamps):
+        return None, None
+    start = stamps[0]
+    return tuple((s - start).total_seconds() for s in stamps), start.isoformat()
+
+
 @READERS.register("imagexpress")
 class ImageXpressReader(PlateReader):
     vendor = "ImageXpress"
@@ -126,6 +155,15 @@ class ImageXpressReader(PlateReader):
                 raise ReaderError(f"{tiff.name}: wavelength {wave} is not declared in {htd.name}")
             files[position][site][(t_index[time_id], wave - 1, z_index[z_id])] = tiff
         shape_tcz = (len(t_index), n_waves, len(z_index))
+        times, started = time_points(found, t_index)
+        if len(t_index) > 1:
+            notes.append(
+                "Time points: the acquisition time of the first image of each TimePoint folder "
+                "(wells imaged later in a cycle are later by up to the plate scan time)."
+                if times is not None
+                else "No acquisition times in the TIFF tags: set the time interval in the "
+                "Metadata panel."
+            )
 
         # Optical metadata: one representative TIFF per wavelength.
         per_wave: dict[int, dict[str, Any]] = {}
@@ -218,6 +256,8 @@ class ImageXpressReader(PlateReader):
             barcode=(entries.get("Description") or [None])[0] or None,  # type: ignore[list-item]
             shape_tczyx=(*shape_tcz, *plane_shape),
             notes=tuple(notes),
+            time_points_s=times if len(t_index) > 1 else None,
+            acquired_at=started,
         )
 
     @staticmethod

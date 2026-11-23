@@ -85,6 +85,8 @@ class ImageMetadata:
     modality: Modality = "unknown"
     pinhole_um: float | None = None
     bit_depth: int | None = None
+    #: Time between time points (s) when the source records no times (user override).
+    time_interval_s: float | None = None
 
     #: Scalar fields a user may override from the metadata panel.
     OVERRIDABLE = (
@@ -95,6 +97,7 @@ class ImageMetadata:
         "immersion_ri",
         "modality",
         "pinhole_um",
+        "time_interval_s",
     )
 
     def with_overrides(self, overrides: dict[str, Any]) -> ImageMetadata:
@@ -155,6 +158,10 @@ class Plate:
     shape_tczyx: tuple[int, int, int, int, int] | None = None
     #: Things the reader had to assume; shown to the user.
     notes: tuple[str, ...] = ()
+    #: Time of each time point, in seconds since the first (from the instrument), if known.
+    time_points_s: tuple[float, ...] | None = None
+    #: When the first time point was acquired (ISO 8601; local time if no zone is given).
+    acquired_at: str | None = None
     #: How to open this plate again (reader name, path, options), e.g. in a worker process.
     source: dict[str, Any] = field(default_factory=dict, compare=False)
 
@@ -164,6 +171,21 @@ class Plate:
     @property
     def n_fields(self) -> int:
         return sum(len(w.fields) for w in self.wells.values())
+
+
+def plate_times(plate: Plate) -> tuple[tuple[float, ...] | None, str]:
+    """Seconds since the first time point of each time point, and where they come from:
+    the instrument's timestamps, else the user's time interval (metadata), else unknown —
+    frame numbers are never used as times."""
+    n = plate.shape_tczyx[0] if plate.shape_tczyx else 1
+    if plate.time_points_s is not None and len(plate.time_points_s) == n:
+        return tuple(float(t) for t in plate.time_points_s), "instrument"
+    if plate.metadata.time_interval_s:
+        step = float(plate.metadata.time_interval_s)
+        return tuple(i * step for i in range(n)), "time interval (metadata)"
+    if n == 1:
+        return (0.0,), "single time point"
+    return None, "unknown (set the time interval in the Metadata panel)"
 
 
 @dataclass(frozen=True)

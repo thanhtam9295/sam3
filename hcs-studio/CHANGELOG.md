@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Phase 22a — live-cell kinetics: time-course data
+- Real times per time point from the readers (ImageXpress image timestamps, ND2 frame events,
+  OME-Zarr `t` scale / plate attributes), or the Metadata panel's **time interval**; recorded in
+  the run manifest (`time_points_s`, `time_source`, `acquired_at`). Frame numbers are never used
+  as times.
+- Treatment time: given, the layout's `treated_at`, or the plate's `plate.dispensed` event;
+  `hours_since_treatment`.
+- `register_timepoints` (image step): drift between time points corrected per field (phase
+  cross-correlation of consecutive time points, windowed, sub-pixel), stage jumps reported, fields
+  cropped to the area seen at every time point.
+- `confluence` (measurement step): texture (median-residual local SD, pooled calibration, edge
+  correction), threshold or label-set confluence per field and time point; per-well means.
+- `tables/time_course.parquet/.csv`: readouts per well and time point; `hcs-studio kinetics
+  table` joins separate acquisitions of a plate on their times.
+- Plate-level estimates (`fit`) sample fields across time points too.
+- Synthetic time-lapse plates (`SyntheticPlate(timepoints=…)`, `GrowingCells`). Docs: kinetics.md.
+
 ### Phase 21c — confocal 3D spheroids
 - `attenuation` (image step): depth-dependent intensity loss corrected per plane (robust
   exponential fit or per-plane normalisation, signal above background only, gain cap, warnings).
