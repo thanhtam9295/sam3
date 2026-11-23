@@ -85,7 +85,8 @@ def test_volume_and_qc_flags_from_brightfield(home: Path) -> None:
     assert values["A04"]["sp_edge_sigma_um"] > 10
     out = folder / "spheroids"
     assert {p.name for p in out.iterdir()} == {"calibration.json", "crops", "gallery.html",
-                                               "spheroids.csv", "wells.csv"}  # fmt: skip
+                                               "spheroids.csv", "wells.csv", "radial_profiles.csv",
+                                               "radial_profiles.png"}  # fmt: skip
     assert len(list((out / "crops").iterdir())) == 9  # every well with a spheroid
     gallery = (out / "gallery.html").read_text()
     assert gallery.count('class="card"') == 10 and 'data-sp-volume-um3="' in gallery
@@ -175,6 +176,11 @@ def test_preset_readouts_and_brightfield_colour() -> None:
     from hcs_studio.readouts import resolve
     from hcs_studio.utils.display import channel_colormap
 
+    full = preset({"brightfield": "BF", "live": "Calcein", "dead": "EthD1"},
+                  channels=["BF", "Calcein", "EthD1"], invasion=True, organoids=True)  # fmt: skip
+    assert full.steps[0].params["protrusion_reach_um"] == 300
+    assert (full.steps[1].params["live_channel"], full.steps[1].params["dead_channel"]) == (2, 3)
+    assert full.steps[1].params["invasion"] and full.steps[2].params["mode"] == "organoids"
     pipeline = preset({"fluorescence": "Calcein"}, channels=["Hoechst", "Calcein"])
     assert [s.module for s in pipeline.steps] == ["detect_spheroids", "measure_spheroids",
                                                   "spheroid"]  # fmt: skip
@@ -188,3 +194,151 @@ def test_preset_readouts_and_brightfield_colour() -> None:
     assert channel_colormap(ChannelInfo("Brightfield"), 0) == "gray"
     assert channel_colormap(ChannelInfo("BF"), 3) == "gray"
     assert channel_colormap(ChannelInfo("DAPI"), 0) == "blue"
+
+
+def test_core_viability_and_invasion_from_images(home: Path) -> None:
+    """Done-when (21b): known necrotic core fraction within ±5 pp; dead fraction, invasion area,
+    protrusion count and reach recovered from brightfield + live/dead images."""
+    from hcs_studio.io.base import open_plate
+    from hcs_studio.pipeline.executor import run_pipeline
+    from hcs_studio.synthetic import ShotNoise, SyntheticPlate
+    from hcs_studio.synthetic.spheroids import BrightfieldSpheroid, LiveDeadStains
+
+    specs: dict[tuple[int, int], dict[str, Any]] = {
+        (0, 0): {"radius_um": 200, "core_ratio": 0.3},
+        (0, 1): {"radius_um": 200, "core_ratio": 0.5},
+        (0, 2): {"radius_um": 200, "core_ratio": 0.7},
+        (0, 3): {"radius_um": 150, "core_ratio": 0.0, "dead_ratio": 0.0},
+        (0, 4): {"radius_um": 120, "core_ratio": 0.5,
+                 "strands": [(0, 100, 12), (90, 60, 10), (200, 140, 14), (300, 40, 10)]},
+        (0, 5): {"radius_um": 150, "core_ratio": 0.4, "strands": [(45, 80, 12), (160, 120, 12)]},
+    }  # fmt: skip
+    plate = SyntheticPlate(
+        wells=list(specs),
+        features=[
+            BrightfieldSpheroid(spec=lambda r, c: specs[(r, c)]),
+            LiveDeadStains(spec=lambda r, c: specs[(r, c)]),
+            ShotNoise(sd=8.0),
+        ],
+        channels=("Brightfield", "Calcein", "EthD1"),
+        size=400,
+        pixel_size_um=2.0,
+        name="SPH",
+    )
+    path, truth = plate.write(home / "raw")
+    from hcs_studio.assays.spheroids import preset
+
+    mapping = {"brightfield": "Brightfield", "live": "Calcein", "dead": "EthD1"}
+    pipeline = preset(mapping, channels=["Brightfield", "Calcein", "EthD1"], invasion=True)
+    folder = run_pipeline(open_plate(path), pipeline, output_root=home / "runs",
+                          save_images=False).folder  # fmt: skip
+    values = pd.read_csv(folder / "tables" / "per_well_summary.csv").set_index("well")
+    got = values.to_dict("index")
+    for well, data in truth["wells"].items():
+        spheroid, stains = data["fields"]["1"]["spheroid"], data["fields"]["1"]["live_dead"]
+        invading = spheroid["protrusions"] > 0
+        tolerance = 0.05 if invading else 0.02  # the strands count in the spheroid's area
+        assert got[well]["sp_core_fraction"] == pytest.approx(
+            spheroid["core_fraction"], abs=tolerance
+        ), well
+        assert got[well]["sp_dead_fraction"] == pytest.approx(stains["dead_fraction"], abs=0.03), (
+            well
+        )
+        assert got[well]["sp_protrusions"] == spheroid["protrusions"], well
+        if invading:
+            assert got[well]["sp_invasion_area_um2"] == pytest.approx(
+                spheroid["invasion_area_um2"], rel=0.1
+            )
+            assert got[well]["sp_max_invasion_um"] == pytest.approx(
+                spheroid["max_invasion_um"], abs=6
+            )
+            assert got[well]["sp_skeleton_length_um"] > 0.8 * sum(
+                s[1] for s in specs[(0, int(well[1:]) - 1)]["strands"]
+            )
+        else:
+            assert got[well]["sp_invasion_area_um2"] == 0
+    assert got["A04"]["sp_core_area_um2"] == 0 and got["A04"]["sp_dead_area_um2"] == 0
+    # the viable rim: radius minus core radius
+    assert got["A02"]["sp_rim_um"] == pytest.approx(100, abs=4)
+    profiles = pd.read_csv(folder / "spheroids" / "radial_profiles.csv")
+    dead = profiles[(profiles["well"] == "A03") & (profiles["channel"] == "dead")]
+    by_depth = dead.groupby("depth")["shell_mean"].mean()
+    assert by_depth.iloc[-1] > 5 * by_depth.iloc[0]  # dead stain in the core, not at the edge
+    assert (folder / "spheroids" / "radial_profiles.png").exists()
+
+
+def test_organoid_mode_counts_sizes_and_efficiency(home: Path) -> None:
+    from hcs_studio.assays.spheroids import preset
+    from hcs_studio.io.base import open_plate
+    from hcs_studio.model.annotation import PlateLayout
+    from hcs_studio.model.layout_tools import apply_fields, set_role
+    from hcs_studio.pipeline.executor import run_pipeline
+    from hcs_studio.synthetic import ShotNoise, SyntheticPlate
+    from hcs_studio.synthetic.spheroids import BrightfieldSpheroid
+
+    counts = {(0, 0): 20, (0, 1): 20, (1, 0): 6, (1, 1): 6, (2, 0): 0}
+    specs = {k: {"organoids": n, "organoid_radius_um": (20, 45), "core_ratio": 0}
+             for k, n in counts.items()}  # fmt: skip
+    plate = SyntheticPlate(
+        wells=list(specs),
+        features=[BrightfieldSpheroid(spec=lambda r, c: specs[(r, c)]), ShotNoise(sd=8.0)],
+        channels=("Brightfield",),
+        size=400,
+        n_fields=2,
+        pixel_size_um=2.0,
+        name="ORG",
+    )
+    path, truth = plate.write(home / "raw")
+    layout = set_role(PlateLayout.for_plate_type(96), [(0, 0), (0, 1)], "negative_control")
+    layout = set_role(layout, [(1, 0), (1, 1)], "positive_control")
+    layout = apply_fields(layout, list(counts), seeding_density=100)
+    pipeline = preset({"brightfield": "Brightfield"}, channels=["Brightfield"], organoids=True,
+                      min_area_um2=200)  # fmt: skip
+    folder = run_pipeline(open_plate(path), pipeline, output_root=home / "runs", layout=layout,
+                          save_images=False).folder  # fmt: skip
+    got = pd.read_csv(folder / "tables" / "per_well_summary.csv").set_index("well").to_dict("index")
+    imaged_mm2 = 2 * (400 * 2.0) ** 2 / 1e6
+    for well, data in truth["wells"].items():
+        diameters = [d for f in data["fields"].values()
+                     for d in f["spheroid"]["organoid_diameters_um"]]  # fmt: skip
+        assert got[well]["sp_org_count"] == len(diameters), well
+        assert got[well]["sp_ofe_pct"] == pytest.approx(len(diameters), abs=1e-9)  # 100 seeded
+        assert got[well]["sp_org_per_mm2"] == pytest.approx(len(diameters) / imaged_mm2)
+        if diameters:
+            assert got[well]["sp_org_diameter_median_um"] == pytest.approx(
+                np.median(diameters), rel=0.03
+            )
+            assert got[well]["sp_qc_ok"] == 1
+    assert got["C01"]["sp_flags"] == "no_organoids" and got["C01"]["sp_qc_ok"] == 0
+    assert got["B01"]["sp_volume_vs_vehicle_pct"] < 50
+    out = folder / "spheroids"
+    assert {"organoid_sizes.csv", "size_distribution.png"} <= {p.name for p in out.iterdir()}
+    sizes = pd.read_csv(out / "organoid_sizes.csv")
+    assert len(sizes) == 40 + 40 + 12 + 12
+    assert "organoids" in (out / "gallery.html").read_text()
+
+
+def test_invasion_core_and_shells_known_shapes() -> None:
+    from hcs_studio.assays.spheroids import (
+        ExtraOptions,
+        invasion_measures,
+        necrotic_core,
+        radial_shells,
+    )
+
+    yy, xx = np.mgrid[0:200, 0:200]
+    disc = (yy - 100) ** 2 + (xx - 100) ** 2 <= 50**2
+    strand = (np.abs(yy - 100) <= 3) & (xx >= 100) & (xx <= 180)  # 30 px beyond the edge
+    mask = disc | strand
+    values = invasion_measures(mask, ExtraOptions(invasion_core_px=10, min_protrusion_px=5))
+    assert values["protrusions"] == 1
+    assert values["max_invasion_px"] == pytest.approx(30, abs=1.5)
+    assert values["invasion_px2"] == pytest.approx(7 * 30, rel=0.1)
+    assert values["skeleton_branches"] >= 1
+    shells = radial_shells(disc, 5)
+    assert set(np.unique(shells[disc])) == {0, 1, 2, 3, 4} and shells[100, 100] == 4
+    plane = np.where((yy - 100) ** 2 + (xx - 100) ** 2 <= 25**2, 100.0, 400.0)
+    core, contrast = necrotic_core(plane, disc, ExtraOptions(core_smooth_px=1.0))
+    assert contrast > 0.5 and core.sum() == pytest.approx(np.pi * 25**2, rel=0.05)
+    flat, low = necrotic_core(np.full(plane.shape, 400.0), disc, ExtraOptions())
+    assert not flat.any() and low == pytest.approx(0)

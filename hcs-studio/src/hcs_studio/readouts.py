@@ -334,6 +334,40 @@ SPHEROID_FEATURES: dict[str, tuple[str, str, Direction, str]] = {
     "edge_sigma_um": ("edge blur", "µm", "up", "Gaussian blur of the outline (focus)"),
 }
 
+#: measure_spheroids extras (Phase 21b), also reported per well as ``sp_<feature>``
+SPHEROID_EXTRAS: dict[str, tuple[str, str, Direction, str]] = {
+    "core_area_um2": ("necrotic core area", "µm²", "up", "core at half height rim → centre"),
+    "core_fraction": ("necrotic core fraction", "", "up", "core area / spheroid area"),
+    "core_diameter_um": ("necrotic core diameter", "µm", "up", "equivalent core diameter"),
+    "core_contrast": ("core contrast", "", "either", "rim–centre contrast of the core channel"),
+    "rim_um": ("viable rim", "µm", "either", "equivalent radius minus core radius"),
+    "live_area_um2": ("live area", "µm²", "either", "live-stain positive area"),
+    "dead_area_um2": ("dead area", "µm²", "up", "dead-stain positive area"),
+    "dead_fraction": ("dead fraction", "", "up", "dead / (live ∪ dead) stained area"),
+    "live_fraction": ("live fraction", "", "down", "live-only / (live ∪ dead) stained area"),
+    "live_threshold": ("live threshold", "", "none", "live stain threshold used"),
+    "dead_threshold": ("dead threshold", "", "none", "dead stain threshold used"),
+    "invasion_core_area_um2": (
+        "invasion core area",
+        "µm²",
+        "either",
+        "spheroid body without protrusions",
+    ),
+    "invasion_area_um2": ("invasion area", "µm²", "up", "area of the protrusions"),
+    "invasion_fraction": ("invasion fraction", "", "up", "protrusion area / total area"),
+    "protrusions": ("protrusions", "", "up", "protrusions reaching min_protrusion_um"),
+    "protrusion_length_um": ("protrusion length", "µm", "up", "mean reach of the protrusions"),
+    "max_invasion_um": ("maximum invasion distance", "µm", "up", "farthest reach from the body"),
+    "skeleton_length_um": ("protrusion skeleton length", "µm", "up", "skeleton of the protrusions"),
+    "skeleton_branches": ("protrusion branches", "", "up", "skeleton end points"),
+    "radial_{c:core|live|dead}_s{n:int}": (
+        "{c} intensity, shell {n}",
+        "",
+        "either",
+        "radial profile: mean in shell n (1 = edge)",
+    ),
+}
+
 
 def _builtin() -> list[ReadoutSpec]:
     specs: list[ReadoutSpec] = []
@@ -348,6 +382,84 @@ def _builtin() -> list[ReadoutSpec]:
     for feat, (display, unit, direction, text) in SPHEROID_FEATURES.items():
         specs += _object_and_well(feat, display, unit, direction, text, "measure_spheroids")
     w: Level = "well"
+    for feat, (display, unit, direction, text) in SPHEROID_EXTRAS.items():
+        specs += _object_and_well(feat, display, unit, direction, text, "measure_spheroids")
+        if not feat.startswith("radial_"):
+            text = f"the well's spheroid: {text}"
+            specs.append(ReadoutSpec(f"sp_{feat}", f"spheroid {display}", unit, w, direction,
+                                     "none", text, "spheroid"))  # fmt: skip
+    specs += [
+        ReadoutSpec(
+            "sp_org_count",
+            "organoids",
+            "organoids",
+            w,
+            "down",
+            "percent_of_control",
+            "organoids in the imaged fields",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_org_count_complete",
+            "organoids (complete)",
+            "organoids",
+            w,
+            "down",
+            "none",
+            "organoids not cut by the image border",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_org_diameter_{s:mean|median|p10|p90}_um",
+            "organoid diameter ({s})",
+            "µm",
+            w,
+            "down",
+            "none",
+            "organoid size distribution (complete organoids)",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_org_area_total_um2",
+            "organoid area (total)",
+            "µm²",
+            w,
+            "down",
+            "percent_of_control",
+            "summed organoid area",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_org_volume_total_um3",
+            "organoid volume (total)",
+            "µm³",
+            w,
+            "down",
+            "percent_of_control",
+            "summed organoid volume",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_org_per_mm2",
+            "organoid density",
+            "per mm²",
+            w,
+            "down",
+            "none",
+            "organoids per imaged area",
+            "spheroid",
+        ),
+        ReadoutSpec(
+            "sp_ofe_pct",
+            "organoid-forming efficiency",
+            "%",
+            w,
+            "down",
+            "none",
+            "organoids / seeded cells (layout seeding density)",
+            "spheroid",
+        ),
+    ]
     specs += [
         # well summary basics (output/tables.py)
         ReadoutSpec(

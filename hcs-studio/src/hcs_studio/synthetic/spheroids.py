@@ -5,8 +5,12 @@
 meniscus shadow, ``meniscus``), and a spheroid: a disc of radius ``spec['radius_um']`` (darker,
 textured: cells, with a darker core), blurred by ``spec['blur_px']``. Optional per well
 (``spec``): ``offset_um`` (dy, dx), ``second_radius_um`` (a second spheroid), ``debris`` (small
-dark specks), ``attached_um`` (a blob stuck to the spheroid's edge). The truth records the
-radius, area, sphere volume and the expected QC flags.
+dark specks), ``attached_um`` (a blob stuck to the spheroid's edge), ``core_ratio`` (radius of
+the darker necrotic core / radius; 0.5, 0 = none), ``strands`` ([(angle °, length µm, width µm)]:
+invading strands of cells from the edge into the matrix), ``organoids`` + ``organoid_radius_um``
+(many organoids instead of one spheroid). The truth records the radius, area, sphere volume,
+core fraction, invasion and the expected QC flags. :class:`LiveDeadStains` draws a live stain
+(calcein) in the viable rim and a dead stain (EthD-1, PI) in the core of the same spheroid.
 """
 
 from __future__ import annotations
@@ -17,6 +21,28 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+
+
+def geometry(spec: Mapping[str, Any], h: int, w: int, px: float) -> tuple[float, float, float]:
+    """(centre y, centre x, radius) in pixels of the spheroid described by ``spec``."""
+    dy, dx = spec.get("offset_um", (0.0, 0.0))
+    return (h - 1) / 2 + dy / px, (w - 1) / 2 + dx / px, float(spec.get("radius_um", 0)) / px
+
+
+def strand_mask(yy: Any, xx: Any, cy: float, cx: float, radius: float,
+                strands: Any, px: float) -> Any:  # fmt: skip
+    """Pixels of the invading strands (rectangles from inside the edge outwards)."""
+    mask = np.zeros(yy.shape, dtype=bool)
+    for angle, length, width in strands:
+        a = math.radians(angle)
+        along = (yy - cy) * math.sin(a) + (xx - cx) * math.cos(a)
+        across = -(yy - cy) * math.cos(a) + (xx - cx) * math.sin(a)
+        mask |= (
+            (along >= radius - 3)
+            & (along <= radius + length / px)
+            & (np.abs(across) <= width / px / 2)
+        )
+    return mask
 
 
 @dataclass
@@ -52,9 +78,23 @@ class BrightfieldSpheroid:
         texture *= self.texture / max(float(texture.std()), 1e-9)
         blur = float(spec.get("blur_px", 0.8))
         dy, dx = spec.get("offset_um", (0.0, 0.0))
-        cy, cx = (h - 1) / 2 + dy / px, (w - 1) / 2 + dx / px
-        radius = float(spec["radius_um"]) / px
+        cy, cx, radius = geometry(spec, h, w, px)
         spheres = [(cy, cx, radius)]
+        organoids: list[float] = []
+        if "organoids" in spec:
+            spheres = []
+            low, high = spec.get("organoid_radius_um", (15, 40))
+            tries = 0
+            while len(spheres) < int(spec["organoids"]) and tries < 5000:
+                tries += 1
+                r = float(ctx.rng.uniform(low, high)) / px
+                y, x = (
+                    ctx.rng.uniform(0.15 * h + r, 0.85 * h - r),
+                    ctx.rng.uniform(0.15 * w + r, 0.85 * w - r),
+                )
+                if all(math.hypot(y - a, x - b) > r + c + 6 for a, b, c in spheres):
+                    spheres.append((float(y), float(x), r))
+            organoids = [2 * r * px for _, _, r in spheres]
         if spec.get("second_radius_um"):
             r2 = float(spec["second_radius_um"]) / px
             spheres.append((cy, cx + radius + r2 + 10, r2))
@@ -62,13 +102,23 @@ class BrightfieldSpheroid:
         alpha = np.zeros((h, w))
         for y, x, r in spheres:
             a = self._disc(yy, xx, y, x, r, blur)
-            core = self._disc(yy, xx, y, x, 0.5 * r, blur)
+            core = self._disc(yy, xx, y, x, float(spec.get("core_ratio", 0.5)) * r, blur)
             value = self.spheroid + (self.core - self.spheroid) * core
             content = np.where(a > alpha, value, content)
             alpha = np.maximum(alpha, a)
         if spec.get("attached_um"):
             ra = float(spec["attached_um"]) / px
             a = self._disc(yy, xx, cy, cx - radius - 0.6 * ra, ra, blur)
+            content = np.where(a > alpha, self.spheroid, content)
+            alpha = np.maximum(alpha, a)
+        strands = spec.get("strands") or []
+        invasion = np.zeros((h, w), dtype=bool)
+        if strands:
+            disc = (yy - cy) ** 2 + (xx - cx) ** 2 <= radius**2
+            invasion = strand_mask(yy, xx, cy, cx, radius, strands, px) & ~disc
+            a = ndimage.gaussian_filter(
+                strand_mask(yy, xx, cy, cx, radius, strands, px).astype(float), blur
+            )
             content = np.where(a > alpha, self.spheroid, content)
             alpha = np.maximum(alpha, a)
         for _ in range(int(spec.get("debris", 0))):
@@ -79,6 +129,8 @@ class BrightfieldSpheroid:
             content = np.where(a > alpha, self.spheroid, content)
             alpha = np.maximum(alpha, a)
         image[self.channel] += (field * (1 - alpha) + (content + texture) * alpha)[None]
+        if "organoids" in spec:
+            return {"count": len(organoids), "organoid_diameters_um": organoids}
         area = math.pi * float(spec["radius_um"]) ** 2
         flags = []
         if spec.get("second_radius_um"):
@@ -100,4 +152,45 @@ class BrightfieldSpheroid:
             "volume_um3": 4 / 3 * math.pi * float(spec["radius_um"]) ** 3,
             "centre_px": [cy, cx],
             "flags": flags,
+            "core_fraction": float(spec.get("core_ratio", 0.5)) ** 2,
+            "invasion_area_um2": float(invasion.sum()) * px * px,
+            "protrusions": len(strands),
+            "max_invasion_um": max((s[1] for s in strands), default=0.0),
+        }
+
+
+@dataclass
+class LiveDeadStains:
+    """Live stain in the viable rim, dead stain in the necrotic core (radius ratio
+    ``spec['core_ratio']``) of the spheroid in ``spec``; ``spec['dead_ratio']`` overrides the
+    radius of the dead region (e.g. 0 for an untreated, fully viable spheroid)."""
+
+    spec: Callable[[int, int], Mapping[str, Any]]
+    name: str = "live_dead"
+    live_channel: int = 1
+    dead_channel: int = 2
+    background: float = 100.0
+    live: float = 800.0
+    dead: float = 900.0
+
+    def draw(self, ctx: Any) -> dict[str, Any]:
+        from scipy import ndimage
+
+        spec = dict(self.spec(ctx.row, ctx.col))
+        image = ctx.image
+        h, w = image.shape[-2:]
+        cy, cx, radius = geometry(spec, h, w, ctx.pixel_size_um)
+        ratio = float(spec.get("dead_ratio", spec.get("core_ratio", 0.5)))
+        yy, xx = np.mgrid[0:h, 0:w].astype(float)
+        distance = np.hypot(yy - cy, xx - cx)
+        blur = float(spec.get("blur_px", 0.8))
+        dead = ndimage.gaussian_filter((distance <= ratio * radius).astype(float), blur)
+        whole = ndimage.gaussian_filter((distance <= radius).astype(float), blur)
+        image[self.live_channel] += (self.background + self.live * np.clip(whole - dead, 0, 1))[
+            None
+        ]
+        image[self.dead_channel] += (self.background + self.dead * dead)[None]
+        return {
+            "dead_fraction": ratio**2,
+            "dead_area_um2": math.pi * (ratio * radius * ctx.pixel_size_um) ** 2,
         }

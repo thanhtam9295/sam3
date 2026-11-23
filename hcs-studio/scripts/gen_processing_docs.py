@@ -134,8 +134,16 @@ NOTES = {
     "measure_spheroids": "Spheroids (Phase 21): use instead of measure_objects for the spheroids. "
     "Area, equivalent diameter, perimeter, axes, circularity, solidity, compactness, volume "
     "(sphere π/6·d³ and ellipsoid π/6·L·W²), darkness (brightfield), edge blur (edge_sigma_um, "
-    "focus), position (offcentre, touching_edge).",
-    "spheroid": "Spheroids (Phase 21): one spheroid per well — the largest object not touching "
+    "focus), position (offcentre, touching_edge). Phase 21b extras: radial profiles in `shells` "
+    "concentric shells (core, live and dead channels); necrotic core at half height between rim "
+    "and centre of the core channel (dead stain: bright core; brightfield: dark core) — area, "
+    "fraction, viable rim; live/dead areas and dead fraction (threshold: background median + "
+    "threshold_sd robust SD, or fixed); invasion (opening by invasion_core_um with distance "
+    "transforms: body vs protrusions, their count, reach, skeleton length and branches).",
+    "spheroid": "Spheroids (Phase 21): mode organoids = every object ≥ min_organoid_um2: count, "
+    "diameter distribution, total area/volume, density per mm², forming efficiency from the "
+    "layout's seeding density (well_area_mm2 extrapolates from the imaged fields), flag "
+    "no_organoids. Mode single (default): one spheroid per well — the largest object not touching "
     "the image border (≥ min_spheroid_um2). Readouts `sp_` (volume by `volume`: sphere or "
     "ellipsoid), volume vs vehicle, Z′; flags no_spheroid, multiple, touching_edge, off_centre, "
     "out_of_focus, debris, irregular (exclude_flags set sp_qc_ok = 0). Writes `spheroids/`: "

@@ -41,8 +41,12 @@ DESCRIPTIONS = {
     "difference of Gaussians, which ignores smooth well-edge and meniscus shading, then the outline "
     "at half height between the spheroid interior and its local background; fluorescence: Otsu)",
     "measure_spheroids": "spheroid size, shape and volume (sphere from the equivalent diameter, "
-    "π/6·d³; ellipsoid π/6·L·W²), brightfield darkness, outline blur and position",
-    "spheroid": "one spheroid per well (the largest object not touching the image border), with "
+    "π/6·d³; ellipsoid π/6·L·W²), brightfield darkness, outline blur and position; radial "
+    "intensity profiles in concentric shells; necrotic core outlined at half height between the "
+    "rim and the centre; live/dead stain areas above background median + 5 robust SD; invasion "
+    "as protrusions beyond a morphological opening of the spheroid (count, reach, skeleton)",
+    "spheroid": "one spheroid per well (the largest object not touching the image border; or, in "
+    "organoid mode, every organoid: count, size distribution, density and forming efficiency), with "
     "QC flags for no spheroid, several spheroids, touching the border, off-centre, out of focus, "
     "debris and irregular outlines",
     "mitotic_errors": "micronuclei (small DNA objects up to 0.2 × the median nuclear area within "

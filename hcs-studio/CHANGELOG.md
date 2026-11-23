@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Phase 21b — spheroids: viability, necrotic core, invasion, organoids
+- `measure_spheroids`: radial profiles in concentric shells; necrotic core at half height between
+  rim and centre (brightfield dark core or dead-stain bright core): area, fraction, viable rim;
+  live/dead stain areas and dead fraction; invasion (body by morphological opening vs
+  protrusions: count, reach, area, skeleton length and branches).
+- `detect_spheroids`: `protrusion_reach_um` follows invading cells; small objects' outlines
+  fixed (interior from the dark class of the region).
+- `spheroid`: organoid mode (count, size distribution, density, organoid-forming efficiency from
+  the layout's seeding density); `radial_profiles.csv/png`, `organoid_sizes.csv`,
+  `size_distribution.png`; live/dead roles in the wizard; preset options `invasion`, `organoids`.
+
 ### Phase 21a — spheroids: detection, size, volume, QC, gallery
 - `detect_spheroids` (image step): brightfield texture detection that ignores well-edge and
   meniscus shading, outline at half height (blur-independent size); dark and fluorescence modes.

@@ -241,6 +241,21 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Spheroids: viability, core, invasion, organoids (Phase 21b)
+
+| Check | Result | Test |
+|---|---|---|
+| Synthetic brightfield + calcein + EthD-1 spheroids (r 120–200 µm) with core radius ratio 0, 0.3, 0.5, 0.7 (core fraction 0–0.49); two with 2–4 invading strands (10–14 µm wide, 40–140 µm long) | core fraction within 2 pp (seen ≤ 0.2 pp from brightfield and from the dead stain), within 5 pp with strands (their area counts in the spheroid); dead fraction within 3 pp (seen ≤ 2 pp: blurred dead edge counts as dead); viable rim 100 ± 4 µm; protrusion count exact; maximum reach within 6 µm (seen 1); invasion area within 10 % (seen −2 %); no core, no dead area in the untreated spheroid; dead-stain radial profile rises to the centre | `test_core_viability_and_invasion_from_images` |
+| Organoid wells: 0, 6 or 20 organoids per field (r 20–45 µm), 2 fields, seeding density 100 | counts exact; median diameter within 3 % (seen 0.2 %); forming efficiency and density exact; `no_organoids`; volume vs vehicle | `test_organoid_mode_counts_sizes_and_efficiency` |
+| Disc + one strand; disc with a dark core; flat disc | 1 protrusion, reach 30 px, area 7 × 30 px; shells 0–4 with the centre deepest; core area within 5 %; no core without contrast | `test_invasion_core_and_shells_known_shapes` |
+
+Found while building: small objects (organoids, r ≤ 45 µm) came out up to 30 % too large because
+their texture region is mostly background, so the "interior" level was background; the
+interior is now the dark class (Otsu) of the region — size errors ≤ 1.3 % from 30 to 400 µm.
+
+Not yet checked: real live/dead spheroids (calcein spill into the core, EthD-1 in a thin rim of
+debris), cystic organoids (bright lumen), Matrigel invasion images (out-of-focus strands).
+
 ## Spheroids (Phase 21a)
 
 | Check | Result | Test |

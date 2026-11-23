@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20 built (20a–20e); 21a built
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20 built (20a–20e); 21a, 21b built
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -596,6 +596,16 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `previews/fNNN.png` + outline overlay). `SPHEROID_FEATURES` in readouts.py. `channel_colormap`:
   transmitted-light names → gray. Synthetic `synthetic/spheroids.py` (`BrightfieldSpheroid`,
   radial smooth meniscus — a min-of-distances meniscus has diagonal ridges that read as texture).
+- **Phase 21b (built)**: in `assays/spheroids.py`: `ExtraOptions` + `spheroid_extras` (called from
+  `spheroid_table` when planes/invasion are given): `radial_shells` (depth / max depth),
+  `necrotic_core` (half height rim 10–30 % vs centre > 85 % depth; component at the deepest
+  point), `stain_threshold` (outside-objects median + k robust SD), `invasion_measures` (opening
+  via EDTs, kept protrusions ≥ min reach, skeleton end points). `detect`: interior level = median
+  of the Otsu dark class of the component (not the eroded component: wrong for small objects);
+  `reach_px` widens the ROI. `Spheroid.mode == "organoids"` → `organoids()` (imaged area from
+  `well_summary.json` fields × field px area; OFE from `seeding_density`). Readouts:
+  `SPHEROID_EXTRAS` (object + `sp_` well), `sp_org_*`. Synthetic: `core_ratio`, `strands`,
+  `organoids` spec keys; `LiveDeadStains` feature.
 
 ## Commands
 

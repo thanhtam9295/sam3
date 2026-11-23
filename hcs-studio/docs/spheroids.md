@@ -1,14 +1,21 @@
 # Spheroids and organoids
 
 Per-spheroid size, shape and volume with QC flags, a sortable gallery and dose–response on
-volume. Built so far (21a): **one spheroid per well** (ULA 96/384 plates) on brightfield or a
-whole-spheroid fluorescence stain, in 2D. Coming: viability (live/dead), necrotic core, invasion
-and organoid mode (21b); confocal 3D (21c). Growth curves over time need Phase 22; ilastik
-detection waits for Phase 16 (b).
+volume (21a); viability (live/dead), necrotic core, radial profiles, invasion and organoid mode
+(21b) — on brightfield or fluorescence, in 2D. Coming: confocal 3D (21c). Growth curves over time
+need Phase 22; ilastik detection waits for Phase 16 (b).
 
 ```bash
 hcs-studio assay preset spheroid --map brightfield=BF --channels BF --output spheroids.yaml
 hcs-studio run --pipeline spheroids.yaml --input <plate> --workers auto
+```
+
+With live/dead stains, invasion or organoids (Python: `preset(mapping, channels=…,
+invasion=True, organoids=True)`):
+
+```bash
+hcs-studio assay preset spheroid --map brightfield=BF --map live=Calcein --map dead=EthD1 \
+    --channels BF,Calcein,EthD1 --output spheroids_live_dead.yaml
 ```
 
 The preset has three steps: `detect_spheroids` → `measure_spheroids` → `spheroid`. For Z stacks
@@ -41,6 +48,29 @@ Use it **instead of** `measure_objects` for the spheroids (both would write the 
 | `edge_sigma_um` | blur of the outline (Gaussian σ explaining contrast / steepest gradient): focus |
 | `offcentre`, `touching_edge` | centroid distance from the field centre / half the field; object cut by the image border |
 
+## Viability, necrotic core and radial profiles (`measure_spheroids`)
+
+| Option | What it measures |
+|---|---|
+| `live_channel`, `dead_channel` | live / dead stain areas inside the spheroid: pixels above the background (outside all objects) median + `threshold_sd` (5) robust SD, or `live_threshold` / `dead_threshold`; `dead_fraction` = dead / (live ∪ dead) stained area (pixels with both count as dead) |
+| `core` (on) | **necrotic core**: on `core_channel` (default: the dead stain if mapped — a bright core — else the brightfield channel — a dark core), smoothed by `core_smooth_um` (6 µm), the core is outlined at **half height between the rim** (10–30 % of the way in) **and the centre** (deepest 15 %). `core_area_um2`, `core_fraction` (of the spheroid's area), `core_diameter_um`, `rim_um` (viable rim: equivalent radius minus core radius). No core when the rim–centre contrast is below `min_core_contrast` (0.15). |
+| `shells` (10) | **radial profiles**: mean intensity in concentric shells from the edge (shell 1) to the centre, by distance from the edge relative to the deepest point — so irregular spheroids work too. Columns `radial_<core/live/dead>_sNN`; `spheroids/radial_profiles.csv` (long format) and `radial_profiles.png` (mean profile per role). |
+
+## Invasion (`invasion: true`)
+
+For spheroids in Matrigel or collagen. Detection must follow the invading cells:
+`detect_spheroids` → `protrusion_reach_um` (the preset uses 300 µm with `invasion=True`). The
+spheroid **body** is the object after a morphological opening with radius `invasion_core_um`
+(20 µm; computed with distance transforms); everything thinner that sticks out is protrusion.
+
+| Column | Meaning |
+|---|---|
+| `invasion_core_area_um2`, `invasion_area_um2`, `invasion_fraction` | body area; protrusion area; protrusion / total area |
+| `protrusions`, `protrusion_length_um`, `max_invasion_um` | protrusions reaching `min_protrusion_um` (10 µm) from the body; their mean reach; the farthest reach |
+| `skeleton_length_um`, `skeleton_branches` | skeleton of the protrusions: length and end points |
+
+Invading spheroids are also flagged `irregular` (low solidity) — expected in this assay.
+
 ## One spheroid per well (`spheroid`)
 
 The well's spheroid is the largest object (≥ `min_spheroid_um2`, 2000 µm²) that does not touch
@@ -67,6 +97,25 @@ Flags in `exclude_flags` (default: no_spheroid, multiple, touching_edge, out_of_
 `wells.csv`, `crops/<well>.png` (the spheroid with its outline, from the run's preview) and
 `gallery.html`: one card per well with its flags, sortable by any readout; linked from the run's
 `index.html`. Brightfield channels (names such as Brightfield, BF, Phase, TL) are shown in gray.
+
+## Organoid mode (`mode: organoids`)
+
+Many organoids per well (in matrix, several fields per well). Every object ≥ `min_organoid_um2`
+(200 µm²) is an organoid; those cut by the image border are counted but left out of the size
+distribution.
+
+| Readout | Meaning |
+|---|---|
+| `sp_org_count`, `sp_org_count_complete` | organoids; not cut by the border |
+| `sp_org_diameter_{mean,median,p10,p90}_um` | size distribution |
+| `sp_org_area_total_um2`, `sp_org_volume_total_um3` | summed area and volume |
+| `sp_org_per_mm2` | organoids per imaged mm² (fields × field area) |
+| `sp_ofe_pct` | **organoid-forming efficiency**: organoids / seeded cells (`seeding_density` in the layout); with `well_area_mm2` the count is extrapolated from the imaged fields to the well |
+| `sp_dead_fraction`, `sp_core_fraction` | area-weighted over the organoids |
+
+`sp_volume_vs_vehicle_pct` uses the total organoid volume; the flag `no_organoids` fails a well.
+`spheroids/organoid_sizes.csv` and `size_distribution.png` (box per well) go with the gallery,
+whose cards show the field with the most organoid area.
 
 ## Dose–response
 

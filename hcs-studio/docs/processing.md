@@ -262,6 +262,7 @@ Spheroids (Phase 21), 2D: brightfield = textured objects (local SD of a differen
 | `method` | 'brightfield' | brightfield: texture, then half-height outline; dark: darker than the background; bright: fluorescence (Otsu). |
 | `texture_um` | 6.0 | Texture window (Gaussian σ). |
 | `min_area_um2` | 300.0 | Smaller objects are dropped. |
+| `protrusion_reach_um` | 0.0 | Invasion assays: follow dark protrusions this far from the spheroid body. |
 | `output` | 'spheroids' | Name of the label set. |
 
 ## Spot detection (LoG / DoG) (`detect_spots`)
@@ -382,12 +383,26 @@ Measures every object of the chosen label sets on the linear image (never on con
 
 ## Measure spheroids (`measure_spheroids`)
 
-Spheroids (Phase 21): use instead of measure_objects for the spheroids. Area, equivalent diameter, perimeter, axes, circularity, solidity, compactness, volume (sphere π/6·d³ and ellipsoid π/6·L·W²), darkness (brightfield), edge blur (edge_sigma_um, focus), position (offcentre, touching_edge).
+Spheroids (Phase 21): use instead of measure_objects for the spheroids. Area, equivalent diameter, perimeter, axes, circularity, solidity, compactness, volume (sphere π/6·d³ and ellipsoid π/6·L·W²), darkness (brightfield), edge blur (edge_sigma_um, focus), position (offcentre, touching_edge). Phase 21b extras: radial profiles in `shells` concentric shells (core, live and dead channels); necrotic core at half height between rim and centre of the core channel (dead stain: bright core; brightfield: dark core) — area, fraction, viable rim; live/dead areas and dead fraction (threshold: background median + threshold_sd robust SD, or fixed); invasion (opening by invasion_core_um with distance transforms: body vs protrusions, their count, reach, skeleton length and branches).
 
 | Parameter | Default | Meaning |
 |---|---|---|
 | `labels` | 'spheroids' | Label set of the spheroids. |
 | `channel` | None | Brightfield/fluorescence channel for darkness and focus. |
+| `core` | True | Measure the necrotic core. |
+| `core_channel` | None | Channel for the core: empty = the dead stain if any, else `channel`. |
+| `core_polarity` | 'auto' | auto: bright for a dead stain, dark otherwise (brightfield). |
+| `core_smooth_um` | 6.0 | Smoothing before the core outline. |
+| `min_core_contrast` | 0.15 | Rim–centre contrast below this: no core. |
+| `shells` | 10 | Radial profile shells. |
+| `live_channel` | None | Live stain (calcein). |
+| `dead_channel` | None | Dead stain (EthD-1, PI). |
+| `threshold_sd` | 5.0 | Stain positive above background median + this × robust SD. |
+| `live_threshold` | None | Fixed live threshold. |
+| `dead_threshold` | None | Fixed dead threshold. |
+| `invasion` | False | Measure invasion (protrusions). |
+| `invasion_core_um` | 20.0 | Opening radius: thinner structures are protrusions. |
+| `min_protrusion_um` | 10.0 | Shorter: not a protrusion. |
 
 ## Micronuclei and multinucleation (`mitotic_errors`)
 
@@ -606,17 +621,22 @@ Table step: runs on the object tables after all wells are processed, and can be 
 | `simulations` | 39 | CSR simulations for the envelopes; 0 = none. |
 | `seed` | 0 | Random seed for the simulations. |
 
-## Assay: spheroids (one per well) (`spheroid`)
+## Assay: spheroids and organoids (`spheroid`)
 
-Spheroids (Phase 21): one spheroid per well — the largest object not touching the image border (≥ min_spheroid_um2). Readouts `sp_` (volume by `volume`: sphere or ellipsoid), volume vs vehicle, Z′; flags no_spheroid, multiple, touching_edge, off_centre, out_of_focus, debris, irregular (exclude_flags set sp_qc_ok = 0). Writes `spheroids/`: spheroids.csv, wells.csv, crops and a sortable gallery.html.
+Spheroids (Phase 21): mode organoids = every object ≥ min_organoid_um2: count, diameter distribution, total area/volume, density per mm², forming efficiency from the layout's seeding density (well_area_mm2 extrapolates from the imaged fields), flag no_organoids. Mode single (default): one spheroid per well — the largest object not touching the image border (≥ min_spheroid_um2). Readouts `sp_` (volume by `volume`: sphere or ellipsoid), volume vs vehicle, Z′; flags no_spheroid, multiple, touching_edge, off_centre, out_of_focus, debris, irregular (exclude_flags set sp_qc_ok = 0). Writes `spheroids/`: spheroids.csv, wells.csv, crops and a sortable gallery.html.
 
 Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
 
 | Parameter | Default | Meaning |
 |---|---|---|
 | `object_type` | 'spheroids' | Label set of the spheroids. |
+| `mode` | 'single' | single: one spheroid per well (ULA plates); organoids: many per well. |
+| `min_organoid_um2` | 200.0 | Organoid mode: smallest. |
+| `well_area_mm2` | None | Organoid mode: well area, to extrapolate counts from the imaged fields (empty = the fields cover the whole well). |
 | `brightfield_channel` | '' | Brightfield channel (preset). |
 | `fluorescence_channel` | '' | Fluorescence channel (preset). |
+| `live_channel` | '' | Live stain channel (preset). |
+| `dead_channel` | '' | Dead stain channel (preset). |
 | `volume` | 'sphere' | Volume estimate reported as sp_volume_um3. |
 | `min_spheroid_um2` | 2000.0 | Smaller objects are debris, never the spheroid. |
 | `multiple_fraction` | 0.25 | Another object ≥ this × the spheroid: 'multiple'. |
