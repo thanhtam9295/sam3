@@ -4,8 +4,8 @@ Time-lapse plates (Incucyte-style live imaging, or one plate imaged repeatedly b
 are analysed on **real times**, never on frame numbers. This guide covers the time-course data
 (Phase 22a): where the times come from, the treatment time, drift correction, confluence and the
 time-course table (Phase 22a), the kinetic analysis: growth curves, doubling times, IC50
-over time and GR values (Phase 22b), and the views and quality control of a time-lapse plate
-(Phase 22c).
+over time and GR values (Phase 22b), the views and quality control of a time-lapse plate
+(Phase 22c), and cell tracking (Phase 22d).
 
 ## Times
 
@@ -211,6 +211,45 @@ black, concentrations light to dark) and `potency_over_time.png` (IC50 and GR50 
 `heatmap.png`, `qc_wells.csv` (flags per well), `qc_timeline.csv` (relative focus and edge
 effect per time point) and `report.html`.
 
+## Cell tracking (`tracking`)
+
+The **tracking** table step follows each nucleus from time point to time point within a field
+(after `segment_classical`/Cellpose and `measure_objects`; put `register_timepoints` first so
+stage drift is not read as movement). It uses scipy only:
+
+1. **Linking**: optimal assignment between consecutive time points (`linear_sum_assignment`) on
+   the squared distance from each nucleus's *predicted* position — its last displacement carried
+   on, since cells move persistently — to the nuclei of the next time point. Each nucleus may
+   instead end or start a track at the cost of the gate (Jaqaman et al. 2008), so a far pair is
+   left unlinked when that is cheaper overall. Pairs farther than `max_speed_um_per_h` × the
+   interval (at least `min_gate_um`) are never linked.
+2. **Divisions**: a nucleus that starts a track within reach of a nucleus at the previous time
+   point whose track continues into a sister, both smaller than `max_daughter_ratio` (0.8) × the
+   mother's area, is a daughter: the mother's track ends and both daughters start tracks with the
+   mother as parent.
+3. **Gap closing**: a track ending early and one starting up to `max_gap` (2) time points later
+   within the gate are joined (a nucleus missed or out of focus at one time point).
+
+Two touching nuclei merged by segmentation for a time point, then separate again, look like a
+division; two guards keep them apart: a nucleus appearing within the gate of a track lost in the
+last `max_gap` time points is that track coming back, and a cell born less than `min_cycle_h`
+(4 h) ago does not divide.
+
+Per object: `trk_id` (unique in the well: field × 100 000 + track), `trk_parent`, `trk_divided`.
+`tracking/tracks.csv`: one row per track — start, end, frames, duration, displacement, path,
+speed, straightness, parent, whether it divides, how it ends (`division`, `end`, `lost`) and the
+cell-cycle time of tracks from one division to the next (birth and division placed halfway
+between the time points around them). Per well (`per_well_summary.csv`): `trk_tracks`,
+`trk_speed_um_per_h`, `trk_straightness`, `trk_divisions`, `trk_division_rate_per_h`,
+`trk_cycle_h`, `trk_lost_fraction`.
+
+**When tracking works**: the movement between time points must be small next to the spacing of
+the nuclei. On synthetic cells (persistent random walk, nuclei ~40 µm apart) hourly frames at
+10 µm/h keep 98.5 % of the links and find 94 % of the divisions; at 20 µm/h (half the spacing per
+frame) 86 % / 81 %; at 2-hour frames 77 % / 71 %. Image more often rather than raising
+`max_speed_um_per_h`. Cell-cycle times are complete only for cells born and dividing within the
+movie: in a movie not much longer than the cycle, the faster cycles are over-represented.
+
 ## Synthetic data
 
 `hcs_studio.synthetic.kinetics.GrowingCells` draws cells growing with a known count per time
@@ -219,4 +258,6 @@ brightfield-like channel, with an optional drift per time; the truth per time po
 count, the confluence and the drift. `SyntheticPlate(timepoints=…, time_points_s=…,
 acquired_at=…)` writes a time-lapse OME-Zarr plate with those times. `response_course` writes
 a time-course table of a dose–response plate with known IC50(t) and GR50 (a drug that lowers the
-growth rate, optionally after a delay).
+growth rate, optionally after a delay). `MovingCells` / `simulate_lineages` draw nuclei that move
+(persistent random walk) and divide (area doubling over the cycle), with every cell's id, parent
+and position in the truth.

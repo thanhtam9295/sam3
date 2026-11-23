@@ -185,6 +185,13 @@ NOTES = {
     "on fields pooled across the plate and time points, mask edge corrected for the window "
     "(gaps narrower than ~3 × texture_um count as covered). threshold: a fluorescent stain. "
     "labels: the area of a label set. See the Kinetics guide.",
+    "tracking": "Kinetics (Phase 22d): table step that tracks nuclei over the time points of each "
+    "field (scipy only): frame-to-frame optimal assignment on the distance to the predicted "
+    "position (persistent motion), gated by max_speed_um_per_h; divisions (daughters smaller than "
+    "max_daughter_ratio × the mother, the mother's track ends); gap closing over max_gap time "
+    "points. Object columns `trk_id`, `trk_parent`, `trk_divided`; `tracking/tracks.csv`; per well "
+    "speed, straightness, divisions, division rate, cell-cycle time, lost fraction. Put "
+    "register_timepoints first. See the Kinetics guide.",
     "kinetics": "Kinetics (Phase 22b): table step for time-lapse runs. Per well a growth fit "
     "on the log of the readout (exponential, lag_exponential, logistic; AICc) → `kn_doubling_h`, "
     "`kn_growth_rate_per_h`, `kn_lag_h`, `kn_capacity`, plus AUC, fold changes and times to a "

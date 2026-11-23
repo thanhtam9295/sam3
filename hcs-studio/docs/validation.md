@@ -241,6 +241,27 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Live-cell kinetics: cell tracking (Phase 22d)
+
+| Check | Result | Test |
+|---|---|---|
+| Point data: 10 → ~50 cells over 48 h (cycle 20 h ± 10 %), persistent random walk 10 µm/h, hourly frames | ≥ 97 % of links (seen 98.5 %), ≥ 90 % of divisions (seen 92 %); speed within 5 % (9.7 µm/h); cell cycle within 10 % (20.0 h) | `test_tracks_and_divisions_of_known_lineages` |
+| Same at 20 µm/h | motion prediction keeps 86 % of links against 74 % without (2-hour frames at 10 µm/h: 77 %) | `test_prediction_helps_fast_cells` |
+| A nucleus missed at one time point; an object appearing 200 µm away | gap closed (one track), the far object a new track; speed 5 µm/h exact; no gap closing with max_gap 0 | `test_gap_closing_and_gate` |
+| Segmented nuclei of moving, dividing cells (8 → ~25 cells, 24 hourly frames, cycle 14 h, 8 µm/h) through the pipeline | ≥ 95 % of nuclei matched to a true cell; ≥ 90 % of links and ≥ 75 % of divisions; speed within 25 %; cycle within 15 % | `test_tracking_from_images` |
+
+Found while building: (1) daughters can drift > 20 µm apart within one hourly interval, so
+"beside a continuing track" missed 60 % of divisions → the daughter is looked for within reach of
+the mother's last position. (2) Nearest-position linking lost 26 % of links at 20 µm/h →
+assignment on the predicted position. (3) Cycle times were one interval short (first to last
+frame) → birth and division at the interval midpoints. (4) Two touching nuclei merged by
+segmentation for one frame and separating again read as divisions with 1–5 h "cycles" → a new
+object near a track lost in the last max_gap frames is that track coming back, and a cell born
+less than min_cycle_h ago does not divide.
+
+Not yet checked: real time-lapse nuclei (crowded monolayers, mitotic rounding and its intensity
+change, apoptotic fragments), comparison with TrackMate / ilastik tracking (Phase 16 d).
+
 ## Live-cell kinetics: views and QC (Phase 22c)
 
 | Check | Result | Test |

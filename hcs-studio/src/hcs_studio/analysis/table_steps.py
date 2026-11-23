@@ -42,6 +42,7 @@ ANNOTATION_PREFIXES = (
     "tl_",
     "pf_",
     "sp_",
+    "trk_",
 )
 #: Numeric columns that are positions or identifiers, not features.
 NON_FEATURES = frozenset(

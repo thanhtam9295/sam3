@@ -66,6 +66,10 @@ DESCRIPTIONS = {
     "confluence": "confluence (% of the field covered by cells: local texture of the image minus "
     "its median filter, thresholded at Otsu's level of fields pooled across the plate and time "
     "points, edges corrected for the window; or an intensity threshold, or a label set)",
+    "tracking": "cell tracking (nuclei linked between time points by optimal assignment on the "
+    "distance to their predicted positions, with track ends and starts allowed at the cost of a "
+    "speed gate, Jaqaman et al. 2008; divisions from daughters smaller than the mother next to it; "
+    "gaps of up to max_gap time points closed)",
     "kinetics": "kinetic analysis of the time course (growth curves fitted on the log scale: "
     "exponential, lag-exponential or logistic chosen by AICc, doubling time ln 2 / growth rate; "
     "AUC; IC50 at each time point from % of the same-time vehicle median; GR values from "

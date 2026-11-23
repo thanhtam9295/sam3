@@ -721,6 +721,23 @@ Places the fields of each well in one coordinate system from their stage positio
 | `save_mosaic` | False | Also write the well as one linear image (mosaic.ome.tif, all channels; overlaps averaged), e.g. of projected and background-corrected fields. |
 | `mosaic_downsample` | 2 | Mosaic image: block-average by this factor (1 = full resolution; needs all fields of a well in memory). |
 
+## Cell tracking (`tracking`)
+
+Kinetics (Phase 22d): table step that tracks nuclei over the time points of each field (scipy only): frame-to-frame optimal assignment on the distance to the predicted position (persistent motion), gated by max_speed_um_per_h; divisions (daughters smaller than max_daughter_ratio × the mother, the mother's track ends); gap closing over max_gap time points. Object columns `trk_id`, `trk_parent`, `trk_divided`; `tracking/tracks.csv`; per well speed, straightness, divisions, division rate, cell-cycle time, lost fraction. Put register_timepoints first. See the Kinetics guide.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to track (one per cell). |
+| `max_speed_um_per_h` | 30.0 | Fastest plausible movement; farther pairs never link. |
+| `min_gate_um` | 5.0 | Smallest linking distance. |
+| `max_gap` | 2 | Time points a track may skip. |
+| `divisions` | True | Detect divisions (parent tracks). |
+| `division_radius_um` | 20.0 | Daughters within this. |
+| `max_daughter_ratio` | 0.8 | Daughters smaller than this × the mother's area. |
+| `min_track_frames` | 3 | Shorter tracks are not summarised. |
+
 ## Assay: nuclear translocation (`translocation`)
 
 Assay (Phase 20d): nuclear/cytoplasmic ratio of a reporter per cell (nucleus vs the cytoplasm label set), log2 ratio, and responding cells above a threshold from the unstimulated controls (median + threshold_sd robust SD of log N/C; a percentile; Otsu over unstimulated and stimulated cells; or fixed). mode agonist: vehicle = unstimulated; inhibitor: positive controls = unstimulated. Per well % responding, median N/C, activation between the controls, Z′. Writes `tl_` columns and `assays/translocation/`. EC50/IC50 with the pharmacology step on tl_responding_pct. See the Assays guide.

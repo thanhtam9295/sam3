@@ -1642,6 +1642,19 @@ def _builtin() -> list[ReadoutSpec]:
     }  # fmt: skip
     for name, (display, unit, direction, text) in kinetic.items():
         specs.append(ReadoutSpec(f"kn_{name}", display, unit, w, direction, "none", text, kin))
+    tracking: dict[str, tuple[str, str, Direction, str]] = {
+        "tracks": ("tracks", "", "either", "tracks of at least min_track_frames time points"),
+        "speed_um_per_h": ("speed", "µm/h", "either", "median of the tracks' mean speeds"),
+        "straightness": ("straightness", "", "either", "median displacement / path of the tracks"),
+        "divisions": ("divisions", "", "down", "divisions found"),
+        "division_rate_per_h": ("division rate", "1/h", "down", "divisions per cell-hour tracked"),
+        "cycle_h": ("cell-cycle time", "h", "up", "median time from birth to division"),
+        "lost_fraction": ("lost tracks", "", "either", "tracks ending before the movie ends, "
+                          "not by division"),
+    }  # fmt: skip
+    for name, (display, unit, direction, text) in tracking.items():
+        specs.append(ReadoutSpec(f"trk_{name}", display, unit, w, direction, "none", text,
+                                 "tracking"))  # fmt: skip
     specs += [
         ReadoutSpec("timepoint", "time point", "", w, "none", "none",
                     "index of the time point (0 = first)", kin),

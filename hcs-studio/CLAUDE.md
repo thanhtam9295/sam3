@@ -656,6 +656,14 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   history)`; `kn_qc_flags`. `kinetics/report.py` (`report_data`, `write_report` →
   self-contained `kinetics/report.html`, `heatmap_figure`); linked in `output/report.report_links`.
   Time course `fields_imaged`; `_objects_measured` = 0 where imaged without objects.
+- **Phase 22d (built; user said "Proceed with 22d", scipy only)**: `kinetics/tracking.py`
+  (`track_objects` per field: augmented LAP (`_assign`, Jaqaman 2008) on predicted positions,
+  gate = max speed × interval; divisions near the mother's last position with area guard,
+  `_reappears` (track lost in the last max_gap frames → not a division) and `min_cycle_h`;
+  gap closing by LAP; `track_table` (cycle from interval midpoints), `well_summary`; table step
+  `tracking` (prefix `trk_` in ANNOTATION_PREFIXES and `_LABEL_PREFIXES`; times from the
+  manifest; ids field × 100 000 + track; `tracking/tracks.csv`). Synthetic `simulate_lineages`,
+  `MovingCells` (per-field cache; truth `cells` with id/parent/y/x).
 
 ## Commands
 

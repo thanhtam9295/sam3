@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Phase 22d — live-cell kinetics: cell tracking
+- `tracking` (table step, scipy only): nuclei linked between time points by optimal assignment
+  on the distance to their predicted positions (persistent motion; track ends/starts at the
+  cost of a speed gate), divisions (daughters smaller than the mother; guards against merges
+  splitting up), gap closing; `trk_id`/`trk_parent`/`trk_divided` per object,
+  `tracking/tracks.csv`, per-well speed, straightness, divisions, division rate, cell-cycle
+  time, lost tracks.
+- Synthetic moving and dividing nuclei with known lineages (`MovingCells`, `simulate_lineages`).
+
 ### Phase 22c — live-cell kinetics: views and QC
 - Kinetic QC in the `kinetics` step: acquisition gaps and missing time points, focus drift (per
   well and plate-wide), edge evaporation (edge vs interior wells of the same condition over

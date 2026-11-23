@@ -126,3 +126,122 @@ def response_course(
                          "hours_since_treatment": t - treated_h,
                          "nuclei_objects_measured": float(rng.poisson(mean))})  # fmt: skip
     return pd.DataFrame(rows)
+
+
+def simulate_lineages(
+    times_h: list[float],
+    size_um: tuple[float, float],
+    *,
+    n0: int,
+    speed_um_per_h: float,
+    cycle_h: float,
+    radius_um: float,
+    seed: int,
+    margin_um: float = 15.0,
+    min_spacing_um: float = 30.0,
+) -> list[list[dict[str, Any]]]:
+    """Cells per time point: ``id``, ``parent`` (0: none), ``y``, ``x`` (µm), ``radius`` (µm).
+
+    Cells move with a persistent random walk (heading changes by N(0, 0.5 rad) per hour, speed
+    ``speed_um_per_h``) inside the field (reflected at ``margin_um``), grow from area A to 2A over
+    their cycle (``cycle_h`` ± 10 %, the first cells at random ages) and divide into two cells of
+    area A placed on either side of the mother. Steps are of at most 0.25 h between the times
+    asked for, so positions do not depend on the sampling."""
+    rng = np.random.default_rng(seed)
+    height, width = size_um
+    cells: list[dict[str, Any]] = []
+    next_id = 1
+    placed: list[tuple[float, float]] = []
+    while len(cells) < n0:
+        y = rng.uniform(margin_um, height - margin_um)
+        x = rng.uniform(margin_um, width - margin_um)
+        if all(math.hypot(y - a, x - b) >= min_spacing_um for a, b in placed):
+            placed.append((y, x))
+            cycle = cycle_h * rng.uniform(0.9, 1.1)
+            cells.append({"id": next_id, "parent": 0, "y": y, "x": x,
+                          "heading": rng.uniform(0, 2 * math.pi), "age": rng.uniform(0, cycle),
+                          "cycle": cycle})  # fmt: skip
+            next_id += 1
+        elif len(placed) + 1 > 10 * n0:
+            break
+    out: list[list[dict[str, Any]]] = []
+    now = 0.0
+
+    def snapshot() -> list[dict[str, Any]]:
+        return [
+            {"id": c["id"], "parent": c["parent"], "y": c["y"], "x": c["x"],
+             "radius": radius_um * math.sqrt(1 + c["age"] / c["cycle"])}
+            for c in cells
+        ]  # fmt: skip
+
+    for target in times_h:
+        while now < target - 1e-9:
+            dt = min(0.25, target - now)
+            born: list[dict[str, Any]] = []
+            for c in cells:
+                c["heading"] += rng.normal(0, 0.5 * math.sqrt(dt))
+                c["y"] += speed_um_per_h * dt * math.sin(c["heading"])
+                c["x"] += speed_um_per_h * dt * math.cos(c["heading"])
+                for key, limit in (("y", height), ("x", width)):
+                    if c[key] < margin_um:
+                        c[key] = 2 * margin_um - c[key]
+                        c["heading"] += math.pi
+                    elif c[key] > limit - margin_um:
+                        c[key] = 2 * (limit - margin_um) - c[key]
+                        c["heading"] += math.pi
+                c["age"] += dt
+                if c["age"] >= c["cycle"]:
+                    axis = rng.uniform(0, math.pi)
+                    offset = 1.6 * radius_um
+                    for sign in (1, -1):
+                        y = c["y"] + sign * offset * math.sin(axis)
+                        x = c["x"] + sign * offset * math.cos(axis)
+                        born.append({"id": next_id, "parent": c["id"],
+                                     "y": min(max(y, margin_um), height - margin_um),
+                                     "x": min(max(x, margin_um), width - margin_um),
+                                     "heading": axis if sign > 0 else axis + math.pi, "age": 0.0,
+                                     "cycle": cycle_h * rng.uniform(0.9, 1.1)})  # fmt: skip
+                        next_id += 1
+                    c["dead"] = True
+            cells = [c for c in cells if not c.get("dead")] + born
+            now += dt
+        out.append(snapshot())
+    return out
+
+
+@dataclass
+class MovingCells:
+    """Nuclei that move and divide (``simulate_lineages``); truth per time point: every cell's
+    id, parent and position, so links can be checked."""
+
+    times_h: list[float]
+    n0: int = 12
+    speed_um_per_h: float = 10.0
+    cycle_h: float = 20.0
+    radius_um: float = 4.0
+    name: str = "moving"
+    channel: int = 0
+    intensity: float = 1500.0
+    seed: int = 0
+
+    def __post_init__(self) -> None:
+        self._cache: dict[tuple[int, int, int], list[list[dict[str, Any]]]] = {}
+
+    def draw(self, ctx: Any) -> dict[str, Any]:
+        h, w = ctx.image.shape[-2:]
+        px = ctx.pixel_size_um
+        key = (ctx.row, ctx.col, ctx.field)
+        if key not in self._cache:
+            self._cache[key] = simulate_lineages(
+                self.times_h, (h * px, w * px), n0=self.n0, speed_um_per_h=self.speed_um_per_h,
+                cycle_h=self.cycle_h, radius_um=self.radius_um,
+                seed=hash((self.seed, *key)) % 2**32,
+            )  # fmt: skip
+        cells = self._cache[key][ctx.timepoint]
+        yy, xx = np.mgrid[0:h, 0:w].astype(float)
+        for cell in cells:
+            disc = (yy * px - cell["y"]) ** 2 + (xx * px - cell["x"]) ** 2 <= cell["radius"] ** 2
+            ctx.image[self.channel, :, disc] += self.intensity
+        rounded = [{k: round(v, 3) if isinstance(v, float) else v for k, v in c.items()}
+                   for c in cells]  # fmt: skip
+        return {"count": len(cells), "cells": rounded}
