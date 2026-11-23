@@ -11,6 +11,8 @@ invading strands of cells from the edge into the matrix), ``organoids`` + ``orga
 (many organoids instead of one spheroid). The truth records the radius, area, sphere volume,
 core fraction, invasion and the expected QC flags. :class:`LiveDeadStains` draws a live stain
 (calcein) in the viable rim and a dead stain (EthD-1, PI) in the core of the same spheroid.
+:class:`ConfocalSpheroid` draws a 3D spheroid in a confocal Z stack (blur, depth attenuation,
+necrotic core, partial Z coverage).
 """
 
 from __future__ import annotations
@@ -193,4 +195,61 @@ class LiveDeadStains:
         return {
             "dead_fraction": ratio**2,
             "dead_area_um2": math.pi * (ratio * radius * ctx.pixel_size_um) ** 2,
+        }
+
+
+@dataclass
+class ConfocalSpheroid:
+    """A 3D spheroid in a confocal Z stack: a sphere of radius ``spec['radius_um']`` centred at
+    ``spec['z_centre_um']`` (default: the middle of the stack) and ``offset_um``, stained
+    uniformly in ``channel`` (e.g. Hoechst), a dead stain in its core (``core_ratio``) in
+    ``dead_channel``, blurred by ``blur_xy_um`` / ``blur_z_um`` (an elongated confocal PSF) and
+    dimmed with depth into the spheroid as exp(−depth / ``spec['attenuation_um']``) (none if
+    absent). The truth records the volume, core volume fraction and whether the stack covers the
+    whole spheroid."""
+
+    spec: Callable[[int, int], Mapping[str, Any]]
+    name: str = "confocal_spheroid"
+    channel: int = 0
+    dead_channel: int | None = None
+    background: float = 100.0
+    intensity: float = 800.0
+    dead: float = 900.0
+    blur_xy_um: float = 2.0
+    blur_z_um: float = 4.0
+
+    def draw(self, ctx: Any) -> dict[str, Any]:
+        from scipy import ndimage
+
+        spec = dict(self.spec(ctx.row, ctx.col))
+        image = ctx.image
+        planes, h, w = image.shape[-3:]
+        px, dz = ctx.pixel_size_um, ctx.z_step_um
+        cy, cx, _ = geometry(spec, h, w, px)
+        radius = float(spec["radius_um"])
+        zc = float(spec.get("z_centre_um", (planes - 1) / 2 * dz))
+        zz, yy, xx = np.mgrid[0:planes, 0:h, 0:w].astype(float)
+        distance = np.sqrt(((zz * dz - zc) ** 2) + ((yy - cy) * px) ** 2 + ((xx - cx) * px) ** 2)
+        sigma = (self.blur_z_um / dz, self.blur_xy_um / px, self.blur_xy_um / px)
+        sphere = ndimage.gaussian_filter((distance <= radius).astype(float), sigma)
+        ratio = float(spec.get("core_ratio", 0.0))
+        core = ndimage.gaussian_filter((distance <= ratio * radius).astype(float), sigma)
+        attenuation = 1.0
+        if spec.get("attenuation_um"):
+            depth = np.clip(zz * dz - (zc - radius), 0, None)
+            attenuation = np.exp(-depth / float(spec["attenuation_um"]))
+        image[self.channel] += self.background + self.intensity * sphere * attenuation
+        if self.dead_channel is not None:
+            image[self.dead_channel] += self.background + self.dead * core * attenuation
+        top, bottom = zc - radius, zc + radius
+        complete = top >= 0 and bottom <= (planes - 1) * dz
+        inside = min(bottom, (planes - 1) * dz + dz / 2) - max(top, -dz / 2)
+        return {
+            "count": 1,
+            "radius_um": radius,
+            "volume_um3": 4 / 3 * math.pi * radius**3,
+            "core_volume_fraction": ratio**3,
+            "complete_z": bool(complete),
+            "z_coverage": float(min(1.0, max(inside, 0) / (2 * radius))),
+            "attenuation_um": float(spec.get("attenuation_um", 0) or 0),
         }

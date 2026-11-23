@@ -257,6 +257,7 @@ def load_builtin_modules() -> None:
     from hcs_studio.assays import spheroids as _spheroids  # noqa: F401
     from hcs_studio.assays import translocation as _translocation  # noqa: F401
     from hcs_studio.processing import (  # noqa: F401
+        attenuation,
         autofluorescence,
         background,
         deconvolution,

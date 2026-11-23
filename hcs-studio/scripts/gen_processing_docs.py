@@ -126,12 +126,22 @@ NOTES = {
     "positive_min_foci foci, focus area and intensity, and pan-nuclear nuclei (mean intensity ≥ "
     "pan_factor × the vehicle median) reported apart; by cell-cycle phase when the cell-cycle "
     "step ran first. Writes `dd_` columns and `assays/foci/`. Warns about Z projections.",
-    "detect_spheroids": "Spheroids (Phase 21), 2D: brightfield = textured objects (local SD of a "
+    "attenuation": "Confocal Z stacks (Phase 21c): depth-dependent intensity loss. Per plane, the "
+    "`percentile` of the foreground above the plane's background, over planes whose foreground "
+    "covers ≥ min_area_fraction of the largest; exponential: robust fit of I₀·exp(−z/λ), "
+    "per_plane: each plane to the first. Only the signal above background is scaled; gains capped "
+    "at max_gain (warning). Reports λ and the factors per channel. Put it first.",
+    "detect_spheroids": "Spheroids (Phase 21), Z stacks with method bright: 3D detection (Otsu, "
+    "surface at half height between interior and local background, anisotropic distances). "
+    "2D: brightfield = textured objects (local SD of a "
     "difference of Gaussians at texture_um; smooth well-edge and meniscus shading cancels out; "
     "objects not textured inside are dropped), outline refined at half height between the "
     "interior and the local background (blur does not change the size); dark = darker than the "
     "background; bright = fluorescence (Otsu). Label set `spheroids`, largest first.",
     "measure_spheroids": "Spheroids (Phase 21): use instead of measure_objects for the spheroids. "
+    "Z stacks: 3D volume, surface, sphericity, Z extent and coverage (z_incomplete), core / live / "
+    "dead volumes, counts of objects whose parent is the spheroids (e.g. Cellpose 3D nuclei) per "
+    "spheroid and per mm³; axial_scale corrects the Z step. "
     "Area, equivalent diameter, perimeter, axes, circularity, solidity, compactness, volume "
     "(sphere π/6·d³ and ellipsoid π/6·L·W²), darkness (brightfield), edge blur (edge_sigma_um, "
     "focus), position (offcentre, touching_edge). Phase 21b extras: radial profiles in `shells` "

@@ -2,8 +2,8 @@
 
 Per-spheroid size, shape and volume with QC flags, a sortable gallery and dose–response on
 volume (21a); viability (live/dead), necrotic core, radial profiles, invasion and organoid mode
-(21b) — on brightfield or fluorescence, in 2D. Coming: confocal 3D (21c). Growth curves over time
-need Phase 22; ilastik detection waits for Phase 16 (b).
+(21b) — on brightfield or fluorescence, in 2D; and confocal Z stacks in 3D (21c). Growth curves
+over time need Phase 22; ilastik detection waits for Phase 16 (b).
 
 ```bash
 hcs-studio assay preset spheroid --map brightfield=BF --channels BF --output spheroids.yaml
@@ -116,6 +116,53 @@ distribution.
 `sp_volume_vs_vehicle_pct` uses the total organoid volume; the flag `no_organoids` fails a well.
 `spheroids/organoid_sizes.csv` and `size_distribution.png` (box per well) go with the gallery,
 whose cards show the field with the most organoid area.
+
+## Confocal Z stacks (3D)
+
+```python
+preset({"fluorescence": "Hoechst", "dead": "EthD1", "nuclei": "Hoechst"},
+       channels=["Hoechst", "EthD1"], z_planes=60)
+```
+
+gives `attenuation` → `detect_spheroids` (3D) → [`segment_cellpose` 3D nuclei with
+`parent: spheroids` → `measure_objects` on the nuclei] → `measure_spheroids` → `spheroid`.
+Brightfield stacks are projected (extended depth of field) and analysed in 2D.
+
+**Depth attenuation** (`attenuation`): deeper planes of a thick sample are dimmer (scattering,
+absorption). Per plane the step takes the 90th percentile of the foreground above the plane's
+background (planes whose foreground covers at least half the largest), fits an exponential decay
+I₀·exp(−z/λ) (Theil–Sen line through the logarithm) and multiplies the signal above background by
+exp(z/λ) from the first plane with signal on. `per_plane` normalises each plane instead. Gains are
+capped at `max_gain` (10×) with a warning; a stack that does not get dimmer with depth is left
+alone (warning). The report gives λ and the factor per plane. **Without it the dim deep half of
+a spheroid falls below the segmentation threshold** (on the test spheroid with λ = 80 µm: 44 %
+of the volume lost).
+
+**3D detection**: with method `bright` on a Z stack, objects are found with Otsu's threshold in 3D
+and their surface is placed at half height between the bright interior and the local background
+(distances in µm, so the coarser Z step is accounted for); holes (an unstained necrotic core) are
+filled.
+
+**3D measurement** (`measure_spheroids` on a Z stack):
+
+| Column | Meaning |
+|---|---|
+| `volume_3d_um3`, `equivalent_diameter_3d_um` | voxels × voxel volume; diameter of a sphere of that volume |
+| `surface_area_um2`, `sphericity` | smoothed marching-cubes surface; π^⅓ (6V)^⅔ / surface (1 = sphere) |
+| `z_extent_um`, `z_incomplete`, `z_coverage` | depth of the segmentation; touches the first or last plane; Z extent / projected diameter (share inside the stack, assuming a spheroid as deep as wide) |
+| `core_volume_um3`, `core_fraction`, `rim_um` | necrotic core in 3D (half height between the rim and the centre) |
+| `live_volume_um3`, `dead_volume_um3`, `dead_fraction` | stained volumes |
+| `<child>_count`, `<child>_per_mm3` | objects whose parent is the spheroid (nuclei from Cellpose 3D) and their density |
+| `area_um2`, `circularity`, … | from the projection of the 3D mask |
+
+`axial_scale` corrects the nominal Z step for refractive-index mismatch (e.g. ~0.8 for an air
+objective imaging into an aqueous sample); it scales volumes and depths. `sp_volume_um3` is the 3D
+volume (`volume: auto`). The flag **`incomplete_z`** (the stack does not cover the whole spheroid;
+its volume is underestimated) fails the well by default.
+
+Stain thresholds (2D and 3D): half height between the background and the stain's plateau inside
+the object (99th percentile), never below the background median + 5 robust SD — blur does not
+grow the stained region, and an unstained spheroid stays at 0.
 
 ## Dose–response
 

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Phase 21c — confocal 3D spheroids
+- `attenuation` (image step): depth-dependent intensity loss corrected per plane (robust
+  exponential fit or per-plane normalisation, signal above background only, gain cap, warnings).
+- `detect_spheroids`: 3D detection of fluorescent spheroids in Z stacks (half-height surface).
+- `measure_spheroids` on Z stacks: 3D volume, surface, sphericity, Z extent and coverage, 3D core /
+  live / dead volumes, counts and density of child objects (Cellpose 3D nuclei with
+  `parent: spheroids`), `axial_scale`.
+- `spheroid`: `volume: auto` (3D when measured), flag `incomplete_z`; preset for Z stacks
+  (`z_planes`, nuclei role). Stain thresholds at half height above the noise floor (2D and 3D).
+- Synthetic confocal spheroids (`ConfocalSpheroid`); `SyntheticPlate.z_step_um`.
+
 ### Phase 21b — spheroids: viability, necrotic core, invasion, organoids
 - `measure_spheroids`: radial profiles in concentric shells; necrotic core at half height between
   rim and centre (brightfield dark core or dead-stain bright core): area, fraction, viable rim;

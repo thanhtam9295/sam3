@@ -61,6 +61,18 @@ Table step: runs on the object tables after all wells are processed, and can be 
 | `time_zero_count` | None | Viable nuclei per well at time zero (else 0 h wells). |
 | `no_effect_gr` | 0.8 |  |
 
+## Depth attenuation correction (`attenuation`)
+
+Confocal Z stacks (Phase 21c): depth-dependent intensity loss. Per plane, the `percentile` of the foreground above the plane's background, over planes whose foreground covers ≥ min_area_fraction of the largest; exponential: robust fit of I₀·exp(−z/λ), per_plane: each plane to the first. Only the signal above background is scaled; gains capped at max_gain (warning). Reports λ and the factors per channel. Put it first.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channels` | None | Channel numbers to process, starting at 1. Empty = all channels. |
+| `method` | 'exponential' | exponential: fit I₀·exp(−z/λ) and invert it; per_plane: normalise each plane to the first plane with signal. |
+| `percentile` | 90.0 | Foreground percentile measured per plane. |
+| `min_area_fraction` | 0.5 | Planes whose foreground is smaller than this × the largest are not used. |
+| `max_gain` | 10.0 | Largest correction factor. |
+
 ## Background removal (`background`)
 
 Removes background per plane, typically after projection: top-hat, rolling ball or sliding paraboloid (estimated on a 3 × 3 mean), Gaussian or median background (subtracted or divided), a polynomial or spline surface fitted to background pixels, a constant (percentile or blank wells), or BaSiC-style flat- and dark-field estimated across the plate. Negatives are clipped; output stays linear. Each field reports the change inside objects and in the background, and warns when the radius is under 2× the typical object diameter.
@@ -254,7 +266,7 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 
 ## Detect spheroids (`detect_spheroids`)
 
-Spheroids (Phase 21), 2D: brightfield = textured objects (local SD of a difference of Gaussians at texture_um; smooth well-edge and meniscus shading cancels out; objects not textured inside are dropped), outline refined at half height between the interior and the local background (blur does not change the size); dark = darker than the background; bright = fluorescence (Otsu). Label set `spheroids`, largest first.
+Spheroids (Phase 21), Z stacks with method bright: 3D detection (Otsu, surface at half height between interior and local background, anisotropic distances). 2D: brightfield = textured objects (local SD of a difference of Gaussians at texture_um; smooth well-edge and meniscus shading cancels out; objects not textured inside are dropped), outline refined at half height between the interior and the local background (blur does not change the size); dark = darker than the background; bright = fluorescence (Otsu). Label set `spheroids`, largest first.
 
 | Parameter | Default | Meaning |
 |---|---|---|
@@ -383,7 +395,7 @@ Measures every object of the chosen label sets on the linear image (never on con
 
 ## Measure spheroids (`measure_spheroids`)
 
-Spheroids (Phase 21): use instead of measure_objects for the spheroids. Area, equivalent diameter, perimeter, axes, circularity, solidity, compactness, volume (sphere π/6·d³ and ellipsoid π/6·L·W²), darkness (brightfield), edge blur (edge_sigma_um, focus), position (offcentre, touching_edge). Phase 21b extras: radial profiles in `shells` concentric shells (core, live and dead channels); necrotic core at half height between rim and centre of the core channel (dead stain: bright core; brightfield: dark core) — area, fraction, viable rim; live/dead areas and dead fraction (threshold: background median + threshold_sd robust SD, or fixed); invasion (opening by invasion_core_um with distance transforms: body vs protrusions, their count, reach, skeleton length and branches).
+Spheroids (Phase 21): use instead of measure_objects for the spheroids. Z stacks: 3D volume, surface, sphericity, Z extent and coverage (z_incomplete), core / live / dead volumes, counts of objects whose parent is the spheroids (e.g. Cellpose 3D nuclei) per spheroid and per mm³; axial_scale corrects the Z step. Area, equivalent diameter, perimeter, axes, circularity, solidity, compactness, volume (sphere π/6·d³ and ellipsoid π/6·L·W²), darkness (brightfield), edge blur (edge_sigma_um, focus), position (offcentre, touching_edge). Phase 21b extras: radial profiles in `shells` concentric shells (core, live and dead channels); necrotic core at half height between rim and centre of the core channel (dead stain: bright core; brightfield: dark core) — area, fraction, viable rim; live/dead areas and dead fraction (threshold: background median + threshold_sd robust SD, or fixed); invasion (opening by invasion_core_um with distance transforms: body vs protrusions, their count, reach, skeleton length and branches).
 
 | Parameter | Default | Meaning |
 |---|---|---|
@@ -403,6 +415,7 @@ Spheroids (Phase 21): use instead of measure_objects for the spheroids. Area, eq
 | `invasion` | False | Measure invasion (protrusions). |
 | `invasion_core_um` | 20.0 | Opening radius: thinner structures are protrusions. |
 | `min_protrusion_um` | 10.0 | Shorter: not a protrusion. |
+| `axial_scale` | 1.0 | Z stacks: true / nominal Z step (refractive-index mismatch; e.g. ~0.8 for an air objective into water). Scales 3D volumes and distances. |
 
 ## Micronuclei and multinucleation (`mitotic_errors`)
 
@@ -637,14 +650,15 @@ Table step: runs on the object tables after all wells are processed, and can be 
 | `fluorescence_channel` | '' | Fluorescence channel (preset). |
 | `live_channel` | '' | Live stain channel (preset). |
 | `dead_channel` | '' | Dead stain channel (preset). |
-| `volume` | 'sphere' | Volume estimate reported as sp_volume_um3. |
+| `nuclei_channel` | '' | Nuclear stain for 3D nuclei (preset). |
+| `volume` | 'auto' | Volume reported as sp_volume_um3: auto = the 3D volume of a Z stack, else a sphere from the equivalent diameter. |
 | `min_spheroid_um2` | 2000.0 | Smaller objects are debris, never the spheroid. |
 | `multiple_fraction` | 0.25 | Another object ≥ this × the spheroid: 'multiple'. |
 | `max_offcentre` | 0.5 | Centroid distance from the field centre / half field. |
 | `max_edge_sigma_um` | 4.0 | Blurrier: 'out_of_focus'. |
 | `debris_fraction` | 0.02 | Other objects' area above this × spheroid: 'debris'. |
 | `min_solidity` | 0.95 | Below: 'irregular'. |
-| `exclude_flags` | ['no_spheroid', 'multiple', 'touching_edge', 'out_of_focus'] | Flags that fail a well (sp_qc_ok = 0). |
+| `exclude_flags` | ['no_spheroid', 'multiple', 'touching_edge', 'out_of_focus', 'incomplete_z'] | Flags that fail a well (sp_qc_ok = 0). |
 
 ## Stitch well (`stitch_well`)
 

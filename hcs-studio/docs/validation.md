@@ -241,6 +241,23 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Confocal 3D spheroids (Phase 21c)
+
+| Check | Result | Test |
+|---|---|---|
+| Synthetic confocal spheroid (r 90 µm, 2 µm pixels, 4 µm Z steps, 60 planes, σ blur 2 µm xy / 4 µm z) with exponential depth attenuation λ = 60, 120, 300 µm | λ within 3 % (seen ≤ 2 %; before background subtraction 20–35 % too long: the offset flattens the decay); per-plane correction flat within 2 % | `test_attenuation_length_recovered` |
+| Stack without attenuation; very steep attenuation | unchanged + warning; gain capped at max_gain + warning | `test_attenuation_step_flat_stack_and_gain_cap` |
+| Hoechst + EthD-1 spheroids (r 70, 90 µm; dead core radius ratio 0.5–0.6): complete; with attenuation λ = 80 µm; cut by the top of the stack | 3D volume within 2 % (seen −0.3 %, with attenuation the same after correction; without the correction 44 % lost); sphericity 0.97; core volume fraction within 5 pp (seen ≤ 1.7 pp); dead fraction within 3 pp (seen ≤ 0.1 pp); Z coverage 0.71 vs 0.71 and `incomplete_z` | `test_confocal_3d_volume_core_viability_and_coverage` |
+| 3 nuclei inside a 3D spheroid | nuclei_count 3, per mm³; brightfield stack refused in 3D | `test_nuclei_counted_per_spheroid_and_3d_checks` |
+
+Found while building: a stain threshold at background + 5 SD counted the blurred tails of the
+stained region (3D dead fraction 0.175 instead of 0.125; 2D +2 pp) → half height between
+background and the stain's plateau, with the noise floor kept.
+
+Not yet checked: real confocal spheroid stacks (attenuation that is not exponential, refractive
+index mismatch, cleared samples), Cellpose 3D nuclei in dense spheroids (needs the Cellpose
+weights; not run in CI).
+
 ## Spheroids: viability, core, invasion, organoids (Phase 21b)
 
 | Check | Result | Test |

@@ -78,6 +78,7 @@ class FieldContext:
     image: NDArray[np.float64]  # (C, Z, Y, X), float while drawing
     rng: np.random.Generator
     pixel_size_um: float
+    z_step_um: float = 1.0
 
     @property
     def well(self) -> str:
@@ -157,6 +158,7 @@ class SyntheticPlate:
     channels: tuple[str, ...] = ("DAPI", "GFP")
     size: int = 96
     planes: int = 1
+    z_step_um: float = 1.0
     n_fields: int = 1
     pixel_size_um: float = 0.65
     plate_size: tuple[int, int] = (16, 24)
@@ -177,7 +179,7 @@ class SyntheticPlate:
         def image(row: int, col: int, f: int) -> NDArray[np.uint16]:
             rng = np.random.default_rng([self.seed, row, col, f])
             data = np.zeros((len(self.channels), self.planes, self.size, self.size))
-            ctx = FieldContext(row, col, f, data, rng, self.pixel_size_um)
+            ctx = FieldContext(row, col, f, data, rng, self.pixel_size_um, self.z_step_um)
             per_field = {feature.name: feature.draw(ctx) for feature in self.features}
             well = truth["wells"].setdefault(ctx.well, {"fields": {}})
             well["fields"][str(f + 1)] = per_field
@@ -190,6 +192,7 @@ class SyntheticPlate:
             channels=self.channels,
             n_fields=self.n_fields,
             pixel_size_um=self.pixel_size_um,
+            z_step_um=self.z_step_um,
             plate_size=self.plate_size,
             name=self.name,
         )

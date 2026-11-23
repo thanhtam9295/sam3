@@ -348,7 +348,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20 built (20a–20e); 21a, 21b built
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20 built (20a–20e); 21 built (21a–21c)
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -606,6 +606,15 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `well_summary.json` fields × field px area; OFE from `seeding_density`). Readouts:
   `SPHEROID_EXTRAS` (object + `sp_` well), `sp_org_*`. Synthetic: `core_ratio`, `strands`,
   `organoids` spec keys; `LiveDeadStains` feature.
+- **Phase 21c (built)**: `processing/attenuation.py` (`attenuation`: `plane_signal` = foreground
+  p90 minus plane background; `correction_factors` Theil–Sen exponential or per-plane; scales only
+  signal above background; capped). `detect_3d` (method bright on stacks; brightfield stacks
+  refused → project). `measure_spheroids` on stacks: 2D table from the projected labels +
+  `add_3d` (volume/surface via `features._surface_area`/sphericity/Z coverage; `spheroid_extras`
+  with `spacing` → `*_volume_um3`) + `add_child_counts` (label sets with `parent == spheroids`).
+  `stain_threshold` = max(noise floor, half height to the in-object p99). `SpheroidParams.volume`
+  `auto`; flag `incomplete_z` (excluded by default). `SyntheticPlate(z_step_um=…)`,
+  `FieldContext.z_step_um`; synthetic `ConfocalSpheroid`.
 
 ## Commands
 

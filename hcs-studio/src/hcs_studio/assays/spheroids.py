@@ -53,7 +53,7 @@ from hcs_studio.processing.base import (
 )
 
 FLAGS = ("no_spheroid", "multiple", "touching_edge", "off_centre", "out_of_focus", "debris",
-         "irregular")  # fmt: skip
+         "irregular", "incomplete_z")  # fmt: skip
 SPHEROID_COLUMNS = (
     "area_um2",
     "equivalent_diameter_um",
@@ -66,11 +66,14 @@ SPHEROID_COLUMNS = (
     "edge_sigma_um",
     "offcentre",
 )
-EXTRA_COLUMNS = ("core_area_um2", "core_fraction", "core_diameter_um", "rim_um", "core_contrast",
-                 "live_area_um2", "dead_area_um2", "dead_fraction", "live_fraction",
-                 "invasion_core_area_um2", "invasion_area_um2", "invasion_fraction", "protrusions",
-                 "protrusion_length_um", "max_invasion_um", "skeleton_length_um",
-                 "skeleton_branches")  # fmt: skip  # fmt: skip
+EXTRA_COLUMNS = (
+    "core_area_um2", "core_volume_um3", "core_fraction", "core_diameter_um", "rim_um",
+    "core_contrast", "live_area_um2", "dead_area_um2", "live_volume_um3", "dead_volume_um3",
+    "dead_fraction", "live_fraction", "invasion_core_area_um2", "invasion_area_um2",
+    "invasion_fraction", "protrusions", "protrusion_length_um", "max_invasion_um",
+    "skeleton_length_um", "skeleton_branches", "volume_3d_um3", "equivalent_diameter_3d_um",
+    "surface_area_um2", "sphericity", "z_extent_um", "z_coverage",
+)  # fmt: skip  # fmt: skip  # fmt: skip
 
 
 # ------------------------------------------------------------- detection
@@ -182,6 +185,60 @@ def detect(
     return relabel_sequential(out)
 
 
+def detect_3d(
+    stack: NDArray[Any],
+    spacing: tuple[float, float, float],
+    *,
+    margin_um: float = 6.0,
+    min_volume_um3: float = 0.0,
+) -> NDArray[np.int32]:
+    """3D fluorescence spheroids: Otsu, then each object's surface at half height between its
+    bright interior and its local background (anisotropic distances), holes filled."""
+    from scipy import ndimage
+    from skimage.filters import threshold_otsu
+
+    from hcs_studio.segmentation.objects import relabel_sequential
+
+    data = np.asarray(stack, dtype=np.float64)
+    smooth = ndimage.gaussian_filter(data, [spacing[-1] / s for s in spacing])
+    if np.ptp(smooth) == 0:
+        return np.zeros(data.shape, dtype=np.int32)
+    coarse = ndimage.binary_fill_holes(smooth > threshold_otsu(smooth))
+    labels, n = ndimage.label(coarse)
+    voxel = float(np.prod(spacing))
+    min_voxels = min_volume_um3 / voxel
+    pieces: list[NDArray[np.bool_]] = []
+    for index in range(1, n + 1):
+        component = labels == index
+        if component.sum() < min_voxels / 4:
+            continue
+        distance = np.asarray(ndimage.distance_transform_edt(~component, sampling=spacing))
+        ring = (distance > 2 * margin_um) & (distance <= 5 * margin_um) & ~coarse
+        if not ring.any():
+            continue
+        background = float(np.median(smooth[ring]))
+        values = smooth[component]
+        split = threshold_otsu(values) if np.ptp(values) > 0 else float(values[0])
+        bright = values[values > split]
+        inside = float(np.median(bright)) if bright.size else float(np.median(values))
+        if inside <= background:
+            continue
+        level = (inside + background) / 2
+        roi = component | (distance <= 2 * margin_um)
+        refined = ndimage.binary_fill_holes((smooth > level) & roi)
+        parts, k = ndimage.label(refined)
+        overlap = np.bincount(parts[component], minlength=k + 1)
+        for part in range(1, k + 1):
+            if overlap[part] >= min_voxels / 4:
+                pieces.append(parts == part)
+    out = np.zeros(data.shape, dtype=np.int32)
+    sizes = [int(p.sum()) for p in pieces]
+    for rank, i in enumerate(sorted(range(len(pieces)), key=lambda i: -sizes[i]), start=1):
+        if sizes[i] >= min_voxels:
+            out[pieces[i] & (out == 0)] = rank
+    return relabel_sequential(out)
+
+
 class DetectSpheroidsParams(ModuleParams):
     channel: int = Field(ge=1, description="Brightfield (or fluorescence) channel.")
     method: Literal["brightfield", "dark", "bright"] = Field(
@@ -214,7 +271,20 @@ class DetectSpheroids(Module):
     def apply(self, image: ImageData, state: Any) -> ImageData:
         params: DetectSpheroidsParams = self.params
         if image.data.shape[1] > 1:
-            raise ModuleError("spheroid detection is 2D: add a Z projection first")
+            if params.method != "bright":
+                raise ModuleError(
+                    "3D spheroid detection needs a fluorescence channel (method 'bright'); for "
+                    "brightfield stacks add a Z projection first"
+                )
+            pixel = image.metadata.pixel_size_um or 1.0
+            spacing = (image.metadata.z_step_um or pixel, pixel, pixel)
+            radius = math.sqrt(params.min_area_um2 / math.pi)
+            labels3 = detect_3d(image.data[params.channel - 1], spacing,
+                                margin_um=params.texture_um,
+                                min_volume_um3=4 / 3 * math.pi * radius**3)  # fmt: skip
+            result3 = LabelSet(params.output, labels3, source="spheroids (3D)")
+            return image.with_labels(result3, self.name, {"module": self.name,
+                                                          "objects": result3.count, "three_d": True})  # fmt: skip
         pixel_area = (image.metadata.pixel_size_um or 1.0) ** 2
         labels = detect(
             image.data[params.channel - 1, 0],
@@ -327,26 +397,33 @@ class ExtraOptions:
     min_protrusion_px: float = 5.0
 
 
-def radial_shells(mask: NDArray[np.bool_], shells: int) -> NDArray[np.int32]:
+def radial_shells(
+    mask: NDArray[np.bool_], shells: int, spacing: tuple[float, ...] | None = None
+) -> NDArray[np.int32]:
     """Shell index of each pixel of ``mask`` (0 = outer edge … shells − 1 = centre; −1 outside),
     from the distance to the edge relative to the deepest point."""
     from scipy import ndimage
 
-    depth = np.asarray(ndimage.distance_transform_edt(mask), dtype=np.float64)
+    depth = np.asarray(ndimage.distance_transform_edt(mask, sampling=spacing), dtype=np.float64)
     top = float(depth.max()) if mask.any() else 1.0
     index = np.minimum((depth / max(top, 1e-9) * shells).astype(np.int32), shells - 1)
     return np.where(mask, index, -1).astype(np.int32)
 
 
 def necrotic_core(
-    plane: NDArray[Any], mask: NDArray[np.bool_], options: ExtraOptions
+    plane: NDArray[Any],
+    mask: NDArray[np.bool_],
+    options: ExtraOptions,
+    spacing: tuple[float, ...] | None = None,
 ) -> tuple[NDArray[np.bool_], float]:
     """Core mask (at half height between the rim and the centre of ``plane``) and the
     rim–centre contrast; an empty core when the contrast is below ``min_core_contrast``."""
     from scipy import ndimage
 
-    smooth = ndimage.gaussian_filter(np.asarray(plane, dtype=np.float64), options.core_smooth_px)
-    depth = np.asarray(ndimage.distance_transform_edt(mask), dtype=np.float64)
+    scale = spacing or (1.0,) * mask.ndim  # core_smooth_px is in units of the first in-plane axis
+    sigma = [options.core_smooth_px * scale[-1] / s for s in scale]
+    smooth = ndimage.gaussian_filter(np.asarray(plane, dtype=np.float64), sigma)
+    depth = np.asarray(ndimage.distance_transform_edt(mask, sampling=spacing), dtype=np.float64)
     relative = depth / max(float(depth.max()), 1e-9)
     rim_pixels = smooth[mask & (relative > 0.1) & (relative < 0.3)]
     centre_pixels = smooth[mask & (relative > 0.85)]
@@ -368,13 +445,22 @@ def necrotic_core(
     return np.asarray(ndimage.binary_fill_holes(parts == keep), dtype=bool), contrast
 
 
-def stain_threshold(plane: NDArray[Any], everything: NDArray[np.bool_], k: float) -> float:
-    """Background (outside all objects) median + k robust SD."""
-    outside = np.asarray(plane, dtype=np.float64)[~everything]
+def stain_threshold(
+    plane: NDArray[Any], everything: NDArray[np.bool_], k: float,
+    mask: NDArray[np.bool_] | None = None,
+) -> float:  # fmt: skip
+    """Half height between the background (outside all objects) and the stain's plateau inside
+    the object (99th percentile of ``mask``) — blur then does not grow the stained region — but
+    never below the background median + k robust SD (an unstained object stays negative)."""
+    values = np.asarray(plane, dtype=np.float64)
+    outside = values[~everything]
     if outside.size == 0:
         return math.inf
     median = float(np.median(outside))
-    return median + k * 1.4826 * float(np.median(np.abs(outside - median)))
+    noise = median + k * 1.4826 * float(np.median(np.abs(outside - median)))
+    if mask is None or not mask.any():
+        return noise
+    return max(noise, (median + float(np.percentile(values[mask], 99))) / 2)
 
 
 def invasion_measures(mask: NDArray[np.bool_], options: ExtraOptions) -> dict[str, Any]:
@@ -421,11 +507,16 @@ def spheroid_extras(
     planes: dict[str, NDArray[Any]],
     pixel_um: float,
     options: ExtraOptions,
+    spacing: tuple[float, ...] | None = None,
 ) -> dict[str, Any]:
-    """Radial profiles, necrotic core, live/dead areas and invasion of one spheroid."""
+    """Radial profiles, necrotic core, live/dead areas and invasion of one spheroid. With a 3D
+    ``mask`` and ``spacing`` (µm per voxel, Z first) the core and stains are volumes."""
     row: dict[str, Any] = {}
+    three_d = mask.ndim == 3
+    unit = float(np.prod(spacing)) if three_d and spacing else pixel_um**2
+    size, power = ("volume", "um3") if three_d else ("area", "um2")
     area_px = float(mask.sum())
-    shells = radial_shells(mask, options.shells)
+    shells = radial_shells(mask, options.shells, spacing if three_d else None)
     for name, plane in planes.items():
         values = np.asarray(plane, dtype=np.float64)
         means = np.bincount(shells[mask], weights=values[mask], minlength=options.shells)
@@ -435,13 +526,19 @@ def spheroid_extras(
                 float(means[s] / counts[s]) if counts[s] else math.nan
             )
     if "core" in planes:
-        core, contrast = necrotic_core(planes["core"], mask, options)
+        core, contrast = necrotic_core(planes["core"], mask, options, spacing if three_d else None)
         core_px = float(core.sum())
         row["core_contrast"] = contrast
-        row["core_area_um2"] = core_px * pixel_um**2
+        row[f"core_{size}_{power}"] = core_px * unit
         row["core_fraction"] = core_px / area_px if area_px else math.nan
-        row["core_diameter_um"] = 2 * math.sqrt(core_px / math.pi) * pixel_um
-        row["rim_um"] = (math.sqrt(area_px / math.pi) - math.sqrt(core_px / math.pi)) * pixel_um
+        if three_d:
+            radius = (3 * area_px * unit / (4 * math.pi)) ** (1 / 3)
+            core_radius = (3 * core_px * unit / (4 * math.pi)) ** (1 / 3)
+        else:
+            radius = math.sqrt(area_px / math.pi) * pixel_um
+            core_radius = math.sqrt(core_px / math.pi) * pixel_um
+        row["core_diameter_um"] = 2 * core_radius
+        row["rim_um"] = radius - core_radius
     stained = {}
     for name in ("live", "dead"):
         if name in planes:
@@ -449,22 +546,23 @@ def spheroid_extras(
             level = (
                 fixed
                 if fixed is not None
-                else stain_threshold(planes[name], everything, options.threshold_sd)
+                else stain_threshold(planes[name], everything, options.threshold_sd, mask)
             )
             stained[name] = mask & (np.asarray(planes[name]) > level)
-            row[f"{name}_area_um2"] = float(stained[name].sum()) * pixel_um**2
+            row[f"{name}_{size}_{power}"] = float(stained[name].sum()) * unit
             row[f"{name}_threshold"] = float(level)
     if stained:
         union = np.zeros_like(mask)
         for positive in stained.values():
             union |= positive
-        total = float(union.sum())
+        # with both stains: share of the stained tissue; with a dead stain only: of the object
+        total = float(union.sum()) if "live" in stained else area_px
         if "dead" in stained:
             row["dead_fraction"] = float(stained["dead"].sum()) / total if total else math.nan
         if "live" in stained:
             live_only = stained["live"] & ~stained.get("dead", np.zeros_like(mask))
             row["live_fraction"] = float(live_only.sum()) / total if total else math.nan
-    if options.invasion:
+    if options.invasion and not three_d:
         measured = invasion_measures(mask, options)
         row.update({
             "invasion_core_area_um2": measured["invasion_core_px2"] * pixel_um**2,
@@ -477,6 +575,75 @@ def spheroid_extras(
             "skeleton_branches": measured["skeleton_branches"],
         })  # fmt: skip
     return row
+
+
+def add_3d(
+    table: pd.DataFrame,
+    labels: NDArray[Any],
+    planes: dict[str, NDArray[Any]],
+    spacing: tuple[float, float, float],
+    options: ExtraOptions,
+) -> pd.DataFrame:
+    """3D columns per spheroid: volume, surface, sphericity, Z extent and coverage, and the 3D
+    core / live / dead volumes and radial profiles."""
+    from scipy import ndimage
+
+    from hcs_studio.analysis.features import _surface_area
+
+    if table.empty:
+        return table
+    voxel = float(np.prod(spacing))
+    everything = labels > 0
+    boxes = ndimage.find_objects(labels)
+    rows = []
+    for record in table.to_dict("records"):
+        label = int(record["object_id"])
+        mask = labels == label
+        box = boxes[label - 1]
+        volume = float(mask.sum()) * voxel
+        surface = _surface_area(mask[box], spacing) if box is not None else math.nan
+        planes_hit = np.nonzero(mask.any(axis=(1, 2)))[0]
+        extent = (int(planes_hit.max()) - int(planes_hit.min()) + 1) * spacing[0]
+        incomplete = bool(planes_hit.min() == 0 or planes_hit.max() == labels.shape[0] - 1)
+        diameter = float(record["equivalent_diameter_um"])
+        row = {
+            "volume_3d_um3": volume,
+            "equivalent_diameter_3d_um": (6 * volume / math.pi) ** (1 / 3),
+            "surface_area_um2": surface,
+            "sphericity": math.pi ** (1 / 3) * (6 * volume) ** (2 / 3) / surface
+            if surface
+            else math.nan,
+            "z_extent_um": extent,
+            "z_incomplete": incomplete,
+            # a spheroid is about as deep as it is wide: the share of it inside the stack
+            "z_coverage": min(1.0, extent / diameter) if incomplete and diameter else 1.0,
+        }
+        if planes:
+            row.update(spheroid_extras(mask, everything, planes, spacing[-1], options, spacing))
+        rows.append(row)
+    return pd.concat([table.reset_index(drop=True), pd.DataFrame(rows)], axis=1)
+
+
+def add_child_counts(
+    table: pd.DataFrame, spheroids: LabelSet, labels: tuple[LabelSet, ...],
+    spacing: tuple[float, float, float] | None,
+) -> pd.DataFrame:  # fmt: skip
+    """``<child>_count`` per spheroid for label sets whose parent is the spheroids (e.g. nuclei
+    from Cellpose 3D with ``parent: spheroids``), and their density per mm³ in 3D."""
+    if table.empty:
+        return table
+    for child in labels:
+        if child.parent != spheroids.name or child.parent_ids is None:
+            continue
+        present = np.unique(child.data)
+        present = present[(present > 0) & (present < len(child.parent_ids))]
+        counts = np.bincount(child.parent_ids[present], minlength=int(table["object_id"].max()) + 1)
+        table[f"{child.name}_count"] = [int(counts[i]) for i in table["object_id"].astype(int)]
+        if spacing is not None and "volume_3d_um3" in table:
+            table[f"{child.name}_per_mm3"] = table[f"{child.name}_count"] / (
+                table["volume_3d_um3"] / 1e9
+            )
+    return table
 
 
 class MeasureSpheroidsParams(ModuleParams):
@@ -511,6 +678,11 @@ class MeasureSpheroidsParams(ModuleParams):
         default=20.0, gt=0, description="Opening radius: thinner structures are protrusions."
     )
     min_protrusion_um: float = Field(default=10.0, ge=0, description="Shorter: not a protrusion.")
+    axial_scale: float = Field(
+        default=1.0, gt=0,
+        description="Z stacks: true / nominal Z step (refractive-index mismatch; e.g. ~0.8 "
+        "for an air objective into water). Scales 3D volumes and distances.",
+    )  # fmt: skip
 
 
 @MODULES.register("measure_spheroids")
@@ -526,9 +698,9 @@ class MeasureSpheroids(MeasurementModule):
         labels = next((ls for ls in context.labels if ls.name == params.labels), None)
         if labels is None:
             raise ModuleError(f"No label set '{params.labels}': run detect_spheroids first")
-        if labels.data.shape[0] > 1:
-            raise ModuleError("spheroid measurement is 2D: add a Z projection first")
-        pixel = context.corrected.metadata.pixel_size_um or 1.0
+        three_d = labels.data.shape[0] > 1
+        metadata = context.corrected.metadata
+        pixel = metadata.pixel_size_um or 1.0
         data = context.corrected.data
         for number in (
             params.channel,
@@ -538,17 +710,22 @@ class MeasureSpheroids(MeasurementModule):
         ):
             if number is not None and number > data.shape[0]:
                 raise ModuleError(f"Channel {number} does not exist")
-        image = data[params.channel - 1, 0] if params.channel else None
+
+        def plane(number: int) -> NDArray[Any]:
+            chosen: NDArray[Any] = data[number - 1] if three_d else data[number - 1, 0]
+            return chosen
+
+        image = data[params.channel - 1, 0] if params.channel and not three_d else None
         planes: dict[str, NDArray[Any]] = {}
         if params.live_channel:
-            planes["live"] = data[params.live_channel - 1, 0]
+            planes["live"] = plane(params.live_channel)
         if params.dead_channel:
-            planes["dead"] = data[params.dead_channel - 1, 0]
+            planes["dead"] = plane(params.dead_channel)
         polarity = params.core_polarity
         if params.core:
             core = params.core_channel or params.dead_channel or params.channel
             if core is not None:
-                planes["core"] = data[core - 1, 0]
+                planes["core"] = plane(core)
                 if polarity == "auto":
                     polarity = "bright" if core == params.dead_channel else "dark"
         options = ExtraOptions(
@@ -563,7 +740,13 @@ class MeasureSpheroids(MeasurementModule):
             invasion_core_px=params.invasion_core_um / pixel,
             min_protrusion_px=params.min_protrusion_um / pixel,
         )
-        table = spheroid_table(labels.data[0], image, pixel, planes=planes, options=options)
+        if three_d:
+            spacing = ((metadata.z_step_um or pixel) * params.axial_scale, pixel, pixel)
+            table = spheroid_table(labels.data.max(axis=0), None, pixel)
+            table = add_3d(table, labels.data, planes, spacing, options)
+        else:
+            table = spheroid_table(labels.data[0], image, pixel, planes=planes, options=options)
+        table = add_child_counts(table, labels, context.labels, spacing if three_d else None)
         if table.empty:  # an empty well still gets a (0-row) table: it is reported, as no_spheroid
             table = pd.DataFrame({"object_id": pd.Series(dtype=int),
                                   "area_um2": pd.Series(dtype=float)})  # fmt: skip
@@ -590,8 +773,11 @@ class SpheroidParams(TableParams):
     fluorescence_channel: str = Field(default="", description="Fluorescence channel (preset).")
     live_channel: str = Field(default="", description="Live stain channel (preset).")
     dead_channel: str = Field(default="", description="Dead stain channel (preset).")
-    volume: Literal["sphere", "ellipsoid"] = Field(
-        default="sphere", description="Volume estimate reported as sp_volume_um3."
+    nuclei_channel: str = Field(default="", description="Nuclear stain for 3D nuclei (preset).")
+    volume: Literal["auto", "sphere", "ellipsoid", "3d"] = Field(
+        default="auto",
+        description="Volume reported as sp_volume_um3: auto = the 3D volume of a Z stack, else "
+        "a sphere from the equivalent diameter.",
     )
     min_spheroid_um2: float = Field(
         default=2000.0, ge=0, description="Smaller objects are debris, never the spheroid."
@@ -608,7 +794,13 @@ class SpheroidParams(TableParams):
     )
     min_solidity: float = Field(default=0.95, gt=0, le=1, description="Below: 'irregular'.")
     exclude_flags: list[str] = Field(
-        default_factory=lambda: ["no_spheroid", "multiple", "touching_edge", "out_of_focus"],
+        default_factory=lambda: [
+            "no_spheroid",
+            "multiple",
+            "touching_edge",
+            "out_of_focus",
+            "incomplete_z",
+        ],
         description="Flags that fail a well (sp_qc_ok = 0).",
     )
 
@@ -633,6 +825,9 @@ class Spheroid(AssayModule):
         ),
         ChannelRole("live", "Live", "calcein-AM or another live stain", required=False),
         ChannelRole("dead", "Dead", "EthD-1, PI or another dead stain", required=False),
+        ChannelRole(
+            "nuclei", "Nuclei", "nuclear stain: nuclei inside spheroids (Z stacks)", required=False
+        ),
     )
 
     def __init__(self, params: Any) -> None:
@@ -684,7 +879,7 @@ class Spheroid(AssayModule):
             main = self._main(rows) if not rows.empty else None
             flag.loc[rows.index] = rows.index == main
         out["sp_main"] = flag
-        volume = f"volume_{self.p.volume}_um3"
+        volume = self._volume_column(rows)
         out["sp_volume_um3"] = np.nan
         if volume in rows:
             out.loc[rows.index, "sp_volume_um3"] = rows[volume].to_numpy(float)
@@ -710,7 +905,16 @@ class Spheroid(AssayModule):
             flags.append("debris")
         if spheroid["solidity"] < p.min_solidity:
             flags.append("irregular")
+        if bool(spheroid.get("z_incomplete", False)):
+            flags.append("incomplete_z")
         return flags
+
+    def _volume_column(self, rows: pd.DataFrame) -> str:
+        choice = self.p.volume
+        if choice == "auto":
+            has_3d = "volume_3d_um3" in rows and rows["volume_3d_um3"].notna().any()
+            choice = "3d" if has_3d else "sphere"
+        return f"volume_{choice}_um3"
 
     def summarize(
         self, objects: pd.DataFrame, state: Any, well: WellContext
@@ -726,7 +930,10 @@ class Spheroid(AssayModule):
             for column in SPHEROID_COLUMNS + EXTRA_COLUMNS:
                 if column in spheroid and pd.notna(spheroid[column]):
                     values[f"sp_{column.replace('equivalent_', '')}"] = float(spheroid[column])
-            values["sp_volume_um3"] = float(spheroid[f"volume_{self.p.volume}_um3"])
+            values["sp_volume_um3"] = float(spheroid[self._volume_column(rows)])
+            for column in spheroid.index:  # objects inside the spheroid (nuclei …)
+                if str(column).endswith(("_count", "_per_mm3")) and pd.notna(spheroid[column]):
+                    values[f"sp_{column}"] = float(spheroid[column])
             values["sp_field"] = int(spheroid["field"])
             self.objects.append(rows.assign(sp_main=rows.index == main))
         values["sp_flags"] = ",".join(flags)
@@ -757,7 +964,7 @@ class Spheroid(AssayModule):
             })  # fmt: skip
         if not valid.empty:
             values["sp_org_area_total_um2"] = float(valid["area_um2"].sum())
-            values["sp_org_volume_total_um3"] = float(valid[f"volume_{self.p.volume}_um3"].sum())
+            values["sp_org_volume_total_um3"] = float(valid[self._volume_column(valid)].sum())
             for column in ("dead_fraction", "core_fraction"):
                 if column in valid and valid[column].notna().any():
                     known = valid[valid[column].notna()]
@@ -1025,9 +1232,16 @@ def preset(
     invasion: bool = False,
     protrusion_reach_um: float = 300.0,
     organoids: bool = False,
+    z_planes: int = 1,
+    three_d: bool | None = None,
+    nucleus_diameter_um: float = 10.0,
 ) -> Any:
     """Detection on brightfield (texture) or fluorescence (Otsu), measurement (with live/dead
-    stains, core and invasion when asked), the spheroid step (single or organoid mode)."""
+    stains, core and invasion when asked), the spheroid step (single or organoid mode).
+
+    Z stacks (``z_planes`` > 1): with a fluorescence channel and ``three_d`` (default), depth
+    attenuation correction, 3D detection and 3D measurement, plus Cellpose 3D nuclei inside the
+    spheroids when ``mapping`` has ``nuclei``; brightfield stacks are projected (EDF) first."""
     from hcs_studio.pipeline.schema import Pipeline
 
     def number(name: str) -> int | None:
@@ -1036,9 +1250,11 @@ def preset(
         return channels.index(name) + 1 if channels and name in channels else 1
 
     brightfield = mapping.get("brightfield", "")
-    name = brightfield or mapping.get("fluorescence", "") or "Brightfield"
+    fluorescence = mapping.get("fluorescence", "")
+    name = brightfield or fluorescence or "Brightfield"
     detection = number(name) or 1
-    method = "brightfield" if brightfield or not mapping.get("fluorescence") else "bright"
+    method = "brightfield" if brightfield or not fluorescence else "bright"
+    volumetric = z_planes > 1 and method == "bright" and three_d is not False
     measure: dict[str, Any] = {"channel": detection}
     for role in ("live", "dead"):
         if mapping.get(role):
@@ -1050,11 +1266,28 @@ def preset(
     if invasion:
         detect["protrusion_reach_um"] = protrusion_reach_um
     step: dict[str, Any] = {f"{role}_channel": mapping.get(role, "")
-                            for role in ("brightfield", "fluorescence", "live", "dead")}  # fmt: skip
+                            for role in ("brightfield", "fluorescence", "live", "dead", "nuclei")}  # fmt: skip
     if organoids:
         step["mode"] = "organoids"
-    steps = [
-        {"module": "detect_spheroids", "params": detect},
+    steps: list[dict[str, Any]] = []
+    if z_planes > 1 and not volumetric:
+        steps.append(
+            {"module": "projection", "params": {"method": "edf" if brightfield else "max"}}
+        )
+    if volumetric:
+        stained = sorted({n for n in (detection, measure.get("live_channel"),
+                                      measure.get("dead_channel")) if n})  # fmt: skip
+        steps.append({"module": "attenuation", "params": {"channels": stained}})
+    steps.append({"module": "detect_spheroids", "params": detect})
+    if volumetric and mapping.get("nuclei"):
+        steps += [
+            {"module": "segment_cellpose", "params": {
+                "channel": number(mapping["nuclei"]), "do_3d": True, "parent": "spheroids",
+                "output": "nuclei", "diameter_um": nucleus_diameter_um}},
+            {"module": "measure_objects", "params": {"labels": ["nuclei"], "texture": False,
+                                                     "granularity": False}},
+        ]  # fmt: skip
+    steps += [
         {"module": "measure_spheroids", "params": measure},
         {"module": "spheroid", "params": step},
     ]

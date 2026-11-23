@@ -37,6 +37,10 @@ DESCRIPTIONS = {
     "local maxima, size filter; 3D with Z stacks)",
     "foci": "foci per nucleus and well (pan-nuclear nuclei — mean intensity ≥ a multiple of the "
     "vehicle median — reported apart)",
+    "attenuation": "correction of depth-dependent intensity loss (the 90th percentile of the "
+    "foreground above each plane's background, fitted as an exponential decay with depth by a "
+    "Theil–Sen line through its logarithm; the signal above background multiplied by the inverse, "
+    "capped at 10×)",
     "detect_spheroids": "spheroid detection (brightfield: local standard deviation of a "
     "difference of Gaussians, which ignores smooth well-edge and meniscus shading, then the outline "
     "at half height between the spheroid interior and its local background; fluorescence: Otsu)",

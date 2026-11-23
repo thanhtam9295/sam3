@@ -342,3 +342,146 @@ def test_invasion_core_and_shells_known_shapes() -> None:
     assert contrast > 0.5 and core.sum() == pytest.approx(np.pi * 25**2, rel=0.05)
     flat, low = necrotic_core(np.full(plane.shape, 400.0), disc, ExtraOptions())
     assert not flat.any() and low == pytest.approx(0)
+
+
+@pytest.mark.parametrize("length", [60.0, 120.0, 300.0])
+def test_attenuation_length_recovered(length: float) -> None:
+    from types import SimpleNamespace
+
+    from hcs_studio.processing.attenuation import correction_factors, plane_signal
+    from hcs_studio.synthetic.spheroids import ConfocalSpheroid
+
+    image = np.zeros((1, 60, 120, 120))
+    rng = np.random.default_rng(0)
+    ctx = SimpleNamespace(row=0, col=0, image=image, rng=rng, pixel_size_um=2.0, z_step_um=4.0)
+    ConfocalSpheroid(spec=lambda r, c: {"radius_um": 90, "attenuation_um": length}).draw(ctx)
+    stack = image[0] + rng.normal(0, 5, image[0].shape)
+    signal, used, background = plane_signal(stack, 90, 0.5)
+    _factors, info = correction_factors(signal, used, "exponential", 4.0)
+    assert info["attenuation_length_um"] == pytest.approx(length, rel=0.03)
+    assert background.mean() == pytest.approx(100, abs=3)
+    flat, _per_plane = correction_factors(signal, used, "per_plane", 4.0)
+    corrected = signal * flat
+    assert np.nanstd(corrected[used]) / np.nanmean(corrected[used]) < 0.02
+
+
+def test_attenuation_step_flat_stack_and_gain_cap() -> None:
+    from hcs_studio.model.plate import ChannelInfo, ImageMetadata
+    from hcs_studio.processing.attenuation import Attenuation, AttenuationParams
+    from hcs_studio.processing.base import ImageData
+
+    metadata = ImageMetadata(channels=(ChannelInfo("Hoechst"),), pixel_size_um=2.0, z_step_um=4.0)
+    zz, yy, xx = np.mgrid[0:30, 0:60, 0:60]
+    ball = ((zz - 15) * 4) ** 2 + ((yy - 30) * 2) ** 2 + ((xx - 30) * 2) ** 2 <= 50**2
+    flat = ImageData.from_array((100 + 800 * ball)[None].astype(float), metadata)
+    out = Attenuation(AttenuationParams()).apply(flat, None)
+    assert np.allclose(out.data, flat.data) and out.linear  # no loss with depth: unchanged
+    assert any("does not fall" in w for w in out.reports[-1]["warnings"])
+    steep = (100 + 800 * ball * np.exp(-np.clip(zz * 4 - 10, 0, None) / 10.0))[None]
+    capped = Attenuation(AttenuationParams(max_gain=5)).apply(
+        ImageData.from_array(steep.astype(float), metadata), None
+    )
+    report = capped.reports[-1]
+    assert report["channels"]["1"]["max_gain"] == pytest.approx(5)
+    assert any("capped" in w for w in report["warnings"])
+
+
+def test_confocal_3d_volume_core_viability_and_coverage(home: Path) -> None:
+    """Done-when (21c): 3D volume within ±5 %, core fraction within ±5 pp, attenuation
+    corrected, incomplete Z coverage flagged."""
+    from hcs_studio.assays.spheroids import preset
+    from hcs_studio.io.base import open_plate
+    from hcs_studio.pipeline.executor import run_pipeline
+    from hcs_studio.synthetic import ShotNoise, SyntheticPlate
+    from hcs_studio.synthetic.spheroids import ConfocalSpheroid
+
+    specs: dict[tuple[int, int], dict[str, Any]] = {
+        (0, 0): {"radius_um": 90, "core_ratio": 0.5},
+        (0, 1): {"radius_um": 70, "core_ratio": 0.6},
+        (0, 2): {"radius_um": 90, "core_ratio": 0.5, "attenuation_um": 80},
+        (0, 3): {"radius_um": 90, "core_ratio": 0.5, "z_centre_um": 200},
+    }
+    plate = SyntheticPlate(
+        wells=list(specs),
+        features=[
+            ConfocalSpheroid(spec=lambda r, c: specs[(r, c)], dead_channel=1),
+            ShotNoise(sd=5.0),
+        ],
+        channels=("Hoechst", "EthD1"),
+        size=128,
+        planes=60,
+        z_step_um=4.0,
+        pixel_size_um=2.0,
+        name="CONF",
+    )
+    path, truth = plate.write(home / "raw")
+    pipeline = preset({"fluorescence": "Hoechst", "dead": "EthD1"},
+                      channels=["Hoechst", "EthD1"], z_planes=60)  # fmt: skip
+    modules = [s.module for s in pipeline.steps]
+    assert modules == ["attenuation", "detect_spheroids", "measure_spheroids", "spheroid"]
+    folder = run_pipeline(open_plate(path), pipeline, output_root=home / "runs",
+                          save_images=False).folder  # fmt: skip
+    got = pd.read_csv(folder / "tables" / "per_well_summary.csv").set_index("well").to_dict("index")
+    for well, data in truth["wells"].items():
+        expected = data["fields"]["1"]["confocal_spheroid"]
+        values = got[well]
+        assert values["sp_core_fraction"] == pytest.approx(
+            expected["core_volume_fraction"], abs=0.05
+        )
+        assert values["sp_dead_fraction"] == pytest.approx(
+            expected["core_volume_fraction"], abs=0.03
+        )
+        if expected["complete_z"]:
+            assert values["sp_volume_um3"] == pytest.approx(expected["volume_um3"], rel=0.02), well
+            assert values["sp_volume_um3"] == values["sp_volume_3d_um3"]
+            assert values["sp_sphericity"] > 0.95 and values["sp_z_coverage"] == 1.0
+            assert pd.isna(values["sp_flags"]) and values["sp_qc_ok"] == 1
+        else:
+            assert values["sp_flags"] == "incomplete_z" and values["sp_qc_ok"] == 0
+            assert values["sp_z_coverage"] == pytest.approx(expected["z_coverage"], abs=0.05)
+    # without the attenuation correction the dim deep half of a spheroid is lost
+    plain_pipeline = pipeline.model_copy(update={"steps": pipeline.steps[1:]})
+    uncorrected = run_pipeline(open_plate(path), plain_pipeline, output_root=home / "plain",
+                               save_images=False).folder  # fmt: skip
+    plain = pd.read_csv(uncorrected / "tables" / "per_well_summary.csv").set_index("well")
+    lost = (
+        plain.loc["A03", "sp_volume_um3"]
+        / truth["wells"]["A03"]["fields"]["1"]["confocal_spheroid"]["volume_um3"]
+    )
+    assert float(lost) < 0.8
+    manifest = json.loads((folder / "run_manifest.json").read_text())
+    assert "attenuation" in json.dumps(manifest["pipeline"])
+
+
+def test_nuclei_counted_per_spheroid_and_3d_checks() -> None:
+    from hcs_studio.assays.spheroids import (
+        DetectSpheroids,
+        DetectSpheroidsParams,
+        MeasureSpheroids,
+        MeasureSpheroidsParams,
+    )
+    from hcs_studio.model.plate import ChannelInfo, ImageMetadata
+    from hcs_studio.processing.base import ImageData, LabelSet, MeasureContext, ModuleError
+
+    metadata = ImageMetadata(channels=(ChannelInfo("Hoechst"),), pixel_size_um=2.0, z_step_um=4.0)
+    zz, yy, xx = np.mgrid[0:20, 0:80, 0:80]
+    ball = ((zz - 10) * 4) ** 2 + ((yy - 40) * 2) ** 2 + ((xx - 40) * 2) ** 2 <= 30**2
+    image = ImageData.from_array((100 + 800 * ball)[None].astype(float), metadata)
+    spheroids = LabelSet("spheroids", ball.astype(np.int32))
+    nuclei = np.zeros(ball.shape, dtype=np.int32)
+    for i, (z, y, x) in enumerate([(10, 40, 40), (8, 35, 45), (12, 45, 35)], start=1):
+        nuclei[z - 1 : z + 2, y - 2 : y + 3, x - 2 : x + 3] = i
+    children = LabelSet("nuclei", nuclei, parent="spheroids",
+                        parent_ids=np.array([0, 1, 1, 1], dtype=np.int32))  # fmt: skip
+    labelled = image.with_labels(spheroids, "seg").with_labels(children, "nuclei")
+    context = MeasureContext(raw=labelled, corrected=labelled, labels=labelled.labels)
+    table = MeasureSpheroids(MeasureSpheroidsParams(channel=1)).measure(context)["objects"]
+    row = table.iloc[0].to_dict()
+    assert row["nuclei_count"] == 3
+    volume = row["volume_3d_um3"]
+    assert volume == pytest.approx(4 / 3 * np.pi * 30**3, rel=0.08)
+    assert row["nuclei_per_mm3"] == pytest.approx(3 / (volume / 1e9))
+    assert not row["z_incomplete"]
+    brightfield = DetectSpheroids(DetectSpheroidsParams(channel=1))
+    with pytest.raises(ModuleError, match="Z projection"):
+        brightfield.apply(image, None)
