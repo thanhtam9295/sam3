@@ -46,6 +46,7 @@ from hcs_studio import __version__
 from hcs_studio.services import Actor, ServiceContext
 
 TILE = 512
+COOKIE = "hcs_token"
 
 
 def _now() -> datetime:
@@ -251,7 +252,7 @@ def gpu_status() -> list[dict[str, Any]]:
 def create_app() -> Any:
     """The FastAPI application (needs the ``server`` extra)."""
     from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, Request, WebSocket
-    from fastapi.responses import FileResponse, Response
+    from fastapi.responses import FileResponse, HTMLResponse, Response
 
     from hcs_studio.server.queue import DbJobQueue
 
@@ -261,7 +262,8 @@ def create_app() -> Any:
     app.state.queue = queue
 
     def user(request: Request, authorization: str = Header(default="")) -> Actor:
-        token = authorization.removeprefix("Bearer ").strip()
+        # the portal's pages (reports with relative image links) authenticate by cookie
+        token = authorization.removeprefix("Bearer ").strip() or request.cookies.get(COOKIE, "")
         actor = actor_for_token(token) if token else None
         if actor is None:
             raise HTTPException(401, "Sign in first (POST /api/login)")
@@ -289,7 +291,9 @@ def create_app() -> Any:
         return {"version": __version__, "database": get_engine().dialect.name, "jobs": dict(counts)}
 
     @app.post("/api/login")
-    def login(request: Request, body: dict[str, str] = Body(...)) -> dict[str, Any]:
+    def login(
+        request: Request, response: Response, body: dict[str, str] = Body(...)
+    ) -> dict[str, Any]:
         from hcs_studio.security.accounts import AuthError, authenticate
 
         try:
@@ -297,6 +301,18 @@ def create_app() -> Any:
         except AuthError as exc:
             raise HTTPException(401, str(exc)) from None
         token, expires = issue_token(info.username, request.client.host if request.client else "")
+        secure = (
+            request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+        )
+        response.set_cookie(
+            COOKIE,
+            token,
+            httponly=True,
+            samesite="strict",
+            secure=secure,
+            path="/",
+            max_age=int((expires - _now()).total_seconds()),
+        )
         return {
             "token": token,
             "user": info.username,
@@ -306,8 +322,11 @@ def create_app() -> Any:
         }
 
     @app.post("/api/logout")
-    def logout(request: Request, actor: Actor = Depends(user)) -> dict[str, str]:
+    def logout(
+        request: Request, response: Response, actor: Actor = Depends(user)
+    ) -> dict[str, str]:
         revoke_token(request.state.token)
+        response.delete_cookie(COOKIE, path="/")
         return {"status": "signed out"}
 
     @app.get("/api/me")
@@ -540,6 +559,11 @@ def create_app() -> Any:
                 if s.status in ("error", "interrupted", "completed_with_failures")
             ][:50],
         }
+
+    @app.get("/", response_class=HTMLResponse)
+    def portal() -> str:
+        """The web portal (one self-contained page; it signs in through the API)."""
+        return (Path(__file__).parent / "static" / "portal.html").read_text(encoding="utf-8")
 
     app.state.started = time.time()
     return app

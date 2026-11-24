@@ -37,7 +37,7 @@ uv venv --python 3.12 .venv
 ```
 
 ```bash
-uv pip install --python .venv/bin/python -e ".[gui,dev,segmentation,profiling]"
+uv pip install --python .venv/bin/python -e ".[gui,dev,segmentation,profiling,server]"
 ```
 
 On Windows the interpreter path is `.venv\Scripts\python.exe`. The GPU is optional:

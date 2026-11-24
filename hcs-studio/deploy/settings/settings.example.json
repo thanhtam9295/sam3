@@ -1,0 +1,10 @@
+{
+  "config_version": 1,
+  "data_roots": [
+    {"name": "SCREENING", "windows": "\\\\labserver\\screening", "linux": "/mnt/raw", "macos": "/Volumes/screening"},
+    {"name": "RESULTS", "windows": "\\\\labserver\\hcs-results", "linux": "/mnt/results", "macos": "/Volumes/hcs-results"}
+  ],
+  "database": {"mode": "server"},
+  "server": {"results_root": "RESULTS:runs", "session_hours": 12},
+  "security": {"audit_head_copies": ["/mnt/results/audit-checkpoints"]}
+}

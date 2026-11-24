@@ -1,0 +1,11 @@
+# Build context = repository root: send only the two packages the image needs.
+*
+!lab_events/
+!hcs-studio/
+hcs-studio/.venv*
+hcs-studio/**/__pycache__
+hcs-studio/.mypy_cache
+hcs-studio/.ruff_cache
+hcs-studio/.pytest_cache
+hcs-studio/build
+hcs-studio/dist

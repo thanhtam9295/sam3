@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HCS Studio server</title>
+<style>
+:root { --bg: #ffffff; --fg: #1d2129; --muted: #667085; --line: #e3e6ea; --accent: #2f6db5; --panel: #f6f7f9; --bad: #b2182b; --ok: #1a7f37; }
+@media (prefers-color-scheme: dark) { :root { --bg: #15181d; --fg: #e6e8eb; --muted: #9aa3ad; --line: #2c3139; --accent: #6ea8ff; --panel: #1c2027; --bad: #ff7b86; --ok: #56d364; } }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+header { display: flex; gap: 16px; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0 12px 0 0; }
+nav a { margin-right: 14px; color: var(--accent); text-decoration: none; cursor: pointer; }
+nav a.active { font-weight: 600; text-decoration: underline; }
+#who { margin-left: auto; color: var(--muted); }
+main { padding: 16px 20px; max-width: 1400px; }
+table { border-collapse: collapse; font-size: 13px; width: 100%; }
+th, td { text-align: left; padding: 4px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+tr.link { cursor: pointer; } tr.link:hover { background: var(--panel); }
+input, select, button { font: inherit; padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); }
+button { cursor: pointer; background: var(--panel); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px; margin: 0 0 14px; }
+.muted { color: var(--muted); } .bad { color: var(--bad); } .ok { color: var(--ok); }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.bar { height: 8px; background: var(--line); border-radius: 4px; width: 160px; display: inline-block; vertical-align: middle; }
+.bar > span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+#viewer { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 14px; }
+#canvas-wrap { border: 1px solid var(--line); background: #000; overflow: hidden; position: relative; touch-action: none; }
+canvas { display: block; image-rendering: pixelated; cursor: grab; }
+.channel { margin-bottom: 10px; } .channel label { display: block; font-size: 12px; }
+#login { max-width: 340px; margin: 60px auto; }
+@media (max-width: 800px) { #viewer { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>HCS Studio</h1>
+  <nav id="nav" hidden>
+    <a data-view="plates">Plates</a><a data-view="jobs">Jobs</a><a data-view="admin" id="nav-admin" hidden>Admin</a>
+  </nav>
+  <span id="who"></span>
+</header>
+<main id="main"></main>
+<script>
+"use strict";
+const $ = (sel, root = document) => root.querySelector(sel);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const fmt = (v) => typeof v === "number" ? (Number.isInteger(v) ? String(v) : v.toPrecision(4)) : esc(v);
+let me = null, timer = null;
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {credentials: "same-origin", headers: {"Content-Type": "application/json"}, ...options});
+  if (response.status === 401) { me = null; showLogin(); throw new Error("Signed out"); }
+  if (!response.ok) { let d = response.statusText; try { d = (await response.json()).detail; } catch (e) {} throw new Error(d); }
+  return response;
+}
+const json = async (path) => (await api(path)).json();
+
+function setView(name, arg) {
+  clearInterval(timer);
+  document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.view === name));
+  location.hash = name + (arg !== undefined ? "/" + arg : "");
+  ({plates: showPlates, plate: showPlate, run: showRun, jobs: showJobs, admin: showAdmin, viewer: showViewer})[name](arg);
+}
+
+function showLogin(message = "") {
+  $("#nav").hidden = true; $("#who").textContent = "";
+  $("#main").innerHTML = `<form id="login" class="card"><h2>Sign in</h2><p class="bad">${esc(message)}</p>
+    <div class="row"><input id="user" placeholder="User" autocomplete="username" required></div>
+    <div class="row"><input id="pass" type="password" placeholder="Password" autocomplete="current-password" required></div>
+    <button>Sign in</button></form>`;
+  $("#login").onsubmit = async (e) => {
+    e.preventDefault();
+    const r = await fetch("/api/login", {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username: $("#user").value, password: $("#pass").value})});
+    if (!r.ok) { showLogin((await r.json()).detail || "Sign-in failed"); return; }
+    start();
+  };
+}
+
+async function start() {
+  try { me = await json("/api/me"); } catch (e) { showLogin(); return; }
+  $("#nav").hidden = false; $("#nav-admin").hidden = me.role !== "admin";
+  $("#who").innerHTML = `${esc(me.name)} (${esc(me.role)}) · <a href="#" id="logout">sign out</a>`;
+  $("#logout").onclick = async (e) => { e.preventDefault(); await api("/api/logout", {method: "POST"}); showLogin(); };
+  document.querySelectorAll("#nav a").forEach((a) => (a.onclick = () => setView(a.dataset.view)));
+  const [view, arg] = (location.hash.slice(1) || "plates").split("/");
+  setView(view in {plates: 1, plate: 1, run: 1, jobs: 1, admin: 1, viewer: 1} ? view : "plates", arg);
+}
+
+function table(rows, columns, onClick) {
+  if (!rows.length) return `<p class="muted">Nothing here.</p>`;
+  const head = columns.map(([, title]) => `<th>${esc(title)}</th>`).join("");
+  const body = rows.map((r, i) => `<tr class="${onClick ? "link" : ""}" data-i="${i}">${columns.map(([k]) => `<td>${typeof k === "function" ? k(r) : fmt(r[k])}</td>`).join("")}</tr>`).join("");
+  setTimeout(() => onClick && document.querySelectorAll("tr.link").forEach((tr) => (tr.onclick = () => onClick(rows[+tr.dataset.i]))));
+  return `<table><tr>${head}</tr>${body}</table>`;
+}
+
+async function showPlates() {
+  $("#main").innerHTML = `<div class="row"><input id="q" placeholder="Barcode, plate, experiment, assay"><button id="go">Search</button></div><div id="list" class="muted">Loading…</div>`;
+  const load = async () => {
+    const plates = await json("/api/plates?text=" + encodeURIComponent($("#q").value));
+    $("#list").innerHTML = table(plates, [["barcode", "Barcode"], ["name", "Plate"], ["experiment", "Experiment"], ["assay", "Assay"], ["runs", "Runs"], ["latest_started", "Last run"], ["latest_status", "Status"]], (p) => setView("plate", p.plate_id));
+  };
+  $("#go").onclick = load; $("#q").onkeydown = (e) => e.key === "Enter" && load(); load();
+}
+
+async function showPlate(id) {
+  const page = await json(`/api/plates/${id}`);
+  const plate = page.plate || {};
+  $("#main").innerHTML = `<div class="card"><h2>${esc(plate.barcode || plate.name || "Plate " + id)}</h2><p class="muted">${esc(plate.experiment || "")} ${esc(plate.assay || "")}</p></div><h3>Runs</h3>` +
+    table(page.runs || [], [["name", "Run"], ["pipeline", "Pipeline"], ["status", "Status"], ["started", "Started"]], (r) => setView("run", r.id));
+}
+
+async function showRun(id) {
+  const run = await json(`/api/runs/${id}`);
+  const files = run.files.filter((f) => /\.(html|csv|pdf|xlsx)$/i.test(f));
+  const sigs = run.signatures.map((s) => `<li><b>${esc(s.meaning)}</b> by ${esc(s.display_name)} (${esc(s.role)}), ${esc(s.utc)} ${esc(s.reason)}</li>`).join("");
+  const readouts = run.wells.length ? Object.keys(run.wells[0]).filter((k) => typeof run.wells[0][k] === "number").slice(0, 8) : [];
+  $("#main").innerHTML = `<div class="card"><h2>${esc(run.name)}</h2>
+      <p>State: <b class="${run.state === "approved" ? "ok" : ""}">${esc(run.state)}</b>${run.locked ? " (locked)" : ""} · version ${run.version} · pipeline ${esc(run.pipeline)}</p>
+      ${sigs ? `<ul>${sigs}</ul>` : ""}
+      <div class="row">${files.map((f) => `<a href="/api/runs/${id}/files/${encodeURI(f)}" target="_blank">${esc(f)}</a>`).join(" · ")}
+      <a href="/api/runs/${id}/files/pharmacology/curves.csv" target="_blank">pharmacology curves</a></div></div>
+    <h3>Wells</h3>` + table(run.wells, [["well", "Well"], ...readouts.map((k) => [k, k])], (w) => setView("viewer", `${id}:${w.well}:1`));
+}
+
+async function showJobs() {
+  const load = async () => {
+    const jobs = await json("/api/jobs");
+    $("#main").innerHTML = `<h2>Jobs</h2>` + table(jobs, [["label", "Job"], ["owner", "Owner"], ["priority", "Priority"], ["status", "Status"],
+      [(j) => `<span class="bar"><span style="width:${j.total ? (100 * j.done) / j.total : 0}%"></span></span> ${j.done}/${j.total}`, "Progress"], ["message", "Message"], ["created", "Submitted"]]);
+  };
+  await load(); timer = setInterval(load, 3000);
+}
+
+async function showAdmin() {
+  const s = await json("/api/admin/status");
+  const counts = Object.entries(s.jobs).map(([k, v]) => `${esc(k)}: <b>${v}</b>`).join(" · ");
+  const disk = s.disk.free_gb !== undefined ? `${s.disk.free_gb.toFixed(0)} GB free of ${s.disk.total_gb.toFixed(0)} GB (${esc(s.disk.path)})` : esc(s.disk.error || "results folder not set");
+  $("#main").innerHTML = `<div class="card"><h2>Server</h2><p>Jobs: ${counts || "none"}</p><p>Results disk: ${disk}</p></div>
+    <h3>Workers</h3>` + table(s.workers, [["id", "Worker"], [(w) => (w.gpu === null ? "CPU" : "GPU " + w.gpu), "Kind"], ["status", "Status"], ["job_id", "Job"], ["heartbeat", "Heartbeat"]]) +
+    `<h3>GPUs</h3>` + table(s.gpus, [["index", "#"], ["name", "GPU"], ["utilization_pct", "Use %"], ["memory_used_mb", "Memory MB"], ["memory_total_mb", "of"]]) +
+    `<h3>Failed or interrupted jobs</h3>` + table(s.failed, [["label", "Job"], ["owner", "Owner"], ["status", "Status"], ["message", "Message"], ["finished", "When"]]);
+  timer = setInterval(showAdmin, 10000);
+}
+
+// ---------------------------------------------------------------- the image viewer
+const COLOURS = [[0, 0.45, 1], [0, 1, 0], [1, 0, 0], [1, 0, 1], [1, 1, 0], [0, 1, 1], [1, 1, 1]];
+async function tilePlane(base, info, c, z, t, level) {
+  const step = 2 ** level, size = info.tile, h = Math.ceil(info.shape[3] / step), w = Math.ceil(info.shape[4] / step);
+  const out = new Float32Array(h * w);
+  const jobs = [];
+  for (let ty = 0; ty * size < h; ty++) for (let tx = 0; tx * size < w; tx++) {
+    jobs.push(api(`${base}/tile?c=${c}&z=${z}&t=${t}&level=${level}&ty=${ty}&tx=${tx}`).then(async (r) => {
+      const [rows, cols] = r.headers.get("X-Shape").split(",").map(Number);
+      const buf = await r.arrayBuffer();
+      const data = r.headers.get("X-Dtype") === "uint16" ? new Uint16Array(buf) : new Float32Array(buf);
+      for (let y = 0; y < rows; y++) out.set(data.subarray(y * cols, (y + 1) * cols), (ty * size + y) * w + tx * size);
+    }));
+  }
+  await Promise.all(jobs);
+  return {data: out, h, w};
+}
+function percentile(data, p) {
+  const sample = []; const stride = Math.max(1, Math.floor(data.length / 20000));
+  for (let i = 0; i < data.length; i += stride) sample.push(data[i]);
+  sample.sort((a, b) => a - b); return sample[Math.min(sample.length - 1, Math.floor(p * sample.length))] || 0;
+}
+
+async function showViewer(arg) {
+  const [runId, well, fieldText] = (arg || "").split(":");
+  const field = +fieldText || 1, base = `/api/images/${runId}/${well}/${field}`;
+  const info = await json(base + "/info");
+  const [T, C, Z, H, W] = info.shape;
+  let level = Math.max(0, Math.ceil(Math.log2(Math.max(H, W) / 1024)));
+  const state = {z: 0, t: 0, planes: [], channels: info.channels.map((name, i) => ({name, on: i < 3, colour: COLOURS[i % COLOURS.length], lo: 0, hi: 1})), zoom: 1, x: 0, y: 0};
+  $("#main").innerHTML = `<p><a href="#" id="back">← run</a> · ${esc(well)} field ${field} · ${W} × ${H} px${info.pixel_size_um ? ` · ${info.pixel_size_um} µm/px` : ""}</p>
+    <div id="viewer"><div id="canvas-wrap"><canvas id="canvas"></canvas></div><div>
+      <div class="row">${Z > 1 ? `Z <input id="z" type="range" min="0" max="${Z - 1}" value="0">` : ""}${T > 1 ? `T <input id="t" type="range" min="0" max="${T - 1}" value="0">` : ""}</div>
+      <div id="channels"></div><p class="muted">Drag to pan, wheel to zoom.</p></div></div>`;
+  $("#back").onclick = (e) => { e.preventDefault(); setView("run", runId); };
+  const canvas = $("#canvas"), ctx = canvas.getContext("2d");
+  async function load() {
+    state.planes = await Promise.all(state.channels.map((ch, c) => tilePlane(base, info, c, state.z, state.t, level)));
+    state.channels.forEach((ch, c) => { ch.lo = percentile(state.planes[c].data, 0.01); ch.hi = Math.max(ch.lo + 1e-6, percentile(state.planes[c].data, 0.998)); });
+    controls(); draw();
+  }
+  function controls() {
+    $("#channels").innerHTML = state.channels.map((ch, c) => `<div class="channel"><label><input type="checkbox" data-c="${c}" ${ch.on ? "checked" : ""}> ${esc(ch.name)}</label>
+      <label>min <input type="range" data-c="${c}" data-k="lo" min="0" max="1000" value="0"></label><label>max <input type="range" data-c="${c}" data-k="hi" min="0" max="1000" value="1000"></label></div>`).join("");
+    const base = state.channels.map((ch) => [ch.lo, ch.hi]);
+    document.querySelectorAll("#channels input[type=checkbox]").forEach((el) => (el.onchange = () => { state.channels[+el.dataset.c].on = el.checked; draw(); }));
+    document.querySelectorAll("#channels input[type=range]").forEach((el) => (el.oninput = () => {
+      const c = +el.dataset.c, [lo, hi] = base[c], v = lo + ((hi - lo) * +el.value) / 1000;
+      state.channels[c][el.dataset.k] = v; draw();
+    }));
+  }
+  function draw() {
+    const {h, w} = state.planes[0]; canvas.width = w; canvas.height = h;
+    const image = ctx.createImageData(w, h), px = image.data;
+    for (let i = 0; i < w * h; i++) {
+      let r = 0, g = 0, b = 0;
+      state.channels.forEach((ch, c) => { if (!ch.on) return; const v = Math.min(1, Math.max(0, (state.planes[c].data[i] - ch.lo) / (ch.hi - ch.lo))); r += v * ch.colour[0]; g += v * ch.colour[1]; b += v * ch.colour[2]; });
+      px[4 * i] = Math.min(255, r * 255); px[4 * i + 1] = Math.min(255, g * 255); px[4 * i + 2] = Math.min(255, b * 255); px[4 * i + 3] = 255;
+    }
+    ctx.putImageData(image, 0, 0);
+    canvas.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.zoom})`; canvas.style.transformOrigin = "0 0";
+  }
+  let drag = null;
+  canvas.onpointerdown = (e) => { drag = [e.clientX - state.x, e.clientY - state.y]; canvas.setPointerCapture(e.pointerId); };
+  canvas.onpointermove = (e) => { if (drag) { state.x = e.clientX - drag[0]; state.y = e.clientY - drag[1]; draw(); } };
+  canvas.onpointerup = () => (drag = null);
+  $("#canvas-wrap").onwheel = async (e) => {
+    e.preventDefault(); state.zoom = Math.min(16, Math.max(0.25, state.zoom * (e.deltaY < 0 ? 1.25 : 0.8)));
+    const wanted = Math.max(0, Math.ceil(Math.log2(Math.max(H, W) / (1024 * state.zoom))));
+    if (wanted < level) { state.zoom *= 2 ** (wanted - level); level = wanted; await load(); } else draw();
+  };
+  if ($("#z")) $("#z").oninput = (e) => { state.z = +e.target.value; load(); };
+  if ($("#t")) $("#t").oninput = (e) => { state.t = +e.target.value; load(); };
+  $("#canvas-wrap").style.height = "min(75vh, 900px)";
+  await load();
+}
+
+start();
+</script>
+</body>
+</html>

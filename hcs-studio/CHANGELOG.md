@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Phase 27 — server mode
+- PostgreSQL registry (tested on PostgreSQL 16) and a job queue in the database: workers on a
+  GPU server claim jobs (`SKIP LOCKED`) by priority and per-user fair share, one worker per GPU
+  plus CPU workers (`hcs-studio worker-pool`); a killed worker is restarted and its job resumes
+  in its run folder; job processes stop with their worker.
+- REST + WebSocket API (`hcs-studio serve`): sign-in with local accounts (token sessions),
+  plates and runs, run files, raw image tiles, job submission and control through the audited
+  services, live progress, lab events from the scheduler, admin status.
+- Desktop connected mode (`server.url`): sign in to the server at start; the Jobs dock submits
+  to and follows the server. `ServerClient`/`RemoteJobQueue` for scripts.
+- Web portal at `/`: plates, runs (state, signatures, wells, report, pharmacology), a canvas
+  image viewer (channels, contrast, pan/zoom over streamed tiles), jobs, admin page.
+- Deployment: `deploy/` (Dockerfile, Docker Compose with PostgreSQL, API, GPU/CPU workers and
+  nginx), docs/server.md (deployment, upgrades and rollback, backups), docs/it_security.md.
+- New: extra `server` (fastapi, uvicorn, psycopg); httpx in the core.
+
 ### Phase 26b — run states, sign-off, locking and versions
 - Run states draft → completed → reviewed → approved; `hcs-studio sign <run> --meaning
   reviewed|approved` (reviewers; optional or, in regulated mode, required re-authentication;

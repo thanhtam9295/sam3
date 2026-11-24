@@ -818,12 +818,19 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   (server sign-in at launch when `server.url` is set; `accounts.adopt_session` so local
   services act as the server account). `AppSettings.server`; CLI `serve`. Ruff bugbear
   `extend-immutable-calls` for fastapi markers.
+- **Phase 27c (built)**: portal `server/static/portal.html` (served at `/`; vanilla JS; cookie
+  session `hcs_token` (HttpOnly, SameSite=Strict, Secure behind HTTPS) so reports' relative
+  links work; canvas viewer composes raw tiles per channel; tested in Chromium by
+  `test_portal_in_a_browser`). `deploy/` (Dockerfile + `Dockerfile.dockerignore`, build
+  context = repo root; compose: db, api, worker-gpu, worker-cpu, proxy — only the proxy
+  publishes a port; nginx.conf with WebSocket upgrade; settings example). Docs `server.md`,
+  `it_security.md`. Done-when test `tests/test_server_e2e.py` (uvicorn + pool).
 
 ## Commands
 
 Run from this folder (`hcs-studio/`).
 
-- Environment: `uv venv --python 3.12 .venv` then `uv pip install --python .venv/bin/python -e ".[gui,dev,segmentation,profiling]"`
+- Environment: `uv venv --python 3.12 .venv` then `uv pip install --python .venv/bin/python -e ".[gui,dev,segmentation,profiling,server]"`
 - Launch: `python -m hcs_studio` (or `hcs-studio`); `hcs-studio info` prints version and GPU status
 - Describe how a path is read: `hcs-studio inspect <path>`
 - Run a pipeline: `hcs-studio run --pipeline p.yaml --input <plate> --wells A01-H12 --workers auto`; `--resume <folder>`, `--retry-failed <folder>`; list modules: `hcs-studio modules`

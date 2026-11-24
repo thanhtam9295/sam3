@@ -241,6 +241,24 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Server mode (Phase 27)
+
+| Check | Result | Test |
+|---|---|---|
+| Registry migrations, audit chain and accounts on PostgreSQL 16 | migrate 0001–0009; chain intact; argon2 sign-in | manual run 2026-11-24; queue tests below on PostgreSQL |
+| Queue: priority, fair share, GPU routing; events; cancellation; crash → requeue with resume → interrupted after 3 attempts | as specified, on SQLite and PostgreSQL | `tests/test_server_queue.py` |
+| **Done-when:** two clients submit at the same time | both complete, separate run folders | `test_two_clients_jobs_complete`, `test_two_clients_at_once` |
+| **Done-when:** a worker killed (SIGKILL) mid-job | the pool restarts it; the job is requeued and resumes in the same run folder, keeping finished wells | `test_killed_worker_is_restarted_and_job_resumes` (SQLite and PostgreSQL) |
+| **Done-when:** a 384-well plate (308 imaged wells) submitted through a real server (uvicorn, worker pool) by a client that then disconnects | completes; visible to a new desktop client (queue, registry, `RunResults`) and in the web portal (run, report, image tile) | `test_384_well_plate_while_the_client_is_away` (~30 s) |
+| API sessions and permissions (wrong password, viewer submits, analyst opens admin, sign-out) | 401 / 403 / 403 / 401 | `test_sessions_and_permissions` |
+| Run through the API: worker, registry indexing, run summary, report file, path traversal, image tiles equal to the raw plane, WebSocket progress, audit as the API user | as specified | `test_run_through_the_server` |
+| Portal in Chromium (Playwright): sign-in, plates, run state, the canvas viewer draws nuclei, jobs | no page errors | `test_portal_in_a_browser` |
+| Connected Jobs dock | submits through the API, sees the job finish | `test_jobs_dock_in_connected_mode` |
+
+Not tested here: Docker Compose and the Windows service (no Docker in the test container; the
+compose file, Dockerfile and nginx config are checked for consistency only), GPU workers on a
+real GPU, TLS through the proxy.
+
 ## Run states, sign-off, locking (Phase 26b)
 
 | Check | Result | Test |

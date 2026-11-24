@@ -34,6 +34,8 @@ PAGES = [
     ("cellpainting.md", "Cell Painting profiling"),
     ("models.md", "Training, validating and managing models"),
     ("security.md", "Accounts, audit trail and sign-off"),
+    ("server.md", "Server mode"),
+    ("it_security.md", "IT security checklist"),
     ("validation.md", "Validation"),
 ]
 TEMPLATE = """<!doctype html>
