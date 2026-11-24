@@ -357,11 +357,20 @@ def save_app_settings(ctx: ServiceContext, settings: Any) -> Path:
 
 
 @service("run.submit", object_type="job")
-def submit_job(ctx: ServiceContext, queue: Any, job: Any, priority: str = "interactive") -> str:
-    """Queue a pipeline run (``queue``: a ``JobQueue``)."""
+def submit_job(
+    ctx: ServiceContext, queue: Any, job: Any, priority: str = "interactive", spec: Any = None
+) -> str:
+    """Queue a pipeline run (``queue``: a ``JobQueue``; ``spec`` when the caller built it)."""
+    from dataclasses import replace
+
     from hcs_studio.pipeline.queue import JobSpec
 
-    job_id = str(queue.submit(JobSpec.for_job(job, priority=priority, owner=ctx.actor)))
+    spec = (
+        replace(spec, owner=ctx.actor)
+        if spec is not None
+        else JobSpec.for_job(job, priority=priority, owner=ctx.actor)
+    )
+    job_id = str(queue.submit(spec))
     ctx.note(
         object_id=job_id,
         after={

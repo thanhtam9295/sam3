@@ -14,6 +14,9 @@ def add_parsers(sub: Any) -> None:
     pool.add_argument("--gpus", default="", help="GPU indexes, comma-separated (one worker each)")
     pool.add_argument("--cpu", type=int, default=1, help="CPU workers")
     pool.add_argument("--stale", type=float, default=30.0)
+    serve = sub.add_parser("serve", help="run the server API (behind an HTTPS reverse proxy)")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
     queue = sub.add_parser("queue", help="the server job queue")
     queue_sub = queue.add_subparsers(dest="queue_command", required=True)
     queue_sub.add_parser("list", help="recent jobs")
@@ -43,6 +46,13 @@ def run(args: argparse.Namespace) -> int:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
         gpus = [int(g) for g in args.gpus.split(",") if g.strip()]
         run_pool(gpus, args.cpu, stale_s=args.stale)
+        return 0
+    if args.command == "serve":
+        import uvicorn
+
+        from hcs_studio.server.api import create_app
+
+        uvicorn.run(create_app(), host=args.host, port=args.port, proxy_headers=True)
         return 0
     queue = DbJobQueue()
     if args.queue_command == "list":

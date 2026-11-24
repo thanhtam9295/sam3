@@ -235,6 +235,14 @@ def sign_in(username: str, password: str) -> Session:
     return _SESSION
 
 
+def adopt_session(username: str, role: str, display_name: str = "") -> Session:
+    """Connected mode: the account signed in to the server acts here too (the server checked
+    the password and enforces the role)."""
+    global _SESSION
+    _SESSION = Session(username, role, display_name or username, datetime.now(UTC))
+    return _SESSION
+
+
 def sign_out() -> None:
     global _SESSION
     _SESSION = None

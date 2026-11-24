@@ -736,7 +736,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         from hcs_studio.cli_security import run_accounts, run_audit
 
         return run_accounts(args) if args.command == "accounts" else run_audit(args)
-    if args.command in ("worker", "worker-pool", "queue"):
+    if args.command in ("worker", "worker-pool", "queue", "serve"):
         from hcs_studio.cli_server import run as run_server
 
         return run_server(args)

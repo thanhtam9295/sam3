@@ -805,6 +805,19 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   data-root paths), `server/worker.py` (`Worker` runs each job in a `JobProcess`; `run_pool`
   restarts dead workers and reaps). Job processes exit when their parent dies
   (`jobs._exit_with_parent`). CLI `cli_server.py`: `worker`, `worker-pool`, `queue`.
+- **Phase 27b (built)**: `server/api.py` (`create_app`; **no `from __future__ import
+  annotations`** — FastAPI must resolve endpoint annotations imported inside `create_app`; DB
+  session tokens `api_token` (SHA-256 only, migration 0009; expiry `server.session_hours`, idle
+  timeout); every change via services with the token's account and client `api:<host>`; run
+  files path-guarded; image tiles = raw `<u2`/`<f4` chunks (`X-Shape`, `X-Dtype`), 512 px,
+  power-of-two levels; WebSocket `/api/jobs/{id}/ws?token=`; `job_spec_from_request` opens the
+  plate on the server from a data-root path; results go to `server.results_root`).
+  `server/client.py` (`ServerClient` — any httpx-like client, tests pass FastAPI `TestClient`;
+  `RemoteJobQueue` = JobQueue protocol + the attributes the Jobs dock reads). Workers index
+  finished runs (`register_run`). Desktop connected mode: `gui/security_dialogs.connect_server`
+  (server sign-in at launch when `server.url` is set; `accounts.adopt_session` so local
+  services act as the server account). `AppSettings.server`; CLI `serve`. Ruff bugbear
+  `extend-immutable-calls` for fastapi markers.
 
 ## Commands
 

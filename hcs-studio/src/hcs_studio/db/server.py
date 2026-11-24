@@ -73,3 +73,18 @@ class QueueWorker(Base):
     started: Mapped[datetime] = mapped_column(default=utcnow)
     heartbeat: Mapped[datetime] = mapped_column(default=utcnow)
     message: Mapped[str] = mapped_column(Text, default="")
+
+
+class ApiToken(Base):
+    """A signed-in API session: only the SHA-256 of the token is stored."""
+
+    __tablename__ = "api_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(256), index=True)
+    token_sha256: Mapped[str] = mapped_column(String(64), unique=True)
+    client: Mapped[str] = mapped_column(String(256), default="")
+    created: Mapped[datetime] = mapped_column(default=utcnow)
+    expires: Mapped[datetime] = mapped_column(default=utcnow)
+    last_used: Mapped[datetime] = mapped_column(default=utcnow)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)

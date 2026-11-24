@@ -72,7 +72,10 @@ class Worker:
                     finished = finished or event.get("type") == "finished"
                 break
             time.sleep(min(self.poll_s, 0.2))
-        return self.queue.release(self.worker_id, job_id, crashed=not finished)
+        status = self.queue.release(self.worker_id, job_id, crashed=not finished)
+        if finished:
+            register_run(self.queue, job_id)
+        return status
 
     def run_forever(self, stop: Any = None) -> None:
         self.queue.register_worker(self.worker_id, self.gpu, os.getpid())
@@ -132,3 +135,20 @@ def run_pool(
             process.terminate()
         for _, process in slots.values():
             process.join(timeout=10)
+
+
+def register_run(queue: DbJobQueue, job_id: str) -> None:
+    """Index a finished job's run folder in the registry, so clients find it (best effort)."""
+    try:
+        folder = queue.status(job_id).folder
+        if not folder:
+            return
+        from pathlib import Path
+
+        from hcs_studio.db import session_scope
+        from hcs_studio.db.scanner import scan
+
+        with session_scope() as session:
+            scan(session, [Path(folder)])
+    except Exception:  # the run is fine; indexing can be repeated with `db scan`
+        log.exception("Could not index the run of job %s", job_id)

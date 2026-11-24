@@ -304,3 +304,43 @@ class SignRunDialog(QDialog):
         )
         self.sign_button.setEnabled(False)
         self.signed.emit(result)
+
+
+def connect_server(window: Any) -> bool:
+    """Connected mode: when ``server.url`` is set, sign in to the server and let the Jobs dock
+    use it (False when the user gave up; the app then works locally)."""
+    from hcs_studio.config import load_settings
+    from hcs_studio.security.accounts import os_username
+    from hcs_studio.server.client import RemoteJobQueue, ServerClient, ServerError
+
+    settings = load_settings().server
+    if not settings.url:
+        return False
+    client = ServerClient(settings.url, verify=settings.verify_tls)
+    dialog = SignInDialog(
+        window,
+        os_username(),
+        title=f"Sign in to {settings.url}",
+        message="Runs are submitted to and processed on the server.",
+    )
+
+    def check() -> None:
+        try:
+            dialog.info = client.login(dialog.username.text().strip(), dialog.password.text())
+        except (ServerError, OSError) as exc:
+            dialog.error.setText(str(exc))
+            dialog.password.clear()
+            return
+        dialog.accept()
+
+    dialog.check = check  # type: ignore[method-assign]
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return False
+    from hcs_studio.security.accounts import adopt_session
+
+    adopt_session(client.user["user"], client.user["role"], client.user.get("name", ""))
+    window.server = client
+    window.jobs_panel.queue = RemoteJobQueue(client)
+    window.jobs_panel.timer.setInterval(1000)
+    window.statusBar().showMessage(f"Connected to {settings.url} as {client.user.get('user')}")
+    return True

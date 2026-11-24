@@ -76,6 +76,10 @@ def run_gui(smoke_test: bool = False) -> int:
             return 1
     window = MainWindow()
     install_error_handler(window)
+    if not smoke_test:
+        from hcs_studio.gui.security_dialogs import connect_server
+
+        connect_server(window)
     window.show()
     window.show_test_image(switch_tab=False)
     if smoke_test:

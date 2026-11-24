@@ -77,6 +77,20 @@ class SecuritySettings(BaseModel):
         return self.reauth_for_signoff or self.regulated_mode
 
 
+class ServerSettings(BaseModel):
+    """Server mode (Phase 27). On the server: where runs are written and how long API sessions
+    last. On a desktop: the server to connect to (empty = work locally)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(default="", description="https://hcs.example.org (desktop: connect to it)")
+    verify_tls: bool = True
+    #: Server: the results share for runs submitted through the API (a data-root path).
+    results_root: str = ""
+    #: Server: API sessions end after this many hours (and after the idle timeout).
+    session_hours: float = Field(default=12.0, gt=0)
+
+
 class DatabaseConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -94,6 +108,7 @@ class AppSettings(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     automation: AutomationSettings = Field(default_factory=AutomationSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
+    server: ServerSettings = Field(default_factory=ServerSettings)
     #: Earlier per-feature settings files, imported once (read-only copy).
     imported: dict[str, Any] = Field(default_factory=dict)
 
