@@ -33,7 +33,8 @@ def test_versions_hashes_and_round_trip(home: Path) -> None:
     assert first.ref == "nuclei@1" and len(first.content_sha256) == 64
     image, masks = gt.read_item(first, first.items[0])
     assert image.shape == (1, 128, 128) and masks is not None
-    assert np.array_equal(masks > 0, items[0][2] > 0) and int(np.max(masks)) == int(np.max(items[0][2]))
+    assert np.array_equal(masks > 0, items[0][2] > 0)
+    assert int(np.max(masks)) == int(np.max(items[0][2]))
     # an edit is a new version; the old one stays as it was
     corrected = items[0][2].copy()
     corrected[corrected == 1] = 0
