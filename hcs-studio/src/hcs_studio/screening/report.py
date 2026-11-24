@@ -479,3 +479,81 @@ figure{{margin:0;font-size:11px;text-align:center}}img{{display:block;background
     target = folder / "index.html"
     target.write_text(page, encoding="utf-8")
     return target
+
+
+# --------------------------------------------------------------------- summary
+
+
+def write_summary(screen: Path, max_hits: int = 100) -> Path:
+    """``summary.html``: a printable one-page account of the screen — plates screened with
+    Z′, hit rate, the hit list with the gallery images when they exist, artefact and manual
+    decisions, and the confirmation plates when hits were cherry-picked. Built from the files of
+    the screen folder, so it can be rewritten at any time."""
+    screen = Path(screen)
+    info = json.loads((screen / "screen.json").read_text(encoding="utf-8"))
+    plates = pd.read_csv(screen / "plates.csv")
+    hits = pd.read_csv(screen / "hits.csv", keep_default_na=False, na_values=[""])
+    primary = info["config"]["readouts"][0]["alias"]
+    gallery = screen / "gallery"
+    z_column = f"{primary}_z_prime"
+    rows = []
+    for record in plates.to_dict("records"):
+        z = record.get(z_column)
+        bad = isinstance(z, float) and math.isfinite(z) and z < 0.5
+        rows.append(
+            f"<tr><td class=l>{html.escape(str(record['plate']))}</td>"
+            f"<td{' class=bad' if bad else ''}>{'' if z is None or (isinstance(z, float) and not math.isfinite(z)) else f'{z:.2f}'}</td>"
+            f"<td>{record.get('samples', '')}</td><td>{record.get('well_hits', '')}</td>"
+            f"<td>{float(record.get('hit_rate_pct', 0)):.2f}</td></tr>"
+        )
+    hit_rows = []
+    for record in hits.head(max_hits).to_dict("records"):
+        first = str(record.get("wells", "")).split(",")[0]
+        image = ""
+        if ":" in first:
+            plate, well = first.split(":")
+            file = gallery / f"{_anchor(plate)}_{well}.png"
+            if file.exists():
+                image = f'<img src="gallery/{file.name}" alt="{html.escape(first)}">'
+        score = record.get(f"{primary}_score")
+        hit_rows.append(
+            f"<tr><td>{record['rank']}</td><td class=l>{html.escape(str(record['compound']))}</td>"
+            f"<td>{'' if not isinstance(score, float) else f'{score:.3g}'}</td>"
+            f"<td>{record.get('n_hit', '')}/{record.get('n', '')}</td>"
+            f"<td class=l>{html.escape(str(record.get('override') or ''))} {html.escape(str(record.get('override_reason') or ''))}</td>"
+            f"<td>{image}</td></tr>"
+        )
+    pick = screen / "cherrypick" / "cherrypick.json"
+    confirmation = ""
+    if pick.exists():
+        picked = json.loads(pick.read_text(encoding="utf-8"))
+        confirmation = (
+            f"<h2>Confirmation</h2><p>{picked['compounds']} compounds, {picked['transfers']} transfers "
+            f"({picked['backfills']} backfills) onto {len(picked['plates'])} plate(s): "
+            f"{html.escape(', '.join(picked['plates']))} — mode {html.escape(picked['design']['mode'])}, "
+            f"pick list {html.escape(', '.join(picked['pick_lists']))}."
+            + (
+                f" Registered: {html.escape(', '.join(picked.get('registered', [])))}."
+                if picked.get("registered")
+                else ""
+            )
+            + "</p>"
+            + "".join(f"<p class=muted>{html.escape(n)}</p>" for n in picked["notes"])
+        )
+    notes = "".join(f"<li>{html.escape(n)}</li>" for n in info.get("notes", []))
+    page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Screen summary {html.escape(info["name"])}</title>
+<style>body{{font-family:system-ui,sans-serif;margin:16px;max-width:1000px}}table{{border-collapse:collapse;font-size:12px}}
+td,th{{border:1px solid #ddd;padding:2px 6px;text-align:right}}td.l,th.l{{text-align:left}}.bad{{color:#c62828;font-weight:600}}
+.muted{{color:#666;font-size:12px}}img{{max-height:80px}}@media print{{a{{color:inherit}}}}</style></head><body>
+<h1>Screen summary: {html.escape(info["name"])}</h1>
+<p>{info["plates"]} plates, {info["sample_wells"]} sample wells, {info["compounds"]} compounds; <b>{info["hits"]} hits</b>
+({info["hit_rate_pct"]:.2f} %); {info["artifact_wells"]} wells left out as artefacts. Rule <code>{html.escape(info["config"]["hit_rule"])}</code>,
+score {html.escape(info["config"]["score"])}, replicates {html.escape(str(info["config"]["replicate_rule"]))}.
+<a href="report.html">Full report</a>{' · <a href="gallery/index.html">hit gallery</a>' if (gallery / "index.html").exists() else ""}</p>
+<h2>Plates</h2><table><tr><th class=l>plate</th><th>Z′ ({html.escape(primary)})</th><th>samples</th><th>hit wells</th><th>hit rate %</th></tr>{"".join(rows)}</table>
+<h2>Hits</h2><table><tr><th>rank</th><th class=l>compound</th><th>score</th><th>replicates hit</th><th class=l>manual decision</th><th>image</th></tr>{"".join(hit_rows)}</table>
+{confirmation}{f"<h2>Notes</h2><ul>{notes}</ul>" if notes else ""}
+<p class="muted">Written {html.escape(str(info.get("written", "")))} by HCS Studio.</p></body></html>"""
+    target = screen / "summary.html"
+    target.write_text(page, encoding="utf-8")
+    return target

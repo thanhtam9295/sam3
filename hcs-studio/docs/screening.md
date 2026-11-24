@@ -1,7 +1,7 @@
 # Primary screens: hit calling
 
-From single-concentration screening plates to a reviewed hit list (Phase 23a) and the views
-to review it (Phase 23b). Cherry-picking and confirmation plates follow in 23c.
+From single-concentration screening plates to a reviewed hit list (Phase 23a), the views to
+review it (Phase 23b), and cherry-picking the hits onto confirmation plates (Phase 23c).
 
 ## 1. Library plate maps and assay layouts
 
@@ -142,7 +142,57 @@ compound (or a compound clicked on the plate map) with a required reason — the
 `screen.review` service as `hcs-studio screen review`; the hit list, report and table are
 rewritten. Buttons open the report and the gallery in the browser.
 
+## 6. Cherry-picking and confirmation plates
+
+```bash
+hcs-studio screen cherrypick screens/kinase1 --template confirmation_controls.json \
+  --mode dose_response --top-um 30 --points 8 --factor 3 --replicates 2 \
+  --register --outbox //scheduler/inbox
+```
+
+- **Design**: `replicates` (each hit at its screening concentration, or `--concentration-um`, in
+  `--replicates` wells spread over the plate — replicates of a compound never touch) or
+  `dose_response` (`--points` concentrations from `--top-um` down by `--factor` along a row,
+  each replicate series in another row). Hits fill the free wells of the **template** (a layout
+  holding the controls); when a plate is full the next one starts (`CONF-001`, `CONF-002`, …;
+  `--prefix`).
+- **Volumes**: c · V / stock for a final concentration c in the assay volume V
+  (`--assay-volume-ul`, 40), rounded to whole Echo droplets (`--droplet-nl`, 2.5). The layout
+  holds the concentration actually reached, stock · v / (V + v). A transfer below one droplet, or
+  one whose rounding moves the concentration by more than 10 % (e.g. 0.37 µM from 10 mM into
+  40 µL is 1.5 nL; one droplet would give 0.62 µM), is skipped and listed: such points need an
+  intermediate dilution plate. `--backfill PLATE:WELL` tops every compound well up with vehicle
+  to the plate's largest compound volume (equal DMSO in all wells).
+- **Source wells** come from the library map (the registry, or `--library map.csv`).
+- **Pick list** (`cherrypick/picklist.csv`): Labcyte's Echo Cherry Pick columns by default
+  (`Source Plate Barcode`, `Source Well`, `Destination Plate Barcode`, `Destination Well`,
+  `Transfer Volume`). `--format format.yaml` sets the columns to match your protocol — each
+  column is a field (`source_plate`, `source_well`, `destination_plate`, `destination_well`,
+  `volume_nl`, `compound`, `concentration_um`) or fixed text — plus the well style (`A01` or
+  `A1`), the separator, the volume decimals and one file per plate:
+
+  ```yaml
+  columns:
+    - {header: Source Plate Name, value: "Source[1]"}
+    - {header: Source Plate Barcode, field: source_plate}
+    - {header: Source Well, field: source_well}
+    - {header: Destination Plate Barcode, field: destination_plate}
+    - {header: Destination Well, field: destination_well}
+    - {header: Transfer Volume, field: volume_nl}
+  well_format: A1
+  ```
+
+- **Confirmation layouts** (`cherrypick/layouts/<barcode>.json`); `--register` saves each as a
+  layout version keyed by its barcode, so the confirmation plates are annotated — and analysed
+  with pharmacology — automatically when they are imaged.
+- `--outbox` / `--scheduler-url` send one `cherrypick.request` event per plate (lab_events) to
+  the scheduler.
+
+`summary.html` (rewritten after every scoring and cherry-pick) is the one-page screen summary:
+plates screened with Z′, hit rate, the hit list with gallery images, manual decisions, and the
+confirmation plates.
+
 ## Not yet included
 
-PAINS and other chemistry filters need RDKit (not installed; ask before adding). Echo pick lists,
-confirmation layouts and the screen summary report come with 23c.
+PAINS and other chemistry filters need RDKit (not installed; ask before adding). The Echo
+column names and transfer-file parsing have not yet been checked against real Echo files.

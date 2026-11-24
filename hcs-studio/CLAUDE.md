@@ -686,6 +686,15 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   writes report (always) and gallery. GUI `gui/screen_panel.py` (Screen tab: `open`, `review`
   via `services.operations.review_hit`). CLI `screen report <dir> [--gallery N]`, `screen score
   --gallery N`. Keep backslashes out of f-strings (Python 3.11 target).
+- **Phase 23c (built)**: `screening/cherrypick.py` (`ConfirmationDesign` replicates/dose_response,
+  `cherry_pick` → `CherryPick` picks + layouts by barcode; replicate r of hit i at free position
+  i + r·n; series fill the first slot of every row first; volumes c·V/stock rounded to droplets,
+  skipped when < 1 droplet or > `max_rounding_pct` off; `Backfill`; `PickListFormat` columns =
+  field or fixed text; `write_pick_list`; `event_payload`; `run_cherry_pick` (in `WRAPPED`);
+  `volume_check`). Service `operations.cherry_pick_hits` (`screen.cherrypick`: registers layouts
+  via `LayoutStore.save`, sends events via `automation.intake.send`). `report.write_summary` →
+  `summary.html` (after scoring and cherry-pick). CLI `screen cherrypick`. Echo format unverified:
+  ask for the user's sample pick list.
 
 ## Commands
 

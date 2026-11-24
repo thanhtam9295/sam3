@@ -396,10 +396,74 @@ def review_hit(
     summary = json.loads((output / "screen.json").read_text(encoding="utf-8"))
     hits = output / "hits.csv"
     before = compound in hits.read_text(encoding="utf-8") if hits.exists() else None
-    add_override(output, Override(compound=compound, action=action, reason=ctx.reason or "",
-                                  actor=ctx.actor.id))  # fmt: skip
+    add_override(
+        output,
+        Override(compound=compound, action=action, reason=ctx.reason or "", actor=ctx.actor.id),
+    )
     config = ScreenConfig.model_validate(summary["config"])
     result = score([Path(f) for f in summary["runs"]], config, output)
-    ctx.note(object_id=f"{object_id(output)}:{compound}", before={"listed": before},
-             after={"action": action, "hits": len(result.hits)})  # fmt: skip
+    ctx.note(
+        object_id=f"{object_id(output)}:{compound}",
+        before={"listed": before},
+        after={"action": action, "hits": len(result.hits)},
+    )
+    return result
+
+
+@service("screen.cherrypick", object_type="screen")
+def cherry_pick_hits(
+    ctx: ServiceContext,
+    screen: Path,
+    design: Any,
+    template: Any,
+    *,
+    library: Any = None,
+    fmt: Any = None,
+    register: bool = False,
+    outbox: str = "",
+    scheduler_url: str = "",
+) -> Any:
+    """Pick a screen's hits onto confirmation plates: pick list and layouts in
+    ``<screen>/cherrypick/``; ``register`` saves the layouts as versions keyed by their barcodes
+    (the plates are then analysed with them when imaged); ``outbox`` / ``scheduler_url`` send a
+    ``cherrypick.request`` per plate. The screen summary is rewritten."""
+    import json
+
+    from hcs_studio.io.layout_store import LayoutStore, plate_key
+    from hcs_studio.screening.cherrypick import event_payload, run_cherry_pick
+    from hcs_studio.screening.report import write_summary
+
+    screen = Path(screen)
+    result, files = run_cherry_pick(screen, design, template, library=library, fmt=fmt)
+    summary_file = screen / "cherrypick" / "cherrypick.json"
+    summary = json.loads(summary_file.read_text(encoding="utf-8"))
+    name = json.loads((screen / "screen.json").read_text(encoding="utf-8")).get("name", screen.name)
+    if register:
+        registered = []
+        for barcode, layout in result.layouts.items():
+            saved = LayoutStore(plate_key(barcode=barcode)).save(
+                layout, f"confirmation plate of screen {name}"
+            )
+            registered.append(f"{barcode} v{saved.version}")
+        summary["registered"] = registered
+    if outbox or scheduler_url:
+        from hcs_studio.automation.intake import send
+
+        summary["events"] = [
+            send(
+                "cherrypick.request",
+                event_payload(str(name), barcode, result.picks, files[0]),
+                outbox=outbox,
+                scheduler_url=scheduler_url,
+            )["event_id"]
+            for barcode in result.layouts
+        ]
+    summary_file.write_text(json.dumps(summary, indent=1), encoding="utf-8")
+    write_summary(screen)
+    ctx.note(
+        object_id=object_id(screen),
+        after={
+            k: summary.get(k) for k in ("plates", "transfers", "compounds", "registered", "events")
+        },
+    )
     return result

@@ -419,4 +419,7 @@ def run_screen(
         Path(out).mkdir(parents=True, exist_ok=True)
         write_gallery(result, Path(out), max_hits=gallery)
     write_screen(result, out, folders)
+    from hcs_studio.screening.report import write_summary
+
+    write_summary(Path(out))
     return result

@@ -241,6 +241,22 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Primary screens: cherry-picking and confirmation (Phase 23c)
+
+| Check | Result | Test |
+|---|---|---|
+| 30 hits × 3 replicates, 10 µM from 10 mM into 40 µL | 40 nL each (16 droplets); layout concentration 9.99 µM (achieved); no two replicates adjacent; controls untouched | `test_replicates_are_spread_and_volumes_exact` |
+| 150 hits × 3 on a 384 template with 320 free wells | 106 compounds on CONF-001, the rest on CONF-002, 3 replicates each | `test_full_plates_continue_on_the_next` |
+| 8-point dose–response from 30 µM by 3, 2 replicates | series along a row, highest first, replicates in other rows; 30, 10, 3.3 µM kept (within 10 %), 1.1 µM and below skipped (rounding 12–100 % off or < 1 droplet); whole droplets | `test_dose_response_series_and_droplet_limit` |
+| Backfill | every compound well totals the plate's largest volume (120 nL) | `test_backfill_equalises_the_vehicle` |
+| Pick-list formats | default Echo columns; custom headers, fixed text, A1 wells, `;`, one file per plate | `test_pick_list_formats` |
+| CLI on a synthetic screen | pick list from a library map file, layout registered (v1) with all transfers, one schema-valid `cherrypick.request` in the outbox, summary with the confirmation section | `test_cherry_pick_command_registers_and_sends` |
+
+Found while building: rounding to 2.5 nL droplets moved low concentrations far off (0.37 µM →
+0.62 µM, +69 %) → transfers more than 10 % off are skipped and listed (intermediate plates are
+needed for low points). Done-when not yet met: the pick list must match a sample Echo file of
+the user's Cherry Pick protocol (asked for).
+
 ## Primary screens: review views (Phase 23b)
 
 | Check | Result | Test |

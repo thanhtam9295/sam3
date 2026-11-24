@@ -223,9 +223,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--channels", default="", help="the plate's channel names, comma-separated"
     )
     assay_preset.add_argument(
-        "--map", action="append", default=[], metavar="ROLE=CHANNEL",
+        "--map",
+        action="append",
+        default=[],
+        metavar="ROLE=CHANNEL",
         help="e.g. --map dna=DAPI --map edu=EdU",
-    )  # fmt: skip
+    )
     assay_preset.add_argument("--nucleus-um", type=float, default=10.0)
     assay_preset.add_argument("--z-planes", type=int, default=1)
     assay_preset.add_argument("--output", type=Path, required=True)
@@ -238,19 +241,23 @@ def build_parser() -> argparse.ArgumentParser:
     kinetics = sub.add_parser("kinetics", help="time courses of time-lapse plates")
     kinetics_sub = kinetics.add_subparsers(dest="kinetics_command", required=True)
     kinetics_table = kinetics_sub.add_parser(
-        "table", help="readouts per well and time point (one time-lapse run, or several "
+        "table",
+        help="readouts per well and time point (one time-lapse run, or several "
         "acquisitions of the same plate joined on their times)",
-    )  # fmt: skip
+    )
     kinetics_table.add_argument("folders", type=Path, nargs="+", help="run folder(s)")
     kinetics_table.add_argument(
-        "--treated-at", default=None, help="when the compounds were added (ISO 8601; default: "
+        "--treated-at",
+        default=None,
+        help="when the compounds were added (ISO 8601; default: "
         "the layout's treatment time, else the plate.dispensed event)",
-    )  # fmt: skip
+    )
     kinetics_table.add_argument("--output", type=Path, default=None, help="CSV to write")
     kinetics_analyse = kinetics_sub.add_parser(
-        "analyse", help="growth fits, doubling times, IC50 and GR over time (one time-lapse run, "
+        "analyse",
+        help="growth fits, doubling times, IC50 and GR over time (one time-lapse run, "
         "or several acquisitions of the same plate)",
-    )  # fmt: skip
+    )
     kinetics_analyse.add_argument("folders", type=Path, nargs="+", help="run folder(s)")
     kinetics_analyse.add_argument("--readout", default="auto")
     kinetics_analyse.add_argument("--treated-at", default=None)
@@ -278,6 +285,36 @@ def build_parser() -> argparse.ArgumentParser:
     screen_report.add_argument("output", type=Path, help="screen folder")
     screen_report.add_argument("--gallery", type=int, default=0, help="first N hits")
     screen_report.add_argument("--reason", default="")
+    screen_pick = screen_sub.add_parser(
+        "cherrypick", help="Echo pick list and confirmation plates for the hits"
+    )
+    screen_pick.add_argument("output", type=Path, help="screen folder")
+    screen_pick.add_argument(
+        "--template",
+        type=Path,
+        required=True,
+        help="layout with the controls of the confirmation plates",
+    )
+    screen_pick.add_argument(
+        "--mode", choices=["replicates", "dose_response"], default="replicates"
+    )
+    screen_pick.add_argument("--replicates", type=int, default=3)
+    screen_pick.add_argument("--concentration-um", type=float, help="replicates: final conc.")
+    screen_pick.add_argument("--top-um", type=float, help="dose_response: highest conc.")
+    screen_pick.add_argument("--points", type=int, default=8)
+    screen_pick.add_argument("--factor", type=float, default=3.0)
+    screen_pick.add_argument("--assay-volume-ul", type=float, default=40.0)
+    screen_pick.add_argument("--droplet-nl", type=float, default=2.5)
+    screen_pick.add_argument("--prefix", default="CONF", help="destination barcode prefix")
+    screen_pick.add_argument("--backfill", metavar="PLATE:WELL", help="vehicle source well")
+    screen_pick.add_argument("--format", type=Path, help="pick-list format (YAML/JSON)")
+    screen_pick.add_argument("--library", type=Path, help="library map (default: registry)")
+    screen_pick.add_argument(
+        "--register", action="store_true", help="pre-register the confirmation layouts by barcode"
+    )
+    screen_pick.add_argument("--outbox", default="", help="folder for cherrypick.request events")
+    screen_pick.add_argument("--scheduler-url", default="", help="POST the events here")
+    screen_pick.add_argument("--reason", default="")
     screen_review = screen_sub.add_parser("review", help="include or exclude a hit by hand")
     screen_review.add_argument("output", type=Path, help="screen folder")
     screen_review.add_argument("--compound", required=True, help="compound name or key")
@@ -836,9 +873,14 @@ def _qc(args: argparse.Namespace) -> int:
                 print(f"  {done}/{total} fields", flush=True)
 
         result = run_image_qc(
-            _ctx(args), plate, rules, args.output, wells=wells, workers=args.workers,
+            _ctx(args),
+            plate,
+            rules,
+            args.output,
+            wells=wells,
+            workers=args.workers,
             progress=progress,
-        )  # fmt: skip
+        )
     except (OSError, ValueError, KeyError) as exc:
         print(f"Error: {exc}")
         return 2
@@ -925,9 +967,11 @@ def _kinetics(args: argparse.Namespace) -> int:
         output = folders[0] / "tables" / "time_course.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(output, index=False)
-    print(f"Times: {info['time_source'] or 'separate acquisitions'}; started "
-          f"{info['acquired_at'] or 'unknown'}; treated {info['treated_at'] or 'unknown'}"
-          + (f" ({info['treatment_source']})" if info["treatment_source"] else ""))  # fmt: skip
+    print(
+        f"Times: {info['time_source'] or 'separate acquisitions'}; started "
+        f"{info['acquired_at'] or 'unknown'}; treated {info['treated_at'] or 'unknown'}"
+        + (f" ({info['treatment_source']})" if info["treatment_source"] else "")
+    )
     print(f"Time course: {output} ({table['well'].nunique()} wells, {len(table)} rows)")
     return 0
 
@@ -950,8 +994,10 @@ def _kinetics_analyse(args: argparse.Namespace, folders: list[Path]) -> int:
         return 2
     for note in result.notes:
         print(f"Note: {note}")
-    print(f"Readout: {result.readout}; {len(result.fits)} wells; files in {output}: "
-          + ", ".join(files))  # fmt: skip
+    print(
+        f"Readout: {result.readout}; {len(result.fits)} wells; files in {output}: "
+        + ", ".join(files)
+    )
     return 0
 
 
@@ -982,6 +1028,8 @@ def _screen(args: argparse.Namespace) -> int:
                 args.output,
                 gallery=args.gallery,
             )
+        elif args.screen_command == "cherrypick":
+            return _screen_cherrypick(args)
         elif args.screen_command == "review":
             from hcs_studio.services.operations import review_hit
 
@@ -1006,6 +1054,49 @@ def _screen(args: argparse.Namespace) -> int:
     print(
         f"Screen: {len(result.plates)} plates, {len(result.compounds)} compounds, "
         f"{len(result.hits)} hits → {args.output / 'hits.csv'}"
+    )
+    return 0
+
+
+def _screen_cherrypick(args: argparse.Namespace) -> int:
+    from hcs_studio.io.layout_io import load_layout
+    from hcs_studio.screening.cherrypick import Backfill, ConfirmationDesign, PickListFormat
+    from hcs_studio.screening.library import read_library_map
+    from hcs_studio.services.operations import cherry_pick_hits
+
+    backfill = None
+    if args.backfill:
+        plate, well = args.backfill.split(":", 1)
+        backfill = Backfill(source_plate=plate, source_well=well)
+    design = ConfirmationDesign(
+        mode=args.mode,
+        replicates=args.replicates,
+        concentration_um=args.concentration_um,
+        top_um=args.top_um,
+        points=args.points,
+        factor=args.factor,
+        assay_volume_ul=args.assay_volume_ul,
+        droplet_nl=args.droplet_nl,
+        barcode_prefix=args.prefix,
+        backfill=backfill,
+    )
+    result = cherry_pick_hits(
+        _ctx(args),
+        args.output,
+        design,
+        load_layout(args.template).layout,
+        library=read_library_map(args.library) if args.library else None,
+        fmt=PickListFormat.load(args.format) if args.format else None,
+        register=args.register,
+        outbox=args.outbox,
+        scheduler_url=args.scheduler_url,
+    )
+    for note in result.notes:
+        print(f"Note: {note}")
+    compounds = int((result.picks["kind"] == "compound").sum())
+    print(
+        f"Cherry-pick: {compounds} transfers onto {len(result.layouts)} plate(s) "
+        f"({', '.join(result.layouts)}) → {args.output / 'cherrypick'}"
     )
     return 0
 

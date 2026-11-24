@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Phase 23c — primary screens: cherry-picking and confirmation
+- `hcs-studio screen cherrypick` (service `screen.cherrypick`): confirmation plates for the hits —
+  spread replicates or dose–response series on a control template, volumes rounded to Echo
+  droplets with the achieved concentration in the layout (transfers off by > 10 % or below one
+  droplet skipped and listed), optional vehicle backfill, several plates when one is full.
+- Echo pick list with configurable columns (fields or fixed text, A01/A1, separator, decimals,
+  one file per plate); confirmation layouts pre-registered by barcode; `cherrypick.request`
+  events to the scheduler outbox/URL.
+- `summary.html`: one-page screen summary (Z′ per plate, hit rate, hits with images, decisions,
+  confirmation plates).
+
 ### Phase 23b — primary screens: review views
 - `report.html` in every screen folder: summary, plate Z′ table, plate heat maps (hits outlined,
   artefacts crossed, controls marked), score vs plate order with control medians, score
