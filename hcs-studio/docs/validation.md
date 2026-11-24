@@ -241,6 +241,28 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Lab assistant (Phase 28)
+
+Checked against a mocked Claude client (`tests/test_assistant*.py`):
+
+- Read-only SQL: writes, DDL, `ATTACH`, `PRAGMA`, several statements, `sqlite_master`, the
+  snapshot's own table and extension loading are refused by the connection; the row limit
+  truncates and a runaway recursive query stops at the time limit.
+- Privacy: the snapshot and every request of a conversation that calls all data tools (with
+  and without compound codes) contain no planted owner/operator names, notes, SMILES,
+  suppliers, home or run-folder paths; with codes, no compound name.
+- Images: the thumbnail tool is not offered unless allowed and requested; the loop pauses for
+  confirmation, nothing is sent while waiting, declining sends no pixels; sent thumbnails are
+  8-bit RGB ≤ 256 px.
+- Audit and budget: question, tool calls and answer are events with the user; usage is
+  recorded; the budget blocks the next question; admins only can change settings or the key.
+- Evaluation set: 30 questions; every ground-truth query runs and the grading passes an oracle
+  that answers from it (unit conversions and rounding included).
+
+**Not checked yet: the live evaluation against the Claude API** (done-when: ≥ 90 % of answers
+match the SQL ground truth). Run `hcs-studio assistant eval --workdir <new folder>` with your
+key; it costs tokens. The grounding check is heuristic (flags numbers found in no tool result).
+
 ## Server mode (Phase 27)
 
 | Check | Result | Test |

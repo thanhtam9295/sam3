@@ -61,6 +61,10 @@ results share, failed jobs.
 `login`, `submit`, `job`, `events`, `send_event` (lab events, Phase 19 contract). Give the
 scheduler its own account (role analyst).
 
+**Lab assistant** (if enabled on the server): the desktop's Assistant tab sends questions to the
+server, which holds the Claude API key and calls the API (`/api/assistant/…`, see
+[assistant](assistant.md)).
+
 ## Running it
 
 ### Docker Compose on a Linux GPU server (recommended)

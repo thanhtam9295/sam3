@@ -51,6 +51,7 @@ packages = [
     "argon2",
     "_argon2_cffi_bindings",
     "lab_events",
+    "anthropic",  # lab assistant (optional extra; skipped when not installed)
     "umap",
     "pynndescent",
 ]

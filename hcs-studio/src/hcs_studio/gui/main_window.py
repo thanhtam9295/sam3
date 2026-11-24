@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from hcs_studio import __version__
+from hcs_studio.gui.assistant_panel import AssistantPanel, AssistantSettingsDialog
 from hcs_studio.gui.browser import BrowserPanel
 from hcs_studio.gui.classify_panel import ClassifyPanel
 from hcs_studio.gui.compare_panel import ComparePanel
@@ -124,6 +125,10 @@ class MainWindow(QMainWindow):
         self.experiments_panel.open_run.connect(self.show_results)
         self.experiments_panel.log.connect(self.log)
         self.tabs.addTab(self.experiments_panel, "Experiments")
+        self.assistant_panel = AssistantPanel()
+        self.assistant_panel.log.connect(self.log)
+        self.assistant_panel.ui_action.connect(self.on_assistant_action)
+        self.tabs.addTab(self.assistant_panel, "Assistant")
         self.setCentralWidget(self.tabs)
 
         self.browser = BrowserPanel()
@@ -282,6 +287,7 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._action("&Assay wizard…", self.open_assay_wizard))
         tools_menu.addAction(self._action("A&udit trail…", self.open_audit_trail))
         tools_menu.addAction(self._action("Si&gn the run in Results…", self.sign_run))
+        tools_menu.addAction(self._action("Lab assis&tant settings…", self.open_assistant_settings))
 
         view_menu = self.menuBar().addMenu("&View")
         for dock in (
@@ -523,6 +529,39 @@ class MainWindow(QMainWindow):
         self.viewer_panel.show_stages([(stage.lower(), image)])
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Showing {stage.lower()} {well} field {index} from {folder.name}")
+
+    def open_assistant_settings(self) -> None:
+        dialog = AssistantSettingsDialog(self)
+        if dialog.exec():
+            self.assistant_panel.assistant.new_conversation()
+            self.assistant_panel.refresh_status()
+            self.log("Lab assistant settings saved")
+
+    def on_assistant_action(self, action: dict[str, Any]) -> None:
+        """Highlights and comparisons asked for by the assistant (view changes only)."""
+        from hcs_studio.db import session_scope
+        from hcs_studio.db.catalog import Run
+        from hcs_studio.paths import resolve
+
+        try:
+            with session_scope() as session:
+                run = session.get(Run, int(action.get("run_id") or 0))
+                folder = resolve(run.folder) if run is not None else None
+        except Exception as exc:
+            self.log(f"The assistant's run {action.get('run_id')} is not available here: {exc}")
+            return
+        if folder is None:
+            self.log(f"The assistant's run {action.get('run_id')} is not in this registry")
+            return
+        wells = list(action.get("wells") or [])
+        if action.get("action") == "open_comparison":
+            self.compare_wells(folder, wells)
+            return
+        if self.results_panel.results is None or self.results_panel.results.folder != folder:
+            self.show_results(folder)
+        self.results_panel.mark_wells(wells)
+        self.tabs.setCurrentWidget(self.results_panel)
+        self.log(f"Assistant: {action.get('note') or 'wells highlighted'} ({', '.join(wells)})")
 
     def compare_wells(self, folder: Path, wells: list[str]) -> None:
         """Open wells of a run side by side in the Compare tab."""
@@ -882,6 +921,8 @@ class MainWindow(QMainWindow):
         self.log(f"Saved layout version {layout.version}; new runs use it ({path})")
 
     def _on_tab_changed(self, index: int) -> None:
+        if self.tabs.widget(index) is self.assistant_panel:
+            self.assistant_panel.refresh_status()
         if self.tabs.widget(index) is self.experiments_panel:
             self.experiments_panel.refresh()  # the registry may have changed meanwhile
         # show the editor's (possibly unsaved) annotation on the plate map

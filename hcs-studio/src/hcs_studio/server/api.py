@@ -560,6 +560,10 @@ def create_app() -> Any:
             ][:50],
         }
 
+    from hcs_studio.server import assistant_api
+
+    assistant_api.register(app, user, ctx, fail)
+
     @app.get("/", response_class=HTMLResponse)
     def portal() -> str:
         """The web portal (one self-contained page; it signs in through the API)."""

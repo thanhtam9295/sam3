@@ -14,7 +14,7 @@ if ($Variant -eq "cuda") {
 } else {
     uv pip install --python $py torch --index-url https://download.pytorch.org/whl/cpu
 }
-uv pip install --python $py -e ".[gui,segmentation,packaging]"
+uv pip install --python $py -e ".[gui,segmentation,assistant,packaging]"
 
 # The user guide is shipped as HTML next to the program.
 & $py scripts\build_docs.py dist\docs

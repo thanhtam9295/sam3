@@ -152,7 +152,7 @@ def test_deployment_files_are_consistent() -> None:
     for name in ("api", "worker-gpu", "worker-cpu"):
         assert "ports" not in services[name]
     dockerfile = (DEPLOY / "Dockerfile").read_text()
-    assert "[server,segmentation]" in dockerfile and "USER hcs" in dockerfile
+    assert "[server,segmentation,assistant]" in dockerfile and "USER hcs" in dockerfile
     nginx = (DEPLOY / "nginx.conf").read_text()
     assert "proxy_pass http://api:8000" in nginx and "Upgrade $http_upgrade" in nginx
     env = (DEPLOY / ".env.example").read_text()

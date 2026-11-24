@@ -11,7 +11,7 @@ RUN apt-get update \
 
 COPY lab_events /src/lab_events
 COPY hcs-studio /src/hcs-studio
-RUN pip install --no-cache-dir /src/lab_events "/src/hcs-studio[server,segmentation]"
+RUN pip install --no-cache-dir /src/lab_events "/src/hcs-studio[server,segmentation,assistant]"
 
 # Run as an unprivileged user; settings (data roots, server options) live in a volume.
 RUN useradd --system --uid 10001 --home /data hcs && mkdir -p /data/settings && chown -R hcs /data

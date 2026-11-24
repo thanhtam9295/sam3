@@ -274,6 +274,7 @@ def test_user_guide_builds_as_html(tmp_path: Path) -> None:
         "security.html",
         "server.html",
         "it_security.html",
+        "assistant.html",
         "validation.html",
     }
     for page in pages:

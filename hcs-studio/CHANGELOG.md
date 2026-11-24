@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Phase 28 — Claude lab assistant
+- Assistant tab, `hcs-studio assistant ask|preview|status`: plain-language questions about
+  results, answered with the Claude API from curated, read-only views of the registry. Every
+  answer shows its work (each tool call with its SQL); numbers found in no tool result are
+  flagged.
+- Read-only tools: schema, SQL on the curated views (read-only connection, authorizer, row
+  and time limits), plate layouts, scrubbed run manifests, dose-response fits and points,
+  synergy scores, QC summaries, readouts; charts drawn locally; well highlights and comparison
+  view; pipeline-change proposals and methods drafts (structured output) that the user applies.
+- Privacy: no paths, user names, structures or single-cell data are sent; notes only when
+  included; optional compound codes instead of names; image thumbnails only when allowed by an
+  admin and confirmed per image. "Data to be sent" preview.
+- Governance: off until an admin enables it (Tools → Lab assistant settings…,
+  `assistant configure`, `assistant set-key`); key in the OS keychain or, in server mode, only
+  on the server (`/api/assistant/…`); per-user monthly token budget (`assistant_usage`,
+  migration 0010); prompt caching; every question, tool call, image decision and answer in the
+  audit trail. Default models: Claude Opus 5.5 (routine), Claude Fable 5.2 (stronger).
+- Evaluation set of 30 questions with SQL ground truth on the synthetic registry
+  (`hcs-studio assistant eval`, opt-in `HCS_ASSISTANT_EVAL=1`); docs/assistant.md with the
+  data-retention checklist.
+- New: extra `assistant` (anthropic).
+
 ### Phase 27 — server mode
 - PostgreSQL registry (tested on PostgreSQL 16) and a job queue in the database: workers on a
   GPU server claim jobs (`SKIP LOCKED`) by priority and per-user fair share, one worker per GPU

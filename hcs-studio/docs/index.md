@@ -673,6 +673,13 @@ Set up ilastik under **Tools → ilastik settings…** (or `hcs-studio ilastik -
 Studio finds the installation, checks its version and blocks releases known not to work.
 Running projects follows in the next build steps. Details: [ilastik.md](ilastik.md).
 
+## Lab assistant
+
+The **Assistant** tab answers questions about results in plain language with Claude, from a
+curated, read-only copy of the registry; every answer lists the queries behind it. It is off
+until an admin enables it, and you control what leaves the computer (compound codes instead of
+names, notes, images confirmed one by one). See [assistant.md](assistant.md).
+
 ## Limitations in this phase
 
 - Readers have been tested on synthetic plates only, not yet on real instrument exports.

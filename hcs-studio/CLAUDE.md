@@ -352,7 +352,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17 and 18 built; 19 paused; 20 built (20a–20e); 21 built (21a–21c)
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17, 18, 20–28 built; 19 paused
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -825,12 +825,41 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   context = repo root; compose: db, api, worker-gpu, worker-cpu, proxy — only the proxy
   publishes a port; nginx.conf with WebSocket upgrade; settings example). Docs `server.md`,
   `it_security.md`. Done-when test `tests/test_server_e2e.py` (uvicorn + pool).
+- **Phase 28 decisions** (2026-11-24): `anthropic` SDK approved as extra `assistant`
+  (`anthropic>=2.13,<3`, API version 2026-10-21); live evaluation later (the user runs it with
+  their key). Messages API with HCS Studio's own tool loop (not Managed Agents, not the beta
+  tool runner): tools run locally on lab data, every call is audited/confirmable. Defaults
+  `claude-opus-5-5` effort medium (routine), `claude-fable-5-2` effort high (stronger; a
+  Covered Model — 30-day retention, not under ZDR: docs say to switch to Opus with ZDR).
+  No `thinking` parameter (adaptive by default), no sampling parameters, no forced
+  `tool_choice` (400 on these models); server-side refusal fallback (`fallbacks: "default"`,
+  beta `server-side-fallback-2026-07-01`) for the models in `FALLBACK_MODELS`.
+- **Phase 28 (built)**: package `assistant/`: `views.py` (`VIEWS` = the only data the assistant
+  sees, documented; `build_snapshot` writes a separate SQLite file per conversation; `Privacy`
+  (compound codes, notes), `Pseudonyms.reveal` on screen only; `scrub` for manifests/QC JSON —
+  path-like values and keys naming people/hosts/files/notes removed; add a view before a tool
+  may use new data), `sql.py` (`ReadOnlyDatabase`: `mode=ro`, `query_only`, authorizer —
+  CTE reads have db None, stored tables need to be views — progress-handler timeout, row cap),
+  `tools.py` (`TOOL_SPECS` strict schemas, all properties required + nullable; inputs
+  re-validated by `_check_types`; `ToolOutcome` content/summary/sql/ui; `NeedsConfirmation`
+  for thumbnails), `conversation.py` (`Conversation.ask/resume/preview`, `PayloadLog`,
+  `unsupported_numbers` grounding check, structured-output methods draft; system prompt =
+  fixed instructions + `schema_text` with a cache breakpoint, top-level `cache_control`;
+  append `response.content` unchanged), `usage.py` (weighted tokens, `assistant_usage`,
+  migration 0010), `session.py` (`LocalAssistant`, `RemoteAssistant`), `evaluation.py`
+  (`ITEMS` with ground-truth SQL by barcode, `grade`, `run_evaluation`). Services
+  `services/assistant.py` (`assistant.question|tool|thumbnail|answer` = viewer;
+  `settings.assistant`, `settings.assistant_key` = admin). Server `server/assistant_api.py`
+  (no future import; conversations per account; `app.state.assistant.client_factory` for
+  tests). GUI `gui/assistant_panel.py` (Assistant tab, `confirm` injectable;
+  `AssistantSettingsDialog`); CLI `cli_assistant.py`. Tests use dict responses from fake
+  clients (`client.messages.create` / `client.beta.messages.create`).
 
 ## Commands
 
 Run from this folder (`hcs-studio/`).
 
-- Environment: `uv venv --python 3.12 .venv` then `uv pip install --python .venv/bin/python -e ".[gui,dev,segmentation,profiling,server]"`
+- Environment: `uv venv --python 3.12 .venv` then `uv pip install --python .venv/bin/python -e ".[gui,dev,segmentation,profiling,server,assistant]"`
 - Launch: `python -m hcs_studio` (or `hcs-studio`); `hcs-studio info` prints version and GPU status
 - Describe how a path is read: `hcs-studio inspect <path>`
 - Run a pipeline: `hcs-studio run --pipeline p.yaml --input <plate> --wells A01-H12 --workers auto`; `--resume <folder>`, `--retry-failed <folder>`; list modules: `hcs-studio modules`
@@ -846,6 +875,7 @@ Run from this folder (`hcs-studio/`).
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
 - Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; assays: `hcs-studio assay list | preset cell_cycle --map dna=DAPI [--map edu=EdU] --channels … --output p.yaml | run <run> cell_cycle --map dna=DAPI`; kinetics: `hcs-studio kinetics table <run> [<run>… --output c.csv] [--treated-at ISO]` | `analyse <run> [<run>…] [--readout R --interval-h H --output dir]`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
+- Lab assistant: `hcs-studio assistant ask "…" [--strong --ids-only] | preview | status | configure --enable | set-key | eval --workdir <new>` (live eval costs tokens; also `HCS_ASSISTANT_EVAL=1 pytest tests/test_assistant_eval.py`)
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`
 - Windows installer (on Windows): `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Variant cuda]`; user guide as HTML: `python scripts/build_docs.py <folder>`

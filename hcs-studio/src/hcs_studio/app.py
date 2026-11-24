@@ -685,6 +685,9 @@ def build_parser() -> argparse.ArgumentParser:
     from hcs_studio.cli_server import add_parsers as add_server_parsers
 
     add_server_parsers(sub)
+    from hcs_studio.cli_assistant import add_parsers as add_assistant_parsers
+
+    add_assistant_parsers(sub)
     return parser
 
 
@@ -750,6 +753,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "models":
             return run_models(args)
         return run_gt(args) if args.command == "gt" else run_validate(args)
+    if args.command == "assistant":
+        from hcs_studio.cli_assistant import run as run_assistant
+
+        return run_assistant(args)
     if args.command == "screen":
         return _screen(args)
     if args.command == "kinetics":

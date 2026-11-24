@@ -15,7 +15,10 @@ for the installation.
 
 - ☐ Only port 443 is published; the server is reachable from the internal network only.
 - ☐ TLS 1.2+ with the institutional certificate (`deploy/certs/`); HSTS is set by nginx.
-- No outbound internet access is needed at run time. Cellpose/SAM weights come from
+- ☐ Lab assistant (only if enabled, [assistant](assistant.md)): the API container needs
+  outbound HTTPS to `api.anthropic.com`; the key is in the server's keychain or
+  `HCS_SECRET_ANTHROPIC_API_KEY`, and only curated, scrubbed result tables are sent.
+- Otherwise no outbound internet access is needed at run time. Cellpose/SAM weights come from
   huggingface.co once (pre-load them into the image or the settings volume if the server has
   no internet access).
 
