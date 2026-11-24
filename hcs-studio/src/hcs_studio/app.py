@@ -719,9 +719,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _assay(args)
     if args.command == "cellpainting":
         return _cellpainting(args)
-    if args.command in ("gt", "validate-seg"):
-        from hcs_studio.cli_models import run_gt, run_validate
+    if args.command in ("gt", "validate-seg", "models"):
+        from hcs_studio.cli_models import run_gt, run_models, run_validate
 
+        if args.command == "models":
+            return run_models(args)
         return run_gt(args) if args.command == "gt" else run_validate(args)
     if args.command == "screen":
         return _screen(args)

@@ -55,6 +55,49 @@ def add_parsers(sub: Any) -> None:
     val.add_argument("--pixel-size", type=float, help="µm per pixel when items lack it")
     val.add_argument("--output", type=Path, help="folder for fields.csv and metrics.json")
 
+    models = sub.add_parser("models", help="the model registry: train, register, promote, pin")
+    models_sub = models.add_subparsers(dest="models_command", required=True)
+    listing = models_sub.add_parser("list", help="registered model versions")
+    listing.add_argument("--name")
+    listing.add_argument("--kind")
+    show = models_sub.add_parser("show", help="one version with its metrics")
+    show.add_argument("ref", help="NAME, NAME@VERSION or NAME@production")
+    reg = models_sub.add_parser("register", help="register a model file as a new candidate")
+    reg.add_argument("file", type=Path)
+    reg.add_argument("--name", required=True)
+    reg.add_argument(
+        "--kind",
+        required=True,
+        choices=["cellpose", "steps", "classifier", "qc_classifier", "ilastik", "micro_sam"],
+    )
+    reg.add_argument("--base-model", default="")
+    reg.add_argument("--training-set", default="", help="ground-truth NAME@VERSION")
+    reg.add_argument("--notes", default="")
+    reg.add_argument("--reason", default="")
+    status = models_sub.add_parser("status", help="candidate → validated → production → retired")
+    status.add_argument("ref", help="NAME@VERSION")
+    status.add_argument("status", choices=["candidate", "validated", "production", "retired"])
+    status.add_argument("--reason", required=True)
+    status.add_argument("--yes", action="store_true", help="confirm a promotion to production")
+    train = models_sub.add_parser("train", help="train on a ground-truth set and register")
+    train.add_argument("--kind", required=True, choices=["steps", "cellpose", "classifier"])
+    train.add_argument("--name", required=True)
+    train.add_argument("--set", dest="gt", required=True, help="ground-truth NAME[@VERSION]")
+    train.add_argument("--channel", type=int, default=1)
+    train.add_argument("--second-channel", type=int)
+    train.add_argument("--base-model", default="")
+    train.add_argument("--pixel-size", type=float)
+    train.add_argument("--epochs", type=int, help="Cellpose")
+    train.add_argument("--learning-rate", type=float, help="Cellpose")
+    train.add_argument("--grid", help='steps: JSON, e.g. {"method": ["otsu", "li"]}')
+    train.add_argument("--algorithm", choices=["random_forest", "logistic_regression"])
+    train.add_argument("--device", default="auto", choices=["auto", "cpu", "gpu"])
+    train.add_argument("--notes", default="")
+    train.add_argument("--reason", default="")
+    pin = models_sub.add_parser("pin", help="replace @production references by exact versions")
+    pin.add_argument("pipeline", type=Path)
+    pin.add_argument("--output", type=Path, help="default: overwrite the pipeline file")
+
 
 def _context(args: argparse.Namespace) -> Any:
     from hcs_studio.services import context
@@ -163,4 +206,107 @@ def run_validate(args: argparse.Namespace) -> int:
     if args.output:
         write_validation(result, args.output)
         print(json.dumps({"written": str(args.output)}))
+    return 0
+
+
+def _model_line(m: Any) -> str:
+    validation = m.metrics.get("validation", {})
+    score = validation.get("overall", {}).get("ap50", validation.get("balanced_accuracy"))
+    shown = f"{score:.3f}" if isinstance(score, float) else "–"
+    return (
+        f"{m.name}@{m.version}  {m.kind:<12} {m.status:<10} validation {shown:<6} "
+        f"set {m.training_set or '–'}  sha256 {m.sha256[:12]}  {m.created[:10]}"
+    )
+
+
+def run_models(args: argparse.Namespace) -> int:
+    from hcs_studio.services import training as services
+    from hcs_studio.training import registry
+
+    try:
+        if args.models_command == "list":
+            for model in registry.list_models(args.name, args.kind):
+                print(_model_line(model))
+        elif args.models_command == "show":
+            name, _, version = args.ref.removeprefix(registry.PREFIX).partition("@")
+            model = registry.get_model(name, version or None)
+            print(_model_line(model))
+            print(
+                json.dumps(
+                    {
+                        "file": str(model.path),
+                        "base_model": model.base_model,
+                        "hyperparameters": model.hyperparameters,
+                        "metrics": model.metrics,
+                        "notes": model.notes,
+                    },
+                    indent=1,
+                    default=str,
+                )
+            )
+        elif args.models_command == "register":
+            model = services.register_model(
+                _context(args),
+                args.name,
+                args.kind,
+                args.file,
+                base_model=args.base_model,
+                training_set=args.training_set,
+                notes=args.notes,
+            )
+            print(_model_line(model))
+        elif args.models_command == "status":
+            name, _, version = args.ref.removeprefix(registry.PREFIX).partition("@")
+            if not version.isdigit():
+                raise ValueError("give an exact version: NAME@VERSION")
+            if args.status == "production" and not args.yes:
+                print(
+                    f"Promoting {name}@{version} to production changes what new pipelines use; "
+                    "repeat with --yes to confirm"
+                )
+                return 2
+            model = services.set_model_status(
+                _context(args), name, int(version), args.status, approved=args.yes
+            )
+            print(_model_line(model))
+        elif args.models_command == "train":
+            from hcs_studio.training.train import TrainingSpec
+
+            hyper: dict[str, Any] = {}
+            if args.epochs:
+                hyper["epochs"] = args.epochs
+            if args.learning_rate:
+                hyper["learning_rate"] = args.learning_rate
+            if args.grid:
+                hyper["grid"] = json.loads(args.grid)
+            if args.algorithm:
+                hyper["algorithm"] = args.algorithm
+            spec = TrainingSpec(
+                kind=args.kind,
+                name=args.name,
+                set=args.gt,
+                channel=args.channel,
+                second_channel=args.second_channel,
+                base_model=args.base_model,
+                pixel_size_um=args.pixel_size,
+                hyperparameters=hyper,
+                device=args.device,
+                notes=args.notes,
+            )
+            result = services.train_model(_context(args), spec, print)
+            print(_model_line(result.model))
+            if result.baseline is not None:
+                print(
+                    f"Validation AP@0.5: {result.validation['overall']['ap50']:.3f} "
+                    f"(base model {result.baseline['overall']['ap50']:.3f})"
+                )
+        else:
+            from hcs_studio.pipeline.schema import Pipeline
+
+            pipeline, changes = registry.pin_pipeline(Pipeline.load(args.pipeline))
+            pipeline.save(args.output or args.pipeline)
+            print("\n".join(changes) or "Nothing to pin: every model reference names a version")
+    except (ValueError, PermissionError, FileExistsError) as exc:
+        print(f"Error: {exc}")
+        return 2
     return 0

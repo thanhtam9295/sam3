@@ -39,6 +39,11 @@ class Job:
 
 def run_job(job: Job, events: Any, cancel: Any, pause: Any) -> None:
     """Process entry point: run the job and report through ``events`` (a queue)."""
+    if job.extra.get("task") == "train":  # Phase 25: model training in the queue
+        from hcs_studio.training.train import run_training_job
+
+        run_training_job(job.extra["spec"], events.put)
+        return
     try:
         from hcs_studio.io.base import reopen_plate
         from hcs_studio.io.sidecar import apply_overrides

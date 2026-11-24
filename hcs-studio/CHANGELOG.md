@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Phase 25b — model registry and training
+- Model registry (`hcs-studio models list|show|register|status|pin`; services `models.*`):
+  immutable model store, kind, base model, training set and hash, hyperparameters, metrics,
+  author, status candidate → validated → production → retired (production needs a confirmation
+  and a reason; the previous production version is demoted).
+- Pipelines reference models as `registry:NAME@VERSION` (Cellpose, object classifier, learned
+  QC, new step `segment_model` for registered step sets); `models pin` fixes `@production` to an
+  exact version. The run manifest's `models` now lists every model with its SHA-256 (it was
+  always empty before).
+- Training on ground-truth sets (`hcs-studio models train`, the job queue in the app): tuned
+  classical segmentation, Cellpose fine-tuning, object classifiers — validated against the base
+  model and registered as candidates with a feature summary for drift alerts.
+
 ### Phase 25a — ground truth and validation metrics
 - Versioned ground-truth sets (`hcs-studio gt import|split|show|list|export`; services
   `groundtruth.import|create|split`): images, masks, per-field provenance, content hash; splits by

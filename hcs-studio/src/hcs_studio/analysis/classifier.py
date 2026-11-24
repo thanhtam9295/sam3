@@ -358,7 +358,8 @@ class ClassifyParams(TableParams):
         description="Objects get class_<name>, class_<name>_probability, class_<name>_p_<class>.",
     )
     model_path: str = Field(
-        default="", description="Classifier file (.joblib) saved by HCS Studio."
+        default="",
+        description="Classifier file (.joblib) saved by HCS Studio, or registry:NAME@VERSION.",
     )
     min_probability: float = Field(
         default=0.0,
@@ -382,7 +383,8 @@ class ClassifyObjects(TableModule):
         params: ClassifyParams = self.params
         if not params.model_path:
             raise ModuleError("choose a classifier file (train one in the Classify panel)")
-        classifier = load_classifier(Path(params.model_path))
+        path = Path(registered_file(params.model_path, "classifier"))
+        classifier = load_classifier(path)
         if classifier.object_type and classifier.object_type != params.object_type:
             raise ModuleError(
                 f"the classifier was trained on '{classifier.object_type}', not "
@@ -402,7 +404,7 @@ class ClassifyObjects(TableModule):
         return {
             "classifier": classifier,
             "stats": stats,
-            "sha256": file_sha256(Path(params.model_path)),
+            "sha256": file_sha256(path),
         }
 
     def transform(self, objects: pd.DataFrame, state: Any, well: WellContext) -> pd.DataFrame:
@@ -443,3 +445,15 @@ class ClassifyObjects(TableModule):
             "model_sha256": state["sha256"],
             **classifier.summary(),
         }
+
+
+def registered_file(value: str, kind: str) -> str:
+    """A file path, or the stored file of a registry reference (registry:NAME@VERSION)."""
+    from hcs_studio.training.registry import is_ref, resolve_path
+
+    if not is_ref(value):
+        return value
+    try:
+        return resolve_path(value, kind)
+    except ValueError as exc:
+        raise ModuleError(str(exc)) from None

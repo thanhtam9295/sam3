@@ -241,6 +241,24 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Model training, validation and registry (Phase 25)
+
+| Check | Result | Test |
+|---|---|---|
+| Matching and AP on known masks (identical; a square shifted to IoU 0.667; a merge at IoU exactly 0.5; a split; an empty prediction; one-to-one matching below 0.5) | AP 1 / AP 1 up to IoU 0.65 and 0 from 0.70 (mAP 0.4) / 1 merge, 1 match / 1 split / recall 0 / one match | `tests/test_training_metrics.py` |
+| Counts summed over fields and per cell line | AP@0.5 = 3/4 overall, 1 and 1/2 per cell line | `test_counts_are_summed_over_fields_and_grouped` |
+| Classifier metrics and calibration (known confusion; perfect and over-confident probabilities) | balanced accuracy 0.875; ECE 0 / 0.4; Brier 0 | `test_classifier_metrics_known_answer`, `test_calibration_known_answers` |
+| Ground-truth versions, hashes, splits by well/plate/held-out plate | versions immutable; re-split keeps the content hash; no group in two splits | `tests/test_groundtruth.py` |
+| **Done-when (synthetic):** a hard "cell line" (touching clusters, uneven brightness), 24 fields split by well; classical segmentation tuned on the train split | held-out (test) AP@0.5 more than 0.15 above the default segmentation | `test_tuning_improves_held_out_ap` |
+| **Done-when:** a pipeline pinned to a registered model version, run twice; then another version | identical objects; manifest lists version and SHA-256; the other version is recorded with its own hash | `test_pinned_model_reproduces_masks_and_manifest_records_it` |
+| Statuses, approval, demotion, retired and tampered models | refused with clear messages | `test_registry_versions_statuses_and_integrity` |
+| Object classifier from a classification set, used by registry reference | balanced accuracy > 0.95; the step loads the registered file | `test_cellpose_and_classifier_accept_registry_references` |
+| Training as a queue job (own process) | completes and registers | `test_training_job_in_the_queue` |
+
+Not yet checked: fine-tuning **Cellpose** on real annotated fields (needs the 20–40 annotated
+fields asked for, and a GPU); the real-Cellpose test (`HCS_REAL_CELLPOSE=1`) only checks the
+integration with 1 epoch on the CPU.
+
 ## Cell Painting: profile evaluation (Phase 24c)
 
 | Check | Result | Test |

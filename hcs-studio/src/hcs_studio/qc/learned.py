@@ -113,7 +113,9 @@ def train_field_qc(
 
 def bad_probability(fields: pd.DataFrame, learned: LearnedQc) -> pd.Series:
     """P(bad) of each field from a learned-QC classifier (checked against its SHA-256)."""
-    path = Path(learned.model)
+    from hcs_studio.analysis.classifier import registered_file
+
+    path = Path(registered_file(learned.model, "qc_classifier"))
     if learned.sha256 and file_sha256(path) != learned.sha256:
         raise ValueError(f"The learned-QC model {path} changed since the rules were written")
     classifier = load_classifier(path)

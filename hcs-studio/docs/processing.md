@@ -147,7 +147,7 @@ Table step: runs on the object tables after all wells are processed, and can be 
 |---|---|---|
 | `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
 | `name` | 'class' | Objects get class_<name>, class_<name>_probability, class_<name>_p_<class>. |
-| `model_path` | '' | Classifier file (.joblib) saved by HCS Studio. |
+| `model_path` | '' | Classifier file (.joblib) saved by HCS Studio, or registry:NAME@VERSION. |
 | `min_probability` | 0.0 | Objects whose best class is less likely than this are 'unassigned'. |
 
 ## Measure: colocalization (`colocalization`)
@@ -599,14 +599,14 @@ Kinetics (Phase 22a): drift between the time points of each field, measured by p
 
 ## Segmentation: Cellpose (`segment_cellpose`)
 
-Cellpose 4 (`cpsam_v2` is the default Cellpose-SAM model). Give one channel, or two (e.g. cytoplasm plus nuclei) for whole cells. The diameter is optional. Z stacks are segmented in 3D (`do_3d`), plane by plane with stitching, or plane by plane. A trained model file can be used in place of a built-in name. Uses the GPU when available; on the CPU expect about 15 s per 512 × 512 field.
+Cellpose 4 (`cpsam_v2` is the default Cellpose-SAM model). Give one channel, or two (e.g. cytoplasm plus nuclei) for whole cells. The diameter is optional. Z stacks are segmented in 3D (`do_3d`), plane by plane with stitching, or plane by plane. A trained model file or a registered model (`registry:NAME@VERSION`) can be used in place of a built-in name. Uses the GPU when available; on the CPU expect about 15 s per 512 × 512 field.
 
 | Parameter | Default | Meaning |
 |---|---|---|
 | `channel` | required | Channel to segment (nuclear stain, or cytoplasm/membrane). |
 | `second_channel` | None | Optional extra channel (e.g. nuclei when segmenting cells). |
 | `output` | 'nuclei' | Name of the new label set. |
-| `model` | 'cpsam_v2' | cpsam_v2, cpsam, cpdino, cpdino-vitb, or a trained model file. |
+| `model` | 'cpsam_v2' | cpsam_v2, cpsam, cpdino, cpdino-vitb, a trained model file, or a registered model (registry:NAME@VERSION). |
 | `diameter_um` | None | Typical object diameter in µm; empty = let the model decide. |
 | `flow_threshold` | 0.4 | Higher = more (less certain) objects. |
 | `cellprob_threshold` | 0.0 | Lower = larger objects. |
@@ -634,6 +634,14 @@ Smooths the channel, thresholds it (Otsu, Li or triangle; `local` subtracts a sm
 | `min_size_px` | 20 | Remove objects smaller than this. |
 | `fill_holes` | True | Fill holes inside objects. |
 | `parent` | None | Link each object to the object it overlaps most in this label set. |
+
+## Registered segmentation model (`segment_model`)
+
+Runs a segmentation model registered as pipeline steps (for example a classical segmentation tuned on a ground-truth set, `hcs-studio models train --kind steps`) by its registry reference `registry:NAME@VERSION`. The stored steps run exactly as registered, so a pinned version always gives the same masks; the run manifest records the version and its SHA-256. See [models.md](models.md).
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `model` | '' | A registered segmentation model: registry:NAME@VERSION. |
 
 ## Segmentation: SAM 3 (text concept) (`segment_sam3`)
 

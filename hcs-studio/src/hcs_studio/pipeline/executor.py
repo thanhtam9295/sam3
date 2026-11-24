@@ -950,6 +950,12 @@ def run_pipeline(
     if missing:
         raise ValueError(f"Wells without images on this plate: {', '.join(missing)}")
     run_hash = pipeline_hash(plate, pipeline, layout)
+    from hcs_studio.training.registry import pipeline_models
+
+    try:  # every model the pipeline uses, with its file and SHA-256 (Phase 25)
+        models_used = pipeline_models(pipeline)
+    except ValueError as exc:  # a registry reference that does not resolve
+        raise ModuleError(str(exc)) from None
     history: list[dict[str, Any]] = []
     if resume is not None:
         folder = Path(resume)
@@ -1064,6 +1070,7 @@ def run_pipeline(
             checksums=checksums,
         )
         record["pipeline_hash"] = run_hash
+        record["models"] = models_used
         record["history"] = history
         if layout_record:
             record["layout"] = layout_record

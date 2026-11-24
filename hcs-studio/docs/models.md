@@ -57,3 +57,67 @@ Everything is reported overall and per cell line (`metrics.json`, per field `fie
 
 Classifiers are scored with balanced accuracy, per-class precision and recall, the confusion
 matrix and calibration (reliability bins, expected calibration error, Brier score).
+
+## Training
+
+```bash
+hcs-studio models train --kind steps --name hct116-nuclei --set hct116-nuclei --channel 1
+hcs-studio models train --kind cellpose --name hct116-cp --set hct116-nuclei --base-model cpsam_v2 \
+    --epochs 100 --learning-rate 1e-5 [--device gpu]
+hcs-studio models train --kind classifier --name phase-clf --set phase-labels [--algorithm logistic_regression]
+```
+
+Every trainer learns on the set's **train** split, is scored on the **validation** split next to
+its base model, and is registered as a *candidate* with the training set (name, version and
+content hash), the hyperparameters, the validation metrics of both models and a summary of the
+training objects (area, intensity, shape and density quantiles — used for drift alerts).
+
+| Kind | What is learned | Where it runs |
+|---|---|---|
+| `steps` | a classical segmentation (threshold + watershed) tuned by grid search: threshold method, smoothing, minimum distance between centres (`--grid '{"method": ["otsu", "local"], …}'` to change the search) — scored by AP@0.5 summed over the train fields | any CPU, seconds |
+| `cellpose` | Cellpose fine-tuned from a base model (`cpsam_v2`), epochs, learning rate, weight decay | a CUDA GPU in practice (a CPU works for tiny tests only) |
+| `classifier` | an object classifier (random forest or logistic regression) from a classification set (`objects.csv`: `item`, `label` and numeric features) | any CPU |
+
+In the app, training is submitted to the job queue (its own process; GPU jobs run alone); the
+command line trains in the foreground. Image-QC classifiers (`hcs-studio qc-train`) and ilastik
+projects (trained in ilastik) are registered with `hcs-studio models register`.
+
+## The model registry
+
+```bash
+hcs-studio models list [--name N] [--kind K]
+hcs-studio models show hct116-nuclei@3
+hcs-studio models register model.joblib --name qc-field --kind qc_classifier [--training-set S@V]
+hcs-studio models status hct116-nuclei@3 validated --reason "AP@0.5 0.91 on test plates"
+hcs-studio models status hct116-nuclei@3 production --reason "replaces v2" --yes
+hcs-studio models pin pipeline.yaml
+```
+
+Each version is copied into `<settings>/models/<name>/vNNNN/` (read-only, never changed) and
+recorded with its kind, base model, training set and hash, hyperparameters, metrics, author,
+date, status and notes. Statuses: **candidate → validated → production → retired** (a validated
+version can go back to candidate; a retired one can be reconsidered as a candidate). Promotion
+to production needs a reason and a confirmation (`--yes`; a dialog in the app) and moves the
+previous production version back to *validated*. Every change is a service event (who, when,
+why).
+
+### Models in pipelines
+
+Steps name registered models as `registry:NAME@VERSION`:
+
+| Step | Parameter |
+|---|---|
+| Cellpose (`segment_cellpose`) | `model` |
+| Registered segmentation (`segment_model`) — runs a `steps` model exactly as stored | `model` |
+| Classify objects (`classify_objects`) | `model_path` |
+| Learned image QC (pipeline QC rules) | `learned.model` |
+
+`registry:NAME@production` (or no version) is allowed while editing, but `hcs-studio models pin`
+replaces it by the exact version before the pipeline is used for runs — a saved pipeline then
+always gives the same masks. A reference to a missing, retired or altered model (checksum
+mismatch) stops the run with a message.
+
+The run manifest (`run_manifest.json` → `models`) lists every model the pipeline used: step,
+module, parameter, value, file (as a data-root path), SHA-256 and, for registered models, the
+name, version, kind, status and training set. Built-in Cellpose models are hashed from the
+Cellpose model folder when the weights are present.

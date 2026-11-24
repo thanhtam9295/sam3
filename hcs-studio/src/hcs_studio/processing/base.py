@@ -276,6 +276,7 @@ def load_builtin_modules() -> None:
         cellpose_backend,
         classical,
         objects,
+        registered,
         sam3_backend,
     )
 

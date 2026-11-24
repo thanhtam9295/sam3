@@ -74,6 +74,18 @@ def get_model(model: str, gpu: bool) -> Any:
         return _models[key]
 
 
+def model_file(model: str) -> str:
+    """A built-in name or file path; registry references become the registered file."""
+    from hcs_studio.training.registry import is_ref, resolve_path
+
+    if not is_ref(model):
+        return model
+    try:
+        return resolve_path(model, "cellpose")
+    except ValueError as exc:
+        raise ModuleError(str(exc)) from None
+
+
 def clear_model_cache() -> None:
     with _lock:
         _models.clear()
@@ -91,7 +103,10 @@ class CellposeParams(ModuleParams):
     output: str = Field(default="nuclei", description="Name of the new label set.")
     model: str = Field(
         default="cpsam_v2",
-        description="cpsam_v2, cpsam, cpdino, cpdino-vitb, or a trained model file.",
+        description=(
+            "cpsam_v2, cpsam, cpdino, cpdino-vitb, a trained model file, or a registered "
+            "model (registry:NAME@VERSION)."
+        ),
     )
     diameter_um: float | None = Field(
         default=None,
@@ -136,12 +151,13 @@ class SegmentCellpose(Module):
                 raise ModuleError(f"Channel {channel} does not exist")
         if params.diameter_um is not None:
             um_to_px(params.diameter_um, metadata, "The object diameter")
+        model_file(params.model)
 
     def apply(self, image: ImageData, state: Any) -> ImageData:
         params: CellposeParams = self.params
         self.validate(image.metadata)
         gpu = use_gpu(params.device)
-        model = get_model(params.model, gpu)
+        model = get_model(model_file(params.model), gpu)
         channels = [params.channel - 1] + (
             [params.second_channel - 1] if params.second_channel else []
         )

@@ -67,10 +67,16 @@ NOTES = {
     "subtracts a smooth background first, for uneven illumination), fills holes and separates "
     "touching objects by watershed on the distance transform. Fast and transparent; best for "
     "well-separated, evenly stained nuclei and as a fallback when no model is available.",
+    "segment_model": "Runs a segmentation model registered as pipeline steps (for example a "
+    "classical segmentation tuned on a ground-truth set, `hcs-studio models train --kind steps`) "
+    "by its registry reference `registry:NAME@VERSION`. The stored steps run exactly as "
+    "registered, so a pinned version always gives the same masks; the run manifest records the "
+    "version and its SHA-256. See [models.md](models.md).",
     "segment_cellpose": "Cellpose 4 (`cpsam_v2` is the default Cellpose-SAM model). Give one "
     "channel, or two (e.g. cytoplasm plus nuclei) for whole cells. The diameter is optional. "
     "Z stacks are segmented in 3D (`do_3d`), plane by plane with stitching, or plane by plane. "
-    "A trained model file can be used in place of a built-in name. Uses the GPU when available; "
+    "A trained model file or a registered model (`registry:NAME@VERSION`) can be used in place "
+    "of a built-in name. Uses the GPU when available; "
     "on the CPU expect about 15 s per 512 × 512 field.",
     "segment_sam3": 'Segments every instance of a text concept ("nucleus", "spheroid") with '
     "SAM 3, plane by plane, from 1-3 channels shown as a grey or colour image. Runs in a "

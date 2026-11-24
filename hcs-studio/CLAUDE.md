@@ -728,6 +728,24 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `write_evaluation` → CSV/JSON/figures/`evaluation.html`; `run_evaluation` (in `WRAPPED`)).
   copairs needs NaN-free numpy features. Service `operations.cellpainting_evaluation`; CLI
   `cellpainting evaluate|similar`, `profile --evaluate`. Synthetic `profile_cells` (no images).
+- **Phase 25 plan** (2026-11-24; user: build without stopping, review all phases at the end):
+  (a) ground truth + metrics — built; (b) registry, pinned models, manifest models, training
+  jobs — built; (c) comparison report, downstream impact vs MSR, spot checks, drift, Models tab.
+  Ask for 20–40 annotated fields of the hardest cell line.
+- **Phase 25a/b (built)**: package `training/`: `metrics.py` (AP = TP/(TP+FP+FN) per IoU,
+  one-to-one matching — Hungarian at ≤ 0.5 because IoU exactly 0.5 can tie; merges/splits by
+  majority overlap; `classifier_metrics`, `calibration`), `groundtruth.py` (versions in
+  `<settings>/annotations/<name>/vNNNN/`, immutable; `content_sha256` excludes splits;
+  `assign_splits` by plate/well/cell_line + `check_leakage`; `import_pairs`, `export_pairs`),
+  `validate.py` (`segmentation_steps`, `predict`, `validate_segmentation`), `registry.py`
+  (`model_version` + `spot_check` tables, migration 0006; store `<settings>/models/<name>/vNNNN/`
+  read-only; `resolve` checks status and SHA-256; `registry:NAME@VERSION` refs in Cellpose
+  `model`, classifier `model_path`, learned QC; `pipeline_models` → manifest `models`;
+  `pin_pipeline`), `train.py` (`TrainingSpec`; trainers steps (grid search), cellpose,
+  classifier; `run_training_job` = queue entry via `Job.extra["task"] == "train"`).
+  Module `segment_model` (`segmentation/registered.py`). Services `services/training.py`
+  (`groundtruth.*`, `models.*`); CLI in `cli_models.py` (`gt`, `validate-seg`, `models`), also
+  scanned by the services AST test. Synthetic `synthetic/groundtruth.py` (easy/hard).
 
 ## Commands
 

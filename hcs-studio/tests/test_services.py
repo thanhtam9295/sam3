@@ -142,6 +142,8 @@ WRAPPED = {
     "hcs_studio.cellpainting.profiles": {"run_profiling"},
     "hcs_studio.cellpainting.evaluation": {"run_evaluation"},
     "hcs_studio.training.groundtruth": {"import_pairs", "create_set", "split_set"},
+    "hcs_studio.training.registry": {"register_model", "set_status", "update_metrics"},
+    "hcs_studio.training.train": {"train", "run_training_job"},
     "hcs_studio.db.library": {"import_library"},
 }
 ALLOWED = {
