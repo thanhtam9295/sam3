@@ -250,6 +250,11 @@ the field grid, failures and resume, the read-only project check, and objects fr
 probabilities equal to the synthetic truth. `probabilities_to_objects` has known-answer tests
 (touching discs split, hysteresis, seeds).
 
+Object Classification (Phase 16c), with the stand-in: Cellpose-like masks keep their IDs, the
+majority vote per object, class fractions per well equal the synthetic truth, and an EC50 is
+fitted on a class fraction (pharmacology); projects trained on probabilities make ilastik's
+own objects (two calls per well).
+
 **Not checked:** a real trained project with the real ilastik (no `.ilp` samples yet; the
 container could not install ilastik this time). Unconfirmed: where trained projects store the
 training data's axes and channel count (the compatibility check uses them only when found), and

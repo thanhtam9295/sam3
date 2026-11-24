@@ -413,6 +413,35 @@ ilastik (Phase 16b): % of each field where each class is the most likely (`ilast
 | Parameter | Default | Meaning |
 |---|---|---|
 
+## ilastik object classes (`ilastik_object_classes`)
+
+ilastik (Phase 16c): table step; adds class_<name> (class name) and class_<name>_agreement to the objects and per-well class_<name>_<class>_count and _fraction (plate maps, reports, pharmacology readouts).
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'nuclei' | Objects to work on (a segmentation name). |
+| `name` | 'ilastik' | As in the ilastik_objects step. |
+
+## ilastik Object Classification (`ilastik_objects`)
+
+ilastik (Phase 16c): classifies objects with a trained Object Classification project, once per well. input labels (default): an existing label set (e.g. Cellpose nuclei) goes to ilastik as the label image and keeps its IDs; each object gets the class most of its pixels have in ilastik's Object Predictions (the agreement is kept). input prediction_maps / segmentation_image: ilastik makes its own objects from the class channels (two calls per well); they become the label set <name>_objects. Needs ilastik_object_classes to put the classes into the tables. See the ilastik guide.
+
+Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `project` | '' | The trained Object Classification project. |
+| `input` | 'labels' | What the project was trained on: a label image (your objects), probabilities or a binary mask. |
+| `labels` | 'nuclei' | input labels: the objects to classify. |
+| `source_channels` | None | prediction_maps / segmentation_image: the class channels sent (default: every ilastik_ channel; a mask uses the first). |
+| `channels` | None | Raw channels sent, in the trained order; empty = all. |
+| `class_names` | None | Class names when the project does not hold them. |
+| `name` | 'ilastik' | Column name: class_<name>. |
+| `keep_inputs` | False | Keep the HDF5 copies sent to ilastik. |
+| `timeout_min` | 120.0 | Give up on one well after this. |
+
 ## ilastik Pixel Classification (`ilastik_pixel`)
 
 ilastik (Phase 16b): runs a trained Pixel Classification project with ilastik's headless command line, once per well with all its fields (ilastik starts slowly). Adds one channel per class, `ilastik_<class>`: probabilities (0–1) or 0/1 masks from Simple Segmentation; the original channels are unchanged and stay measurable. The project's SHA-256, ilastik's version and the command lines are recorded (manifest, ilastik/ folder). Needs ilastik (Tools → ilastik settings). See the ilastik guide.

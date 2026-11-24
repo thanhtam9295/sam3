@@ -141,10 +141,39 @@ Run folder:
 
 The run manifest's fitted state records the project SHA-256, ilastik's version and the runner.
 
+## Object Classification (including Cellpose objects)
+
+Classify objects with a trained ilastik **Object Classification** project — for example
+phenotypes of Cellpose nuclei:
+
+| Step | What it does |
+|---|---|
+| `ilastik_objects` | runs the project once per well; each object gets the class most of its pixels have in ilastik's "Object Predictions" |
+| `ilastik_object_classes` (table step) | adds `class_ilastik` (class name) and `class_ilastik_agreement` to the objects; per well `class_ilastik_<class>_count` and `_fraction` |
+
+```
+hcs-studio ilastik --preset phenotype.ilp --channels 1 2 --output phenotype.yaml
+# Cellpose nuclei → ilastik Object Classification → measure objects → QC → class fractions
+```
+
+- **input: labels** (default) — for projects trained *from a label image*: the step sends an
+  existing label set (`labels`, e.g. Cellpose `nuclei`) as ilastik's label image, so the
+  objects keep their HCS Studio IDs and the classes join the object tables directly.
+- **input: prediction_maps / segmentation_image** — for projects trained on probabilities or a
+  binary mask: put `ilastik_pixel` first; ilastik makes its own objects from the class channels
+  (`source_channels`). This needs two ilastik calls per well (object identities, then
+  predictions); the objects become the label set `ilastik_objects`.
+- The class fractions are ordinary per-well readouts: plate map, report, and pharmacology
+  (e.g. `--readout class_ilastik_mitotic_fraction`; dose–response on the share of a phenotype).
+- Several ilastik steps in one pipeline (pixel classification, then objects) each run once per
+  well, in order; measurement steps come after the last one.
+- Per well: `wells/<W>/ilastik/object_classes_ilastik.parquet` (field, time point, object,
+  class, agreement) and `.json` (class totals), and ilastik's prediction images.
+
 **Validation status:** tested with a stand-in program that accepts ilastik's command line and
 writes known answers (`tests/test_ilastik_steps.py`), including one call per well, resume after a
 failed well, and the read-only check. **Not yet run with a real trained project**: please send
 one or two `.ilp` files (Pixel Classification, Autocontext) with a few matching images; then
 `HCS_ILASTIK=<ilastik> pytest tests/test_ilastik.py tests/test_ilastik_steps.py` checks the real
 program, and the project reader's guesses (where the training axes and channels are stored) can
-be confirmed. Object Classification, Multicut, Tracking and the Fiji runner follow (steps c–e).
+be confirmed. Multicut, Tracking and the Fiji runner follow (steps d–e).

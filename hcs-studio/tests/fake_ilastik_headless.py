@@ -43,6 +43,9 @@ def main() -> int:
     parser.add_argument("--output_filename_format")
     parser.add_argument("--raw_data", nargs="+", default=[])
     parser.add_argument("--prediction_mask", nargs="+", default=[])
+    parser.add_argument("--label_image", nargs="+", default=[])
+    parser.add_argument("--prediction_maps", nargs="+", default=[])
+    parser.add_argument("--segmentation_image", nargs="+", default=[])
     args = parser.parse_args()
     if args.version:
         print("1.4.2")
@@ -71,9 +74,12 @@ def main() -> int:
         )
         return 1
     with h5py.File(args.project, "r") as project:
-        lo = float(project["fake"].attrs["lo"])
-        hi = float(project["fake"].attrs["hi"])
+        lo = float(project["fake"].attrs.get("lo", 0))
+        hi = float(project["fake"].attrs.get("hi", 1))
+        min_area = int(project["fake"].attrs.get("min_area", 0))
         workflow = project["workflowName"][()].decode()
+    if "ObjectClassification" in workflow:
+        return objects(args, min_area)
     if os.environ.get("FAKE_ILASTIK_TOUCH_PROJECT"):
         with h5py.File(args.project, "a") as project:
             project["fake"].attrs["touched"] = 1
@@ -106,6 +112,50 @@ def main() -> int:
             ds = f.create_dataset("exported_data", data=out)
             ds.attrs["axistags"] = axistags(out_axes)
     print("Finished")
+    return 0
+
+
+def read(spec: str) -> tuple[np.ndarray, list[str]]:
+    file, _, dataset = spec.rpartition(".h5/")
+    with h5py.File(file + ".h5", "r") as f:
+        return f[dataset][()], [a["key"] for a in json.loads(f[dataset].attrs["axistags"])["axes"]]
+
+
+def objects(args: argparse.Namespace, min_area: int) -> int:
+    """Object Classification: class 2 for objects of at least ``fake/min_area`` pixels."""
+    from scipy import ndimage
+
+    roles = [
+        r for r in ("label_image", "prediction_maps", "segmentation_image") if getattr(args, r)
+    ]
+    if len(roles) != 1 or len(getattr(args, roles[0])) != len(args.raw_data):
+        print("ERROR: give one object input per raw image", file=sys.stderr)
+        return 2
+    if args.export_source not in ("Object Predictions", "Object Identities"):
+        print(f"ERROR: unknown export source {args.export_source!r}", file=sys.stderr)
+        return 1
+    for raw_spec, spec in zip(args.raw_data, getattr(args, roles[0]), strict=True):
+        data, axes = read(spec)
+        c = axes.index("c")
+        if roles[0] == "label_image":
+            ids = np.take(data, 0, axis=c).astype(np.int64)
+        else:
+            channel = np.take(data, data.shape[c] - 1, axis=c)
+            ids, _ = ndimage.label(channel >= 0.5 if roles[0] == "prediction_maps" else channel > 0)
+        if args.export_source == "Object Identities":
+            out = ids.astype(np.uint32)
+        else:
+            sizes = np.bincount(ids.ravel())
+            classes = np.where(sizes >= min_area, 2, 1).astype(np.uint8)
+            classes[0] = 0
+            out = classes[ids]
+        out_axes = "".join(a for a in axes if a != "c") + "c"
+        file = raw_spec.rpartition(".h5/")[0] + ".h5"
+        target = args.output_filename_format.replace("{nickname}", Path(file).stem)
+        Path(target).parent.mkdir(parents=True, exist_ok=True)
+        with h5py.File(target, "w") as f:
+            ds = f.create_dataset("exported_data", data=out[..., np.newaxis])
+            ds.attrs["axistags"] = axistags(out_axes)
     return 0
 
 

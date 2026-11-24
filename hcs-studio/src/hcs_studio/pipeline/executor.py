@@ -233,9 +233,14 @@ class PipelineRunner:
             raise ValueError("Fitted states do not match the pipeline's steps")
         self.states = list(states)
 
+    def batch_indices(self) -> list[int]:
+        """Steps that process a well's fields together (``batch_scope == "well"``), in order."""
+        return [i for i, m in enumerate(self.modules) if m.batch_scope == "well"]
+
     def batch_index(self) -> int | None:
-        """The first step that processes a well's fields together (``batch_scope == "well"``)."""
-        return next((i for i, m in enumerate(self.modules) if m.batch_scope == "well"), None)
+        """The last well-batch step (fields continue one by one after it)."""
+        indices = self.batch_indices()
+        return indices[-1] if indices else None
 
     def apply_batch(
         self, index: int, images: list[ImageData], keys: list[tuple[int, int]], workdir: Any
@@ -551,22 +556,35 @@ def process_well(
 
     try:
         if batch is not None:
-            # a step that processes the well's fields together (e.g. ilastik): run every field
-            # up to it, call it once, then continue each field from its output
-            keys, raws, partials = [], [], []
-            for item in items:
-                for t in range(n_timepoints):
-                    runner.check_cancelled()
-                    raw_image = load_raw(item, t)
-                    partials.append(runner.process(raw_image, upto=batch))
-                    raws.append(raw_image)
-                    keys.append((item.index, t))
+            # steps that process the well's fields together (e.g. ilastik): run every field up
+            # to the first one, call it once for the well, continue to the next one, …; after
+            # the last one each field continues on its own
             from hcs_studio.processing.base import BatchFolders
 
             folders = BatchFolders(run=plan.folder, well=well_dir, well_name=name)
-            outputs = runner.apply_batch(batch, [p.final for p in partials], keys, folders)
-            for key_, raw_image, part, out in zip(keys, raws, partials, outputs, strict=True):
-                prepared[key_] = (raw_image, out, out if out.linear else part.corrected)
+            keys: list[tuple[int, int]] = []
+            raws: list[ImageData] = []
+            for item in items:
+                for t in range(n_timepoints):
+                    runner.check_cancelled()
+                    raws.append(load_raw(item, t))
+                    keys.append((item.index, t))
+            currents, linears = list(raws), list(raws)
+            begin = 0
+            for index in runner.batch_indices():
+                for k in range(len(keys)):
+                    runner.check_cancelled()
+                    part = runner.process(currents[k], upto=index, begin=begin, raw=raws[k],
+                                          corrected=linears[k])  # fmt: skip
+                    currents[k], linears[k] = part.final, part.corrected
+                outputs = runner.apply_batch(index, currents, keys, folders)
+                for k, out in enumerate(outputs):
+                    currents[k] = out
+                    if out.linear:
+                        linears[k] = out
+                begin = index + 1
+            for k, key_ in enumerate(keys):
+                prepared[key_] = (raws[k], currents[k], linears[k])
         for item in items:
             runner.check_cancelled()
             finals, correcteds = [], []

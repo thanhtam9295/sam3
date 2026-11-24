@@ -204,6 +204,16 @@ NOTES = {
     "size filter. Known-answer test: two touching discs become two objects.",
     "ilastik_class_areas": "ilastik (Phase 16b): % of each field where each class is the most "
     "likely (`ilastik_area_pct_<class>`; per-well means in the summary).",
+    "ilastik_objects": "ilastik (Phase 16c): classifies objects with a trained Object "
+    "Classification project, once per well. input labels (default): an existing label set "
+    "(e.g. Cellpose nuclei) goes to ilastik as the label image and keeps its IDs; each object "
+    "gets the class most of its pixels have in ilastik's Object Predictions (the agreement is "
+    "kept). input prediction_maps / segmentation_image: ilastik makes its own objects from the "
+    "class channels (two calls per well); they become the label set <name>_objects. Needs "
+    "ilastik_object_classes to put the classes into the tables. See the ilastik guide.",
+    "ilastik_object_classes": "ilastik (Phase 16c): table step; adds class_<name> (class name) "
+    "and class_<name>_agreement to the objects and per-well class_<name>_<class>_count and "
+    "_fraction (plate maps, reports, pharmacology readouts).",
     "confluence": "Kinetics (Phase 22a): % of the field covered by cells, per field and time "
     "point (`confluence_pct`, `confluence_area_um2`; per-well means in the summary). texture "
     "(brightfield/phase): local SD of the image minus its median filter, threshold calibrated "

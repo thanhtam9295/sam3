@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Phase 16c — ilastik Object Classification
+- Step `ilastik_objects`: a trained Object Classification project classifies objects once per
+  well — existing objects (Cellpose, SAM, classical) sent as the label image, each object
+  assigned its majority class; or ilastik's own objects from probabilities / a mask (new label
+  set). Table step `ilastik_object_classes`: `class_ilastik` per object, per-well class counts
+  and fractions as plate readouts (plate map, report, pharmacology dose–response).
+- Pipelines can hold several ilastik steps; each runs once per well, in order.
+- `hcs-studio ilastik --preset <object project>`: Cellpose nuclei → ilastik objects →
+  measurements → class fractions.
+
 ### Phase 16b — ilastik Pixel Classification and Autocontext
 - Steps `ilastik_pixel` and `ilastik_autocontext`: a trained ilastik project runs headless,
   once per well with all its fields; one channel per class (`ilastik_<class>`, probabilities

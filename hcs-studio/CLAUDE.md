@@ -249,7 +249,7 @@ PlateLayout (model/annotation.py)
 
 Not added: lmfit (`scipy.optimize.least_squares` covers bounds, robust loss, covariance CIs), weasyprint (needs system Pango/Cairo; hard on Windows).
 
-## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a) and (b) built
+## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a)–(c) built
 
 Paused 2026-11-19 after step (a); resumed 2026-11-24 (user: "CONTINUE"): step (b) built against a
 fake ilastik (no `.ilp` samples yet; installing ilastik in the container was not permitted this
@@ -370,6 +370,23 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   project's `fake/lo`/`fake/hi`; `FAKE_ILASTIK_LOG`, `FAKE_ILASTIK_FAIL_ON`,
   `FAKE_ILASTIK_TOUCH_PROJECT`), `tests/test_ilastik_steps.py` (`make_project` writes a minimal
   `.ilp`). CLI `hcs-studio ilastik --info <ilp> | --preset <ilp> --output p.yaml`.
+
+### Conventions (step c, built)
+
+- `objects.py`: image step `ilastik_objects` (needs_fit, exclusive, batch_scope well; `input`
+  labels → `--label_image` with an existing label set (keeps IDs), prediction_maps /
+  segmentation_image → ilastik's own objects: calls "Object Identities" then "Object
+  Predictions", relabelled into label set `<name>_objects`); `majority_classes` (class 0 wins
+  only when nothing else is predicted); writes `wells/<W>/ilastik/object_classes_<name>.parquet`
+  (+ `.json` with the project's class list). Table step `ilastik_object_classes`
+  (`class_<name>`, `class_<name>_agreement`; `count_fractions` over **all** project classes so
+  wells without a class report 0, not missing). Same column names as `classify_objects`, so
+  readouts/pharmacology need nothing new.
+- Executor: several well-batch steps run in order (`batch_indices`); `batch_index` = the last;
+  measurement steps must come after the last one.
+- `presets.objects_preset`: `segment_cellpose` → `ilastik_objects` → `measure_objects` → `qc`
+  → `ilastik_object_classes`. Fake ilastik: workflows containing "ObjectClassification" accept
+  `--label_image/--prediction_maps/--segmentation_image`; class 2 for objects ≥ `fake/min_area`.
 
 ### Testing plan
 

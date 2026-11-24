@@ -19,6 +19,8 @@ def pixel_preset(
     """``[projection →] ilastik Pixel Classification / Autocontext → probabilities → objects →
     measure objects → class areas → field QC``. The object class defaults to the last class
     (ilastik projects usually list the background first)."""
+    if info.workflow == "objects":
+        return objects_preset(project, channels=channels)
     names = list(info.label_names)
     if not names:
         raise ValueError("The project's class names were not found: give --class")
@@ -44,3 +46,23 @@ def pixel_preset(
         PipelineStep(module="qc"),
     ]
     return Pipeline(steps=steps)
+
+
+def objects_preset(
+    project: Path, *, channels: list[int] | None = None, nucleus_channel: int = 1
+) -> Pipeline:
+    """``Cellpose nuclei → ilastik Object Classification → measure objects → field QC →
+    class counts and fractions`` (a "from label image" project; for pharmacology, use the
+    ``class_ilastik_<class>_fraction`` readouts)."""
+    params: dict[str, Any] = {"project": str(Path(project).absolute()), "labels": "nuclei"}
+    if channels:
+        params["channels"] = channels
+    return Pipeline(
+        steps=[
+            PipelineStep(module="segment_cellpose", params={"channel": nucleus_channel}),
+            PipelineStep(module="ilastik_objects", params=params),
+            PipelineStep(module="measure_objects", params={"labels": ["nuclei"]}),
+            PipelineStep(module="qc"),
+            PipelineStep(module="ilastik_object_classes", params={"object_type": "nuclei"}),
+        ]
+    )
