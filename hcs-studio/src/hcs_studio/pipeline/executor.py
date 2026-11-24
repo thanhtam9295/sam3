@@ -170,6 +170,14 @@ class PipelineRunner:
         self.output_metadata: ImageMetadata = metadata
         from hcs_studio.kinetics.drift import RegisterTimepoints
 
+        batch = self.batch_index()
+        if batch is not None:
+            early = [m.title for m in self.modules[:batch] if isinstance(m, MeasurementModule)]
+            if early:
+                raise ModuleError(
+                    f"Step {batch + 1} ({self.modules[batch].title}) processes a well's fields "
+                    f"together: measurement steps ({', '.join(early)}) must come after it"
+                )
         kinds = {type(m) for m in self.modules}
         if RegisterTimepoints in kinds and StitchWell in kinds:
             raise ModuleError("Drift correction crops each field: it cannot be combined with "
@@ -225,16 +233,56 @@ class PipelineRunner:
             raise ValueError("Fitted states do not match the pipeline's steps")
         self.states = list(states)
 
+    def batch_index(self) -> int | None:
+        """The first step that processes a well's fields together (``batch_scope == "well"``)."""
+        return next(
+            (i for i, m in enumerate(self.modules) if m.batch_scope == "well"), None
+        )
+
+    def apply_batch(
+        self, index: int, images: list[ImageData], keys: list[tuple[int, int]], workdir: Any
+    ) -> list[ImageData]:
+        """Run the well-batch step ``index`` on the fields of one well."""
+        module = self.modules[index]
+        self.fit(index + 1)
+        started = time.perf_counter()
+        try:
+            if self.gpu_lock is not None and (module.uses_gpu() or module.exclusive):
+                with self.gpu_lock:
+                    out = module.apply_batch(images, self.states[index], keys, workdir)
+            else:
+                out = module.apply_batch(images, self.states[index], keys, workdir)
+        except ModuleError as exc:
+            raise ModuleError(f"Step {index + 1} ({module.title}): {exc}") from None
+        finally:
+            key = f"{index + 1} {module.name}"
+            self.timings[key] = self.timings.get(key, 0.0) + time.perf_counter() - started
+        if len(out) != len(images):
+            raise ModuleError(f"Step {index + 1} ({module.title}) returned {len(out)} images "
+                              f"for {len(images)} fields")  # fmt: skip
+        return out
+
     def process(
-        self, image: ImageData, upto: int | None = None, _fit: bool = True
+        self,
+        image: ImageData,
+        upto: int | None = None,
+        _fit: bool = True,
+        *,
+        begin: int = 0,
+        raw: ImageData | None = None,
+        corrected: ImageData | None = None,
     ) -> ProcessResult:
-        """Apply steps ``[0, upto)`` to an image."""
+        """Apply steps ``[begin, upto)`` to an image (``raw``/``corrected``: the field's raw and
+        last linear image when continuing after a well-batch step)."""
         end = len(self.modules) if upto is None else upto
         if _fit:
             self.fit(end)
-        raw = corrected = image
+        raw = raw if raw is not None else image
+        corrected = corrected if corrected is not None else image
         tables: dict[str, list[Any]] = {}
         for i, module in enumerate(self.modules[:end]):
+            if i < begin:
+                continue
             self.check_cancelled()
             started = time.perf_counter()
             try:
@@ -477,28 +525,68 @@ def process_well(
     clock: dict[str, float] = {"read": 0.0, "write": 0.0}
     well_started = time.perf_counter()
     emit({"type": "well_started", "well": name, "fields": len(items)})
+    batch = runner.batch_index()
+    #: (field, timepoint) → (raw image, batch step output, last linear image before it)
+    prepared: dict[tuple[int, int], tuple[ImageData, ImageData, ImageData]] = {}
+    drift_infos: dict[int, Any] = {}
+
+    def field_drift(item: Field) -> Any:
+        if drift is None or n_timepoints <= 1:
+            return None
+        if item.index not in drift_infos:
+            info = drift.shifts(partial(runner.load, item), n_timepoints)
+            drift_infos[item.index] = info
+            for warning in info["warnings"]:
+                text = f"field {item.index}: {warning}"
+                if text not in well_warnings:
+                    well_warnings.append(text)
+        return drift_infos[item.index]
+
+    def load_raw(item: Field, t: int) -> ImageData:
+        started = time.perf_counter()
+        image = runner.load(item, t)
+        clock["read"] += time.perf_counter() - started
+        info = field_drift(item)
+        if info is not None and drift is not None:
+            image = drift.correct(image, info["shifts_px"][t], info["crop_px"])
+        return image
+
     try:
+        if batch is not None:
+            # a step that processes the well's fields together (e.g. ilastik): run every field
+            # up to it, call it once, then continue each field from its output
+            keys, raws, partials = [], [], []
+            for item in items:
+                for t in range(n_timepoints):
+                    runner.check_cancelled()
+                    raw_image = load_raw(item, t)
+                    partials.append(runner.process(raw_image, upto=batch))
+                    raws.append(raw_image)
+                    keys.append((item.index, t))
+            from hcs_studio.processing.base import BatchFolders
+
+            folders = BatchFolders(
+                run=plan.folder, well=well_dir, well_name=name
+            )
+            outputs = runner.apply_batch(batch, [p.final for p in partials], keys, folders)
+            for key_, raw_image, part, out in zip(keys, raws, partials, outputs, strict=True):
+                prepared[key_] = (raw_image, out, out if out.linear else part.corrected)
         for item in items:
             runner.check_cancelled()
             finals, correcteds = [], []
             raw_first: ImageData | None = None
-            drift_info = None
-            if drift is not None and n_timepoints > 1:
-                drift_info = drift.shifts(partial(runner.load, item), n_timepoints)
-                for warning in drift_info["warnings"]:
-                    text = f"field {item.index}: {warning}"
-                    if text not in well_warnings:
-                        well_warnings.append(text)
+            drift_info = field_drift(item)
             for t in range(n_timepoints):
-                started = time.perf_counter()
-                raw_image = runner.load(item, t)
-                clock["read"] += time.perf_counter() - started
-                if drift_info is not None and drift is not None:
-                    raw_image = drift.correct(raw_image, drift_info["shifts_px"][t],
-                                              drift_info["crop_px"])  # fmt: skip
+                if (item.index, t) in prepared:
+                    raw_image, after, linear = prepared.pop((item.index, t))
+                    assert batch is not None
+                    processed = runner.process(after, begin=batch + 1, raw=raw_image,
+                                               corrected=linear)  # fmt: skip
+                else:
+                    raw_image = load_raw(item, t)
+                    processed = runner.process(raw_image)
                 if t == 0:
                     raw_first = raw_image
-                processed = runner.process(raw_image)
                 finals.append(processed.final)
                 correcteds.append(processed.corrected)
                 for table_name, table in processed.tables.items():

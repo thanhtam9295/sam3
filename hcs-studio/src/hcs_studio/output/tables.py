@@ -255,7 +255,7 @@ def _excluded_fields(flags: pd.DataFrame | None) -> set[tuple[str, int]]:
 
 
 #: Per-field measurements (measurement steps writing to the fields table) averaged per well.
-FIELD_MEASUREMENT_PREFIXES = ("confluence_",)
+FIELD_MEASUREMENT_PREFIXES = ("confluence_", "ilastik_area_pct_")
 
 
 def field_means(

@@ -1626,6 +1626,10 @@ def _builtin() -> list[ReadoutSpec]:
                         f"% of the area covered by cells ({where})", kin),
             ReadoutSpec("confluence_area_um2", "area covered by cells", "µm²", level,
                         "either", "none", f"area covered by cells ({where})", kin),
+            ReadoutSpec("ilastik_area_pct_{cls:any}", "{cls} area (ilastik)", "%", level,
+                        "either", "none",
+                        f"% of the area where ilastik's class is the most likely ({where})",
+                        "ilastik_class_areas"),
         ]  # fmt: skip
     kinetic: dict[str, tuple[str, str, Direction, str]] = {
         "doubling_h": ("doubling time", "h", "up", "ln 2 / growth rate of the chosen growth model"),

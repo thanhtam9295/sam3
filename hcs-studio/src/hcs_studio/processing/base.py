@@ -200,6 +200,31 @@ class Module(ABC):
         """Metadata of the output image (changed by projection and unmixing)."""
         return metadata
 
+    #: "well": the step processes all fields (and timepoints) of a well in one call
+    #: (:meth:`apply_batch`), e.g. an external program with a slow start (ilastik).
+    batch_scope: ClassVar[str] = "field"
+
+    def apply_batch(
+        self,
+        images: list[ImageData],
+        state: Any,
+        keys: list[tuple[int, int]],
+        workdir: Any = None,
+    ) -> list[ImageData]:
+        """Process the fields of one well together; ``keys`` are (field, timepoint) and
+        ``workdir`` a ``BatchFolders`` (run and well folders) or None for previews."""
+        return [self.apply(image, state) for image in images]
+
+
+@dataclass(frozen=True)
+class BatchFolders:
+    """Where a well-batch step may write: ``run`` (the run folder's step folder, shared by
+    all wells) and ``well`` (this well's output folder)."""
+
+    run: Any
+    well: Any
+    well_name: str = ""
+
 
 @dataclass(frozen=True)
 class MeasureContext:
@@ -279,6 +304,7 @@ def load_builtin_modules() -> None:
         registered,
         sam3_backend,
     )
+    from hcs_studio.segmentation.ilastik_backend import steps as _ilastik_steps  # noqa: F401
 
 
 def create_module(name: str, params: dict[str, Any] | None = None) -> Module:
