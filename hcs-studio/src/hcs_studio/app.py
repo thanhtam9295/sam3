@@ -672,6 +672,9 @@ def build_parser() -> argparse.ArgumentParser:
     from hcs_studio.cli_models import add_parsers
 
     add_parsers(sub)
+    from hcs_studio.cli_security import add_parsers as add_security_parsers
+
+    add_security_parsers(sub)
     return parser
 
 
@@ -719,6 +722,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _assay(args)
     if args.command == "cellpainting":
         return _cellpainting(args)
+    if args.command in ("accounts", "audit"):
+        from hcs_studio.cli_security import run_accounts, run_audit
+
+        return run_accounts(args) if args.command == "accounts" else run_audit(args)
     if args.command in ("gt", "validate-seg", "models"):
         from hcs_studio.cli_models import run_gt, run_models, run_validate
 

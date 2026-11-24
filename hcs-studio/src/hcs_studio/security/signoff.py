@@ -201,7 +201,7 @@ def sign(
         reviewers = {s["username"] for s in current.signatures if s["meaning"] == "reviewed"}
         if settings.regulated_mode and username in reviewers:
             raise PermissionError("In regulated mode the approver must differ from the reviewer")
-    if settings.reauth_for_signoff and not reauthenticated:
+    if settings.reauth_required and not reauthenticated:
         raise PermissionError("Signing needs your password again (re-authentication)")
     with session_scope() as session:
         session.add(

@@ -33,6 +33,7 @@ PAGES = [
     ("screening.md", "Primary screens"),
     ("cellpainting.md", "Cell Painting profiling"),
     ("models.md", "Training, validating and managing models"),
+    ("security.md", "Accounts, audit trail and sign-off"),
     ("validation.md", "Validation"),
 ]
 TEMPLATE = """<!doctype html>

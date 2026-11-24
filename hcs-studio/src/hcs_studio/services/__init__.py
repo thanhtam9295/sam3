@@ -39,6 +39,8 @@ class Actor:
     id: str
     name: str = ""
     kind: ActorKind = "os"
+    #: viewer | analyst | reviewer | admin (Phase 26); "" = look it up from the accounts.
+    role: str = ""
 
 
 def os_actor() -> Actor:
@@ -83,7 +85,34 @@ class ServiceContext:
 
 
 def context(reason: str = "", actor: Actor | None = None) -> ServiceContext:
-    return ServiceContext(actor=actor or os_actor(), reason=reason.strip())
+    """The context of an action: the acting user (the signed-in account, else the OS user)
+    with their role, and the reason."""
+    return ServiceContext(actor=with_role(actor or current_actor()), reason=reason.strip())
+
+
+def current_actor() -> Actor:
+    """The signed-in account in this process (app with a password), else the OS user."""
+    from hcs_studio.security.accounts import current_session
+
+    try:
+        session = current_session()
+    except Exception:  # settings unreadable: fall back to the OS user
+        session = None
+    if session is not None:
+        session.touch()
+        return Actor(session.username, session.display_name, "account", session.role)
+    return os_actor()
+
+
+def with_role(actor: Actor) -> Actor:
+    """The actor with its role filled in from the accounts (system actors: admin)."""
+    if actor.role:
+        return actor
+    if actor.kind in ("system", "scheduler"):
+        return replace(actor, role="admin")
+    from hcs_studio.security.accounts import role_of
+
+    return replace(actor, role=role_of(actor.id))
 
 
 @dataclass(frozen=True)
@@ -98,11 +127,15 @@ class Event:
     after: dict[str, Any] | None
     client: str
     app_version: str
-    status: Literal["ok", "failed"] = "ok"
+    status: Literal["ok", "failed", "denied"] = "ok"
     error: str = ""
 
 
 Sink = Callable[[Event], None]
+
+
+class AuditError(RuntimeError):
+    """An event could not be written to the audit trail."""
 
 
 class EventBus:
@@ -111,12 +144,16 @@ class EventBus:
 
     def __init__(self) -> None:
         self.sinks: list[Sink] = []
+        #: Sinks whose failure is an error (the audit trail): raised after all sinks ran.
+        self.strict: set[Sink] = set()
         self._lock = threading.Lock()
 
-    def add(self, sink: Sink) -> None:
+    def add(self, sink: Sink, strict: bool = False) -> None:
         with self._lock:
             if sink not in self.sinks:
                 self.sinks.append(sink)
+            if strict:
+                self.strict.add(sink)
 
     def remove(self, sink: Sink) -> None:
         with self._lock:
@@ -126,11 +163,19 @@ class EventBus:
     def emit(self, event: Event) -> None:
         with self._lock:
             sinks = list(self.sinks)
+            strict = set(self.strict)
+        failure: Exception | None = None
         for sink in sinks:
             try:
                 sink(event)
-            except Exception:
+            except Exception as exc:
                 log.exception("Event sink %r failed for %s", sink, event.type)
+                if sink in strict:
+                    failure = exc
+        if failure is not None:
+            raise AuditError(
+                f"{event.type} was not recorded in the audit trail: {failure}"
+            ) from failure
 
 
 def log_sink(event: Event) -> None:
@@ -145,8 +190,10 @@ def log_sink(event: Event) -> None:
 
 
 def database_sink(event: Event) -> None:
+    """Append the event to the audit trail (``event`` table) and chain it (Phase 26)."""
     from hcs_studio.db import session_scope
     from hcs_studio.db.models import EventRecord
+    from hcs_studio.security.audit import chain_new_rows, maybe_checkpoint
 
     with session_scope() as session:
         session.add(
@@ -156,6 +203,7 @@ def database_sink(event: Event) -> None:
                 actor_id=event.actor.id,
                 actor_name=event.actor.name,
                 actor_kind=event.actor.kind,
+                actor_role=event.actor.role,
                 reason=event.reason,
                 object_type=event.object_type,
                 object_id=event.object_id,
@@ -167,6 +215,12 @@ def database_sink(event: Event) -> None:
                 error=event.error,
             )
         )
+        session.flush()
+        chain_new_rows(session)
+        from hcs_studio.db.security import AuditHead
+
+        count = session.get(AuditHead, 1).count  # type: ignore[union-attr]
+    maybe_checkpoint(count)
 
 
 def _jsonable(value: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -179,7 +233,7 @@ def _jsonable(value: dict[str, Any] | None) -> dict[str, Any] | None:
 
 BUS = EventBus()
 BUS.add(log_sink)
-BUS.add(database_sink)
+BUS.add(database_sink, strict=True)
 
 
 def service(
@@ -207,10 +261,23 @@ def service(
             if needs and not ctx.reason.strip():
                 raise ReasonRequired(f"{event_type}: give a reason for this change")
             outer_note, ctx._note = ctx._note, {}  # a nested service keeps its own note
-            status: Literal["ok", "failed"] = "ok"
+            status: Literal["ok", "failed", "denied"] = "ok"
             error = ""
+            ctx.actor = with_role(ctx.actor)
             try:
+                from hcs_studio.security.roles import allowed, required_role
+
+                if not allowed(ctx.actor.role, event_type):
+                    status = "denied"
+                    raise PermissionError(
+                        f"{event_type} needs the {required_role(event_type)} role; "
+                        f"{ctx.actor.id} is {ctx.actor.role or 'unknown'}"
+                    )
                 return fn(*args, **kwargs)
+            except PermissionError as exc:
+                status = "denied" if status == "denied" else "failed"
+                error = f"{type(exc).__name__}: {exc}"
+                raise
             except Exception as exc:
                 status, error = "failed", f"{type(exc).__name__}: {exc}"
                 raise

@@ -760,6 +760,21 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   in training IQR + spread ratio; the training summary is of the **model's own masks** on train
   fields, not ground truth — else model error reads as drift), run step `model_qa`
   (`qa/model_qa.json`). GUI `gui/models_panel.py` (Models tab; `confirm` injectable for tests).
+- **Phase 26 decisions** (2026-11-24): research use (strict audit always; password and re-auth
+  off by default, `security.regulated_mode` turns them on); server mode uses local accounts
+  only (no SSO); argon2-cffi approved. Plan: (a) accounts, roles, audit chain — built; (b) run
+  states, signatures, locking, versions, report DRAFT mark + signatures + audit section.
+- **Phase 26a (built)**: `security/roles.py` (`PERMISSIONS` prefix → lowest role; checked in the
+  `service` wrapper, denials emitted with status `denied`), `security/accounts.py` (no accounts
+  → OS user is admin; else account role, unknown → viewer; argon2id; lockout; in-process
+  `Session` with timeout), `security/audit.py` (`chain_new_rows` in `database_sink`, the
+  `audit_head` row UPDATE serialises writers; canonical JSON incl. id; `verify_chain`;
+  checkpoints `<settings>/audit/chain_head.jsonl` + `audit_head_copies`). `Actor.role`,
+  `services.context()` uses the signed-in session else the OS user. The database sink is
+  strict (`AuditError`). Migration 0007 (account, audit_head, run_state, signature, event
+  columns with server defaults). Services `services/security.py`; CLI `cli_security.py`
+  (`accounts`, `audit`); GUI `gui/security_dialogs.py` (AuditDialog, SignInDialog,
+  `require_sign_in` at launch). Settings `AppSettings.security`.
 
 ## Commands
 

@@ -56,7 +56,7 @@ def _utc_text(value: Any) -> str:
     if isinstance(value, datetime):
         if value.tzinfo is not None:
             value = value.astimezone(UTC).replace(tzinfo=None)
-        return value.isoformat(timespec="microseconds")
+        return str(value.isoformat(timespec="microseconds"))
     return str(value)
 
 

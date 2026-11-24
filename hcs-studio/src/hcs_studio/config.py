@@ -51,6 +51,32 @@ class DataRootConfig(BaseModel):
         return value.upper()
 
 
+class SecuritySettings(BaseModel):
+    """Accounts, sign-off and the audit trail (Phase 26). Research defaults; ``regulated_mode``
+    turns on the strict settings (password, re-authentication, four-eyes approval)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    regulated_mode: bool = False
+    require_password: bool = False
+    reauth_for_signoff: bool = False
+    session_timeout_min: float = Field(default=30.0, gt=0)
+    lockout_attempts: int = Field(default=5, ge=1)
+    lockout_minutes: float = Field(default=15.0, gt=0)
+    #: Write the audit chain head every N records (0 = only on demand).
+    audit_head_every: int = Field(default=50, ge=0)
+    #: Extra folders (e.g. on another computer) that keep copies of the chain head.
+    audit_head_copies: list[str] = Field(default_factory=list)
+
+    @property
+    def password_required(self) -> bool:
+        return self.require_password or self.regulated_mode
+
+    @property
+    def reauth_required(self) -> bool:
+        return self.reauth_for_signoff or self.regulated_mode
+
+
 class DatabaseConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -67,6 +93,7 @@ class AppSettings(BaseModel):
     data_roots: list[DataRootConfig] = Field(default_factory=list)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     automation: AutomationSettings = Field(default_factory=AutomationSettings)
+    security: SecuritySettings = Field(default_factory=SecuritySettings)
     #: Earlier per-feature settings files, imported once (read-only copy).
     imported: dict[str, Any] = Field(default_factory=dict)
 

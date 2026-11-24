@@ -147,6 +147,8 @@ WRAPPED = {
     "hcs_studio.training.compare": {"compare_candidate"},
     "hcs_studio.training.impact": {"downstream_impact"},
     "hcs_studio.training.qa": {"queue_spot_checks", "review_spot_check", "model_qa"},
+    "hcs_studio.security.accounts": {"create_account", "update_account"},
+    "hcs_studio.security.audit": {"checkpoint"},
     "hcs_studio.db.library": {"import_library"},
 }
 ALLOWED = {
@@ -157,7 +159,12 @@ ALLOWED = {
 
 def test_gui_and_cli_change_state_only_through_services() -> None:
     offenders = []
-    files = [SRC / "app.py", SRC / "cli_models.py", *sorted((SRC / "gui").glob("*.py"))]
+    files = [
+        SRC / "app.py",
+        SRC / "cli_models.py",
+        SRC / "cli_security.py",
+        *sorted((SRC / "gui").glob("*.py")),
+    ]
     for path in files:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         rel = str(path.relative_to(SRC.parent))

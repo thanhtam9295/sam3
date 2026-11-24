@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Phase 26a — accounts, roles and the audit trail
+- Roles viewer < analyst < reviewer < admin with a permission matrix enforced in the service
+  layer (refused actions are recorded); local accounts (`hcs-studio accounts …`) with optional
+  argon2id passwords, lockout and session timeout. Without accounts the computer's user is an
+  admin (single-user installations work as before).
+- Tamper-evident audit trail: every service event stores the user's role and a SHA-256 hash
+  chain; chain-head checkpoints outside the database; `hcs-studio audit list|export|verify|
+  checkpoint` (CSV/PDF export); Tools → Audit trail… in the app; sign-in when a password is
+  required. Settings `security` (research defaults; `regulated_mode`).
+- New dependency: argon2-cffi. The PyInstaller spec is now tracked in git (it was ignored).
+
 ### Phase 25c — model comparison, downstream impact, spot checks, drift
 - `hcs-studio models compare`: candidate vs production (or base model) on the held-out test
   split; report with metrics per cell line, AP by IoU, count errors and example outlines.

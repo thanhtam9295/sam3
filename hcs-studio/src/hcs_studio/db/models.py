@@ -47,8 +47,12 @@ class EventRecord(Base):
     after: Mapped[dict[str, Any] | None] = mapped_column(default=None)
     client: Mapped[str] = mapped_column(String(256), default="")
     app_version: Mapped[str] = mapped_column(String(64), default="")
-    status: Mapped[str] = mapped_column(String(16), default="ok")  # ok | failed
+    status: Mapped[str] = mapped_column(String(16), default="ok")  # ok | failed | denied
     error: Mapped[str] = mapped_column(Text, default="")
+    #: Phase 26: the actor's role and the hash chain (security/audit.py).
+    actor_role: Mapped[str] = mapped_column(String(16), default="")
+    prev_hash: Mapped[str] = mapped_column(String(64), default="")
+    hash: Mapped[str] = mapped_column(String(64), default="", index=True)
 
     __table_args__ = (Index("ix_event_object", "object_type", "object_id"),)
 

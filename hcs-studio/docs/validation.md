@@ -241,6 +241,20 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Accounts, roles and the audit trail (Phase 26a)
+
+| Check | Result | Test |
+|---|---|---|
+| Permission matrix | reviewer for signing and model status, admin for settings/accounts, analyst otherwise | `test_permission_matrix` |
+| argon2id passwords, lockout after 5 failures (also against the right password), admin reset, disabled accounts, session timeout | as specified | `test_accounts_passwords_and_lockout`, `test_sessions_time_out` |
+| A viewer attempting a change | refused; recorded with status `denied` and the role | `test_services_enforce_roles_and_record_denials` |
+| **Done-when:** a reason edited directly in the database; a record deleted | detected (content changed / missing record, broken link) | `test_chain_verifies_and_detects_tampering` |
+| A forger who rewrites every hash after an edit | detected by the checkpoint kept outside the database | `test_checkpoints_catch_a_rewritten_chain` |
+| Records written before the chain existed | chained by the next event | `test_old_unchained_records_are_chained` |
+| Filters, CSV and PDF export, CLI (`audit verify` exit 1 on tampering), audit dialog, sign-in dialog | as specified | `test_query_and_export`, `test_accounts_and_audit_commands`, `test_audit_and_sign_in_dialogs` |
+
+Not checked here: PostgreSQL privileges (append-only role) — Phase 27.
+
 ## Model training, validation and registry (Phase 25)
 
 | Check | Result | Test |

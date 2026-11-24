@@ -280,6 +280,7 @@ class MainWindow(QMainWindow):
             self._action("&Experiment report for the run in Results", self.experiment_report)
         )
         tools_menu.addAction(self._action("&Assay wizard…", self.open_assay_wizard))
+        tools_menu.addAction(self._action("A&udit trail…", self.open_audit_trail))
 
         view_menu = self.menuBar().addMenu("&View")
         for dock in (
@@ -465,6 +466,13 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Run folder")
         if folder:
             self.show_results(Path(folder))
+
+    def open_audit_trail(self) -> None:
+        from hcs_studio.gui.security_dialogs import AuditDialog
+
+        dialog = AuditDialog(self)
+        dialog.search()
+        dialog.open()  # non-blocking
 
     def open_assay_wizard(self) -> None:
         """Choose an assay, map channels, preview the calibration, apply it to the run open in

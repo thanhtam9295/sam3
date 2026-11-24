@@ -69,6 +69,11 @@ def run_gui(smoke_test: bool = False) -> int:
     app.setApplicationName("HCS Studio")
     setup_logging()
     log.info("HCS Studio %s starting (Python %s)", __version__, sys.version.split()[0])
+    if not smoke_test:
+        from hcs_studio.gui.security_dialogs import require_sign_in
+
+        if not require_sign_in():
+            return 1
     window = MainWindow()
     install_error_handler(window)
     window.show()
