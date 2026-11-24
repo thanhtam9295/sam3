@@ -218,6 +218,9 @@ PlateLayout (model/annotation.py)
   Sidecar checksums use `fingerprint()` (files: SHA-256; folders: a tree digest).
 - Time-lapse movies need `raw`/`step:<n>` sources (run outputs keep timepoint 1 only).
 - Tests: pytest's `faulthandler_timeout = 180` dumps stacks of a hung test; keep it.
+- GUI tests: heavy pure-Python work (numba compiles, matplotlib figures) in a `BackgroundTask`
+  thread while `qtbot.waitUntil` spins the event loop can be starved of the GIL for minutes when
+  earlier GUI tests left event filters behind; warm up or stub that work in GUI tests.
 
 ### Integration conventions (Phase 15, built)
 
