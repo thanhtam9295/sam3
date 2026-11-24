@@ -100,6 +100,49 @@ class DatabaseConfig(BaseModel):
     url: str = ""
 
 
+#: Claude models the assistant may use (PROMPT_PLATFORM.md §28.1).
+ASSISTANT_MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2")
+
+
+class AssistantSettings(BaseModel):
+    """The Claude lab assistant (Phase 28). Off until an admin enables it; the API key is a
+    keychain reference (local mode) or lives only on the server (server mode)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    #: routine questions
+    model: str = "claude-opus-5-5"
+    effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    #: "use a stronger model" for one question
+    strong_model: str = "claude-fable-5-2"
+    strong_effort: Literal["low", "medium", "high", "xhigh", "max"] = "high"
+    api_key: str = "secret:anthropic/api_key"
+    #: weighted tokens per user and calendar month (UTC); 0 = no limit
+    monthly_token_budget: int = Field(default=2_000_000, ge=0)
+    user_budgets: dict[str, int] = Field(default_factory=dict)
+    #: compound names replaced by codes unless a question opts out
+    compound_ids_only: bool = False
+    #: whether users may enable image thumbnails for a question (each image is confirmed)
+    allow_images: bool = False
+    max_rows: int = Field(default=200, ge=1, le=5000)
+    query_timeout_s: float = Field(default=5.0, gt=0, le=120)
+    #: model turns per question before the assistant stops
+    max_turns: int = Field(default=12, ge=1, le=50)
+    max_tokens: int = Field(default=16000, ge=1024, le=64000)
+    #: re-run a declined request on a fallback model (server-side fallback)
+    refusal_fallback: bool = True
+    #: strict tool schemas (turn off where structured outputs are unavailable, e.g. CMEK)
+    strict_tools: bool = True
+
+    @field_validator("model", "strong_model")
+    @classmethod
+    def _model(cls, value: str) -> str:
+        if not value.startswith("claude-"):
+            raise ValueError("A Claude model ID, e.g. claude-opus-5-5")
+        return value
+
+
 class AppSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -109,6 +152,7 @@ class AppSettings(BaseModel):
     automation: AutomationSettings = Field(default_factory=AutomationSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
+    assistant: AssistantSettings = Field(default_factory=AssistantSettings)
     #: Earlier per-feature settings files, imported once (read-only copy).
     imported: dict[str, Any] = Field(default_factory=dict)
 

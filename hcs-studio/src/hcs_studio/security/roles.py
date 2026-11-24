@@ -22,6 +22,8 @@ PERMISSIONS: dict[str, str] = {
     "accounts": "admin",
     "qc.rules": "admin",
     "automation.rules": "admin",
+    #: asking the lab assistant (read-only; audited, counted against the user's budget)
+    "assistant": "viewer",
 }
 
 

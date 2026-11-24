@@ -61,6 +61,10 @@ server = [
     "uvicorn>=0.54,<1",
     "psycopg[binary]>=3.3,<4",
 ]
+assistant = [
+    # Claude lab assistant (Phase 28; approved 2026-11-24). API version 2026-10-21.
+    "anthropic>=2.13,<3",
+]
 profiling = [
     # Cell Painting profiling (Phase 24; approved 2026-11-24). Pull in duckdb, statsmodels.
     "pycytominer==1.7.1",
