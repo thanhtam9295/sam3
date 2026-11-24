@@ -57,6 +57,9 @@ table.stats td:last-child { text-align: right; font-variant-numeric: tabular-num
 .stack img.overlay { position: absolute; inset: 0; image-rendering: pixelated; }
 .empty { color: var(--muted); }
 footer { padding: 10px 20px 20px; color: var(--muted); font-size: 12px; }
+.state { display: inline-block; padding: 1px 8px; border-radius: 9px; font-size: 12px; margin-left: 8px; border: 1px solid var(--line); vertical-align: 3px; }
+.draftmark { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 140px; font-weight: 700; color: rgba(178, 24, 43, 0.10); pointer-events: none; z-index: 1000; letter-spacing: 12px; }
+table.audit { border-collapse: collapse; font-size: 12px; } table.audit td, table.audit th { padding: 2px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .well.picked { box-shadow: inset 0 0 0 3px var(--link); }
 #profiles h2 { font-size: 16px; margin: 18px 0 8px; }
 #embed { width: 100%; height: 380px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: crosshair; touch-action: none; }
@@ -80,8 +83,9 @@ table.matrix td.missing { background: var(--nan); cursor: default; }
 </style>
 </head>
 <body>
+{% if signoff.state != "approved" %}<div class="draftmark" aria-hidden="true">DRAFT</div>{% endif %}
 <header>
-  <h1>{{ plate_name }}</h1>
+  <h1>{{ plate_name }}<span class="state" id="run-state">{{ signoff.state }}{% if signoff.version > 1 %} · version {{ signoff.version }}{% endif %}</span></h1>
   <p>{{ subtitle }}</p>
 </header>
 <main>
@@ -136,6 +140,23 @@ table.matrix td.missing { background: var(--nan); cursor: default; }
       <ul id="links"></ul>
     </div>
   </section>
+  {% if signoff.signatures %}
+  <section id="signatures">
+    <h2>Signatures</h2>
+    <table class="audit"><tr><th>Meaning</th><th>Signed by</th><th>Role</th><th>UTC</th><th>Comment</th><th>Manifest SHA-256</th></tr>
+    {% for s in signoff.signatures %}<tr><td><b>{{ s.meaning }}</b><br>{{ s.statement }}</td><td>{{ s.display_name }} ({{ s.username }}){% if s.reauthenticated %}<br>password confirmed{% endif %}</td><td>{{ s.role }}</td><td>{{ s.utc }}</td><td>{{ s.reason }}</td><td><code>{{ s.manifest_sha256[:16] }}…</code></td></tr>
+    {% endfor %}</table>
+  </section>
+  {% endif %}
+  {% if signoff.parent_run %}<section><p>New version of <code>{{ signoff.parent_run }}</code>.</p></section>{% endif %}
+  {% if audit %}
+  <section id="audit">
+    <h2>Audit trail of this run</h2>
+    <table class="audit"><tr><th>#</th><th>UTC</th><th>User (role)</th><th>Action</th><th>Reason</th><th>Status</th></tr>
+    {% for r in audit %}<tr><td>{{ r.id }}</td><td>{{ r.utc }}</td><td>{{ r.user }} ({{ r.role }})</td><td>{{ r.type }}</td><td>{{ r.reason }}</td><td>{{ r.status }}</td></tr>
+    {% endfor %}</table>
+  </section>
+  {% endif %}
   {% if image_qc %}
   <section id="image-qc">
     <h2>Image QC</h2>

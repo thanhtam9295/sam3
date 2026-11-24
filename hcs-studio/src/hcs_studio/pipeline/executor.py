@@ -1269,6 +1269,14 @@ def run_pipeline(
     history[-1]["finished"] = datetime.now(UTC).isoformat()
     history[-1]["status"] = status
     manifest(status)
+    if status in ("completed", "completed_with_failures") and not pipeline.run_steps():
+        # the report was written with the tables, before the final status: refresh it
+        from hcs_studio.output.report import write_report
+
+        try:
+            write_report(folder)
+        except Exception:  # the run is complete; a report problem must not fail it
+            log.exception("Could not refresh the report")
     if pipeline.run_steps() and status in ("completed", "completed_with_failures"):
         emit({"type": "status", "text": "Run steps (pharmacology, figures, reports)"})
         step_log = _run_log(folder, "steps")

@@ -241,6 +241,20 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Run states, sign-off, locking (Phase 26b)
+
+| Check | Result | Test |
+|---|---|---|
+| **Done-when:** scripted scenario (layout saved, run, re-annotation, analysis, a denied signature, review, a refused second review, approval, three refused changes of the locked run, re-analysis as a new version) | every action in the audit log with user, role, reason and status; chain intact; the run's audit records in its report | `test_scripted_scenario_is_fully_audited` |
+| **Done-when:** a locked run | refused by analyze, annotate and report; files read-only; re-analysis needs a reason and makes `<run>_v2` linked to the original (manifest and registry), the original stays approved | same |
+| Report states | DRAFT mark and state until approval; signatures with name, role, time, comment, manifest hash; no DRAFT after approval | same |
+| Regulated mode | signing without / with a wrong password refused; approver must differ from the reviewer; signatures record the re-authentication | `test_regulated_mode_requires_password_and_two_people` |
+| CLI `run-state`, `sign`, `unlock` (admin only), `analyze --new-version`; unfinished runs are drafts; backup | as specified | `test_unlock_and_cli`, `test_states_of_unfinished_runs`, `test_registry_backup` |
+| Sign dialog | reviewed, then approved, then disabled (locked) | `test_sign_run_dialog` |
+
+Not checked: file locking as an ordinary (non-root) user on Windows and Linux shares (the test
+container runs as root, which ignores read-only bits; the test checks the mode bits).
+
 ## Accounts, roles and the audit trail (Phase 26a)
 
 | Check | Result | Test |

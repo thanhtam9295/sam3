@@ -227,16 +227,63 @@ def image_qc_lines(folder: Path) -> dict[str, Any] | None:
         for row in wells.to_dict("records"):
             if row.get("failed"):
                 out["wells"].append((row["well"], row.get("reasons") or ""))
-            compound = [f for f in str(row.get("flags") or "").split(";")
-                        if f in ("autofluorescence", "precipitation")]  # fmt: skip
+            compound = [
+                f
+                for f in str(row.get("flags") or "").split(";")
+                if f in ("autofluorescence", "precipitation")
+            ]
             if compound:
                 out["flagged"].append((row["well"], ", ".join(compound)))
     if (qc / "field_qc.parquet").exists():
-        fields = pd.read_parquet(qc / "field_qc.parquet", columns=["well", "field", "excluded",
-                                                                   "reasons"])  # fmt: skip
+        fields = pd.read_parquet(
+            qc / "field_qc.parquet", columns=["well", "field", "excluded", "reasons"]
+        )
         for row in fields[fields["excluded"]].to_dict("records"):
             out["fields"].append((row["well"], int(row["field"]), row["reasons"]))
     return out
+
+
+def signoff_data(folder: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    """State, version and signatures for the report (Phase 26), from ``signatures.json`` and
+    the manifest — the report never needs the registry."""
+    data: dict[str, Any] = {
+        "state": "completed"
+        if manifest.get("status") in ("completed", "completed_with_failures")
+        else "draft",
+        "version": int(manifest.get("run_version", 1)),
+        "parent_run": str(manifest.get("parent_run", "")),
+        "signatures": [],
+    }
+    path = Path(folder) / "signatures.json"
+    if path.exists():
+        with contextlib.suppress(ValueError, OSError):
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            data["state"] = saved.get("state", data["state"])
+            data["signatures"] = saved.get("signatures", [])
+    return data
+
+
+def audit_rows(folder: Path, limit: int = 300) -> list[dict[str, Any]]:
+    """The run's audit records (empty when the registry is unavailable)."""
+    try:
+        from hcs_studio.security.audit import _utc_text, run_audit
+        from hcs_studio.security.signoff import run_key
+
+        records = run_audit(run_key(folder))[-limit:]
+    except Exception:  # no registry here (a copied run folder): the report still works
+        return []
+    return [
+        {
+            "id": r["id"],
+            "utc": _utc_text(r["utc"])[:19],
+            "user": r["actor_id"],
+            "role": r["actor_role"] or "–",
+            "type": r["type"],
+            "reason": r["reason"],
+            "status": r["status"],
+        }
+        for r in records
+    ]
 
 
 def write_report(folder: Path) -> Path:
@@ -270,6 +317,8 @@ def write_report(folder: Path) -> Path:
         data_json=data_json,
         analysis=analysis_lines(folder),
         image_qc=image_qc_lines(folder),
+        signoff=signoff_data(folder, manifest),
+        audit=audit_rows(folder),
     )
     target = folder / "index.html"
     part = target.with_name("index.html.part")

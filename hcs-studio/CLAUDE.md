@@ -763,7 +763,7 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
 - **Phase 26 decisions** (2026-11-24): research use (strict audit always; password and re-auth
   off by default, `security.regulated_mode` turns them on); server mode uses local accounts
   only (no SSO); argon2-cffi approved. Plan: (a) accounts, roles, audit chain — built; (b) run
-  states, signatures, locking, versions, report DRAFT mark + signatures + audit section.
+  states, signatures, locking, versions, report DRAFT mark + signatures + audit section — built.
 - **Phase 26a (built)**: `security/roles.py` (`PERMISSIONS` prefix → lowest role; checked in the
   `service` wrapper, denials emitted with status `denied`), `security/accounts.py` (no accounts
   → OS user is admin; else account role, unknown → viewer; argon2id; lockout; in-process
@@ -775,6 +775,18 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   columns with server defaults). Services `services/security.py`; CLI `cli_security.py`
   (`accounts`, `audit`); GUI `gui/security_dialogs.py` (AuditDialog, SignInDialog,
   `require_sign_in` at launch). Settings `AppSettings.security`.
+- **Phase 26b (built)**: `security/signoff.py` (`status` from `run_state` else the manifest:
+  completed / completed_with_failures → completed, else draft; `sign` (reviewed needs completed,
+  approved needs reviewed; regulated: approver ≠ reviewer; `reauth_required` needs the password,
+  checked by the service), approval locks (`run_state.locked`, files chmod read-only, report
+  rewritten first), `unlock`, `new_version` (hard links for `IMMUTABLE_DIRS/FILES`, copies the
+  rest; manifest `run_version`, `parent_run`)). `services.operations.guard_runs` in every
+  run-changing service; `analyze_run(new_version=True)` (reason required). Services
+  `run.sign|unlock|new_version`; CLI `run-state`, `sign`, `unlock`, `analyze --new-version`,
+  `db backup` (`db/backup.py`, SQLite online backup). Report: `signoff_data` (from
+  `signatures.json` + manifest; no registry needed), `audit_rows`, DRAFT mark. The executor
+  rewrites the report after the final status when there are no run steps. GUI `SignRunDialog`
+  (Tools → Sign the run in Results…).
 
 ## Commands
 

@@ -73,6 +73,10 @@ hcs-studio unlock <run> --reason "…"              # admin
 hcs-studio analyze <locked run> --pipeline steps.yaml --new-version --reason "…"
 ```
 
+In the app: **Tools → Sign the run in Results…** shows the state and the signatures so far, the
+meaning of the signature, a comment and the password field (required when the settings ask for
+re-authentication).
+
 An approved run is **locked**: its files become read-only and every change through the app is
 refused. Re-analysis creates a **new version** (`<run>_v2`, linked to the original in its
 manifest and in the registry; large unchanged files are hard-linked) and changes that instead.

@@ -281,6 +281,7 @@ class MainWindow(QMainWindow):
         )
         tools_menu.addAction(self._action("&Assay wizard…", self.open_assay_wizard))
         tools_menu.addAction(self._action("A&udit trail…", self.open_audit_trail))
+        tools_menu.addAction(self._action("Si&gn the run in Results…", self.sign_run))
 
         view_menu = self.menuBar().addMenu("&View")
         for dock in (
@@ -473,6 +474,17 @@ class MainWindow(QMainWindow):
         dialog = AuditDialog(self)
         dialog.search()
         dialog.open()  # non-blocking
+
+    def sign_run(self) -> None:
+        from hcs_studio.gui.security_dialogs import SignRunDialog
+
+        results = self.results_panel.results
+        if results is None:
+            self.log("Open a run in Results first, then sign it.")
+            return
+        dialog = SignRunDialog(results.folder, self)
+        dialog.signed.connect(lambda _: self.results_panel.load(results.folder))
+        dialog.open()
 
     def open_assay_wizard(self) -> None:
         """Choose an assay, map channels, preview the calibration, apply it to the run open in

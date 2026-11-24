@@ -26,6 +26,15 @@ if TYPE_CHECKING:
     from hcs_studio.segmentation.sam3_backend import Sam3Settings
 
 
+def guard_runs(*folders: Path | str | None) -> None:
+    """Refuse to change an approved (locked) run (Phase 26)."""
+    from hcs_studio.security.signoff import check_unlocked
+
+    for folder in folders:
+        if folder and (Path(folder) / "run_manifest.json").exists():
+            check_unlocked(Path(folder))
+
+
 def object_id(path: str | Path) -> str:
     """A run folder or file as stored in events: its rooted path."""
     from hcs_studio.output.manifest import rooted_text
@@ -66,6 +75,7 @@ def annotate_run(
     from hcs_studio.io.layout_store import layout_sha256
     from hcs_studio.pipeline import executor
 
+    guard_runs(folder)
     before = _manifest_layout(folder)
     record = executor.annotate_run(folder, layout, source)
     ctx.note(
@@ -108,20 +118,35 @@ def run_pipeline(ctx: ServiceContext, plate: Plate, pipeline: Pipeline, **kwargs
     return result
 
 
-@service("run.analyze", object_type="run")
+def _new_version_needs_reason(*args: Any, **kwargs: Any) -> bool:
+    return bool(kwargs.get("new_version"))
+
+
+@service("run.analyze", object_type="run", reason_required=_new_version_needs_reason)
 def analyze_run(
     ctx: ServiceContext,
     folder: Path,
     table_steps: Pipeline | list[Any],
     *,
     include_run_steps: bool = True,
+    new_version: bool = False,
 ) -> dict[str, Any]:
-    """Apply table and run steps to a finished run (replaces any earlier analysis)."""
+    """Apply table and run steps to a finished run (replaces any earlier analysis). An
+    approved (locked) run is refused unless ``new_version``: then a linked new version of the
+    run is made and analysed (a reason is required); ``record["folder"]`` names it."""
     from hcs_studio.pipeline import executor
+    from hcs_studio.security import signoff
 
+    before = None
+    if new_version:
+        before = {"run": object_id(folder)}
+        folder = signoff.new_version(Path(folder), ctx.reason)
+    guard_runs(folder)
     record = executor.analyze_run(folder, table_steps, include_run_steps=include_run_steps)
+    record["folder"] = str(folder)
     ctx.note(
         object_id=object_id(folder),
+        before=before,
         after={
             "steps": [s.get("module") for s in record.get("steps", [])],
             "run_steps": [s.get("module") for s in record.get("run_steps", [])],
@@ -134,6 +159,7 @@ def analyze_run(
 def write_report(ctx: ServiceContext, folder: Path) -> Path:
     from hcs_studio.output.report import write_report as write
 
+    guard_runs(folder)
     path = write(folder)
     ctx.note(object_id=object_id(folder), after={"report": path.name})
     return path
@@ -161,6 +187,8 @@ def run_pharmacology(
     """Analyse runs and write ``pharmacology/``; manual exclusions need a reason."""
     from hcs_studio.pharmacology import analysis
 
+    if write:
+        guard_runs(*(folders if refresh_reports else folders[:1] if output is None else []))
     result = analysis.run_pharmacology(
         folders, options, output, write=write, refresh_reports=refresh_reports
     )
@@ -186,6 +214,8 @@ def run_profiling(
     from hcs_studio.analysis.profiling import run_profiling as profile
     from hcs_studio.output.report import write_report as write
 
+    if output is None and runs:
+        guard_runs(runs[0])
     result = profile(runs, options, output)
     if output is None and runs:
         write(Path(runs[0]))  # the report shows the profiles of the first run
@@ -232,6 +262,7 @@ def review_qc(
     run's tables and report follow."""
     from hcs_studio.qc.review import Override, apply_override, load_fields
 
+    guard_runs(folder)
     fields = load_fields(Path(folder))
     if level == "field":
         rows = fields[(fields["well"] == well) & (fields["field"] == field)]

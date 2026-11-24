@@ -72,9 +72,11 @@ def manifest_sha256(folder: Path) -> str:
 
 
 def _default_state(manifest: dict[str, Any]) -> str:
+    """A run that finished (with or without failed wells) is completed; running, cancelled,
+    failed or QC-stopped runs are drafts."""
     return (
         "completed"
-        if manifest.get("status") in ("completed", "finished", "done") or manifest.get("finished")
+        if manifest.get("status") in ("completed", "completed_with_failures")
         else "draft"
     )
 

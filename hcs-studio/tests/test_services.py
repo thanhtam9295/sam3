@@ -149,6 +149,7 @@ WRAPPED = {
     "hcs_studio.training.qa": {"queue_spot_checks", "review_spot_check", "model_qa"},
     "hcs_studio.security.accounts": {"create_account", "update_account"},
     "hcs_studio.security.audit": {"checkpoint"},
+    "hcs_studio.security.signoff": {"sign", "unlock", "new_version"},
     "hcs_studio.db.library": {"import_library"},
 }
 ALLOWED = {

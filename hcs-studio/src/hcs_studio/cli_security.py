@@ -29,6 +29,21 @@ def add_parsers(sub: Any) -> None:
     upd.add_argument("--password", action="store_true", help="set a new password (asked)")
     upd.add_argument("--reason", required=True)
 
+    state = sub.add_parser("run-state", help="a run's review state, version and signatures")
+    state.add_argument("run", type=Path)
+    sign = sub.add_parser("sign", help="sign a run as reviewed or approved (reviewers)")
+    sign.add_argument("run", type=Path)
+    sign.add_argument("--meaning", required=True, choices=["reviewed", "approved"])
+    sign.add_argument("--comment", default="")
+    sign.add_argument(
+        "--password",
+        action="store_true",
+        help="confirm with your password (required when the settings say so)",
+    )
+    unlock = sub.add_parser("unlock", help="unlock an approved run (admins)")
+    unlock.add_argument("run", type=Path)
+    unlock.add_argument("--reason", required=True)
+
     aud = sub.add_parser("audit", help="the audit trail: list, export, verify")
     aud_sub = aud.add_subparsers(dest="audit_command", required=True)
     for name, text in (("list", "show audit records"), ("export", "write CSV or PDF")):
@@ -141,4 +156,37 @@ def run_audit(args: argparse.Namespace) -> int:
     else:
         audit.export_csv(records, output)
     print(f"{len(records)} records → {output}")
+    return 0
+
+
+def run_signoff(args: argparse.Namespace) -> int:
+    from hcs_studio.config import load_settings
+    from hcs_studio.security import signoff
+    from hcs_studio.services import context
+    from hcs_studio.services import security as services
+
+    try:
+        if args.command == "run-state":
+            s = signoff.status(args.run)
+            print(
+                f"{args.run.name}: {s.state}{' (locked)' if s.locked else ''}, version {s.version}"
+                + (f", new version of {s.parent_run}" if s.parent_run else "")
+            )
+            for sig in s.signatures:
+                print(
+                    f"  {sig['meaning']}: {sig['display_name']} ({sig['username']}, {sig['role']}) "
+                    f"{sig['utc']} {sig['reason']}"
+                )
+            return 0
+        if args.command == "sign":
+            needs = load_settings().security.reauth_required
+            password = getpass.getpass("Password: ") if (args.password or needs) else None
+            result = services.sign_run(context(args.comment), args.run, args.meaning, password)
+            print(f"{args.run.name}: {result.state}{' — locked' if result.locked else ''}")
+            return 0
+        result = services.unlock_run(context(args.reason), args.run)
+        print(f"{args.run.name}: unlocked ({result.state})")
+    except (ValueError, PermissionError) as exc:
+        print(f"Error: {exc}")
+        return 2
     return 0

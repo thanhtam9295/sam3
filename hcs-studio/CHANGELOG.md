@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Phase 26b — run states, sign-off, locking and versions
+- Run states draft → completed → reviewed → approved; `hcs-studio sign <run> --meaning
+  reviewed|approved` (reviewers; optional or, in regulated mode, required re-authentication;
+  approver ≠ reviewer in regulated mode), `run-state`, `unlock` (admins, with a reason); Tools →
+  Sign the run in Results… in the app.
+- Approved runs are locked (files read-only; every run-changing service refuses them);
+  `hcs-studio analyze --new-version` re-analyses a linked new version (`<run>_v2`, parent in its
+  manifest and the registry).
+- Run reports show the state, a DRAFT mark until approval, the signatures and the run's audit
+  records. `hcs-studio db backup` copies the registry and the audit chain head.
+- Fix: the run report of a pipeline without run steps was written before the final status and
+  said "running"; it is now refreshed when the run finishes.
+
 ### Phase 26a — accounts, roles and the audit trail
 - Roles viewer < analyst < reviewer < admin with a permission matrix enforced in the service
   layer (refused actions are recorded); local accounts (`hcs-studio accounts …`) with optional

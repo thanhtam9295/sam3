@@ -59,6 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="apply only these steps (default: the run's own table steps first)",
     )
+    analyze.add_argument(
+        "--new-version",
+        action="store_true",
+        help="analyse a linked new version of the run (needed for approved, locked runs)",
+    )
     annotate = sub.add_parser(
         "annotate", help="apply a plate layout to a finished run (tables and report rebuilt)"
     )
@@ -78,6 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     db = sub.add_parser("db", help="experiment registry: scan runs, search, potency across runs")
     db_sub = db.add_subparsers(dest="db_command", required=True)
     db_sub.add_parser("info", help="where the registry is, and what it holds")
+    db_backup = db_sub.add_parser("backup", help="copy the registry and the audit chain head")
+    db_backup.add_argument("--output", type=Path, required=True)
     db_scan = db_sub.add_parser("scan", help="index run folders (and raw plates) into the registry")
     db_scan.add_argument("paths", nargs="+", type=Path, help="run folders or folders above them")
     db_scan.add_argument("--raw", action="store_true", help="also register raw plate folders")
@@ -726,6 +733,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from hcs_studio.cli_security import run_accounts, run_audit
 
         return run_accounts(args) if args.command == "accounts" else run_audit(args)
+    if args.command in ("run-state", "sign", "unlock"):
+        from hcs_studio.cli_security import run_signoff
+
+        return run_signoff(args)
     if args.command in ("gt", "validate-seg", "models"):
         from hcs_studio.cli_models import run_gt, run_models, run_validate
 
@@ -1387,10 +1398,18 @@ def _analyze(args: argparse.Namespace) -> int:
         if not pipeline.table_steps() and not pipeline.run_steps() and args.only:
             print("Error: the pipeline has no table steps or run steps")
             return 2
-        record = analyze_run(_ctx(args), args.folder, pipeline, include_run_steps=not args.only)
-    except (OSError, ValueError, ModuleError) as exc:
+        record = analyze_run(
+            _ctx(args),
+            args.folder,
+            pipeline,
+            include_run_steps=not args.only,
+            new_version=args.new_version,
+        )
+    except (OSError, ValueError, ModuleError, PermissionError) as exc:
         print(f"Error: {exc}")
         return 2
+    if args.new_version:
+        print(f"New version: {record['folder']}")
     print(f"Applied {len(record['steps'])} table step(s); tables and report updated")
     for step in record.get("run_steps", []):
         outcome = step["status"] + (f": {step['error']}" if step.get("error") else "")
@@ -1649,6 +1668,12 @@ def _db(args: argparse.Namespace) -> int:
             print(f"Wrote {queries.export_table(frame, args.export)}")
 
     try:
+        if args.db_command == "backup":
+            from hcs_studio.db.backup import backup_registry
+
+            for path in backup_registry(args.output):
+                print(f"Backed up: {path}")
+            return 0
         if args.db_command == "info":
             from sqlalchemy import func, select
 

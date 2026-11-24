@@ -12,8 +12,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -217,3 +219,88 @@ def require_sign_in(parent: QWidget | None = None) -> bool:
         return False
     sign_in(dialog.username.text().strip(), dialog.password.text())
     return True
+
+
+class SignRunDialog(QDialog):
+    """Sign a run as reviewed or approved: state and signatures so far, the meaning of the
+    signature, an optional comment and — when the settings require it — the password."""
+
+    signed = Signal(object)
+
+    def __init__(self, folder: Path, parent: QWidget | None = None) -> None:
+        from hcs_studio.config import load_settings
+        from hcs_studio.security import signoff
+
+        super().__init__(parent)
+        self.folder = Path(folder)
+        self.setWindowTitle(f"Sign {self.folder.name}")
+        self.task = BackgroundTask(self)
+        self.task.finished.connect(self._done)
+        self.status = QLabel("")
+        self.status.setWordWrap(True)
+        self.task.failed.connect(lambda message: self.status.setText(f"Not signed: {message}"))
+        state = signoff.status(self.folder)
+        self.reauth = load_settings().security.reauth_required
+        lines = [
+            f"State: <b>{state.state}</b>"
+            + (" (locked)" if state.locked else "")
+            + (f", version {state.version}" if state.version > 1 else "")
+        ]
+        lines += [
+            f"{s['meaning']}: {s['display_name']} ({s['role']}), {s['utc']}"
+            for s in state.signatures
+        ]
+        self.summary = QLabel("<br>".join(lines))
+        self.meaning = QComboBox()
+        self.meaning.addItems(["reviewed", "approved"])
+        self.meaning.setCurrentText("approved" if state.state == "reviewed" else "reviewed")
+        self.statement = QLabel("")
+        self.statement.setWordWrap(True)
+        self.meaning.currentTextChanged.connect(
+            lambda m: self.statement.setText(signoff.STATEMENTS[m])
+        )
+        self.statement.setText(signoff.STATEMENTS[self.meaning.currentText()])
+        self.comment = QLineEdit()
+        self.comment.setPlaceholderText("Comment (optional)")
+        self.password = QLineEdit()
+        self.password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password.setPlaceholderText(
+            "required" if self.reauth else "optional: confirms your identity"
+        )
+        self.sign_button = QPushButton("Sign")
+        self.sign_button.clicked.connect(self.sign)
+        self.sign_button.setEnabled(not state.locked and state.state in ("completed", "reviewed"))
+        form = QFormLayout()
+        form.addRow("Meaning", self.meaning)
+        form.addRow("", self.statement)
+        form.addRow("Comment", self.comment)
+        form.addRow("Password", self.password)
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.summary)
+        layout.addLayout(form)
+        layout.addWidget(self.sign_button)
+        layout.addWidget(self.status)
+
+    def sign(self) -> None:
+        from hcs_studio.services import context
+        from hcs_studio.services.security import sign_run
+
+        password = self.password.text() or None
+        if self.reauth and not password:
+            self.status.setText("Enter your password to sign.")
+            return
+        ctx, meaning, folder = (
+            context(self.comment.text().strip()),
+            self.meaning.currentText(),
+            self.folder,
+        )
+        self.status.setText("Signing…")
+        self.task.request(lambda: sign_run(ctx, folder, meaning, password))
+
+    def _done(self, result: Any) -> None:
+        self.password.clear()
+        self.status.setText(
+            f"Signed: the run is now {result.state}" + (" and locked." if result.locked else ".")
+        )
+        self.sign_button.setEnabled(False)
+        self.signed.emit(result)
