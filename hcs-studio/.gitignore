@@ -7,3 +7,4 @@ __pycache__/
 dist/
 build/
 .venv-sam3/
+!packaging/hcs_studio.spec

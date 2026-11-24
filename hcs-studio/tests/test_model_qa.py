@@ -239,25 +239,9 @@ def test_qa_commands(home: Path, tmp_path: Path) -> None:
 
 
 @pytest.mark.gui
-def test_models_tab(
-    home: Path, tmp_path: Path, qtbot: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_models_tab(home: Path, tmp_path: Path, qtbot: Any, inline_tasks: None) -> None:
     pytest.importorskip("PySide6")
     from hcs_studio.gui.models_panel import ModelsPanel
-    from hcs_studio.services import training as services
-
-    def quick_compare(ctx: Any, candidate: str, **kwargs: Any) -> Any:
-        """The real comparison (figures) is tested above; building matplotlib figures in the
-        worker thread while qtbot.waitUntil spins the event loop can starve it for minutes."""
-        report = tmp_path / "report.html"
-        report.write_text("report")
-        name, version = registry.parse_ref(candidate)
-        registry.update_metrics(
-            name, int(version or 1), {"test": {"ap50": 0.5, "report": str(report)}}
-        )
-        return None, report
-
-    monkeypatch.setattr(services, "compare_models", quick_compare)
 
     model = _hard_model()
     run = _run(tmp_path, model.ref, [HardNuclei()], "gui")

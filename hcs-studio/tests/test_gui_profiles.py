@@ -65,7 +65,7 @@ def window(qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Ite
 
 
 def test_profiles_linked_to_plate_and_viewer(
-    window: MainWindow, run_folder: Path, qtbot: QtBot, tmp_path: Path
+    window: MainWindow, run_folder: Path, qtbot: QtBot, tmp_path: Path, inline_tasks: None
 ) -> None:
     window.show_results(run_folder)
     panel = window.profiles_panel

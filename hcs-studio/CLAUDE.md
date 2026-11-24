@@ -219,8 +219,9 @@ PlateLayout (model/annotation.py)
 - Time-lapse movies need `raw`/`step:<n>` sources (run outputs keep timepoint 1 only).
 - Tests: pytest's `faulthandler_timeout = 180` dumps stacks of a hung test; keep it.
 - GUI tests: heavy pure-Python work (numba compiles, matplotlib figures) in a `BackgroundTask`
-  thread while `qtbot.waitUntil` spins the event loop can be starved of the GIL for minutes when
-  earlier GUI tests left event filters behind; warm up or stub that work in GUI tests.
+  thread while `qtbot.waitUntil` spins the event loop can be starved of the GIL for minutes late
+  in a long GUI session (not reproducible in isolation); such tests take the `inline_tasks`
+  fixture (tests/conftest.py), which runs the work synchronously.
 
 ### Integration conventions (Phase 15, built)
 

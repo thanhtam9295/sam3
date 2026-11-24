@@ -30,3 +30,25 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     for item in items:
         if "gui" in item.keywords:
             item.add_marker(skip)
+
+
+@pytest.fixture
+def inline_tasks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run ``BackgroundTask`` work synchronously in the GUI thread.
+
+    Heavy pure-Python work (numba compiles, matplotlib figures) in the worker thread while
+    ``qtbot.waitUntil`` spins the event loop can be starved of the GIL for minutes late in a
+    long GUI test session (seen as intermittent faulthandler timeouts). Tests of panel logic
+    use this; the threading itself is covered by the lighter GUI tests."""
+    from hcs_studio.gui.workers import BackgroundTask
+
+    def request(self: BackgroundTask, work: object) -> None:
+        self._generation += 1
+        try:
+            result = work()  # type: ignore[operator]
+        except Exception as exc:
+            self.failed.emit(str(exc) or type(exc).__name__)
+            return
+        self.finished.emit(result)
+
+    monkeypatch.setattr(BackgroundTask, "request", request)
