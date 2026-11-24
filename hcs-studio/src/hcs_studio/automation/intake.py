@@ -58,10 +58,51 @@ def acquisition_key(payload: dict[str, Any]) -> str:
 
 
 def raw_location(payload: dict[str, Any]) -> str:
+    """The raw data of an event as a rooted path (``ROOT:rel``) when possible."""
     raw = payload["raw_data"]
     if raw.get("root") and raw.get("path"):
-        return f"{str(raw['root']).upper()}:{raw['path']}"
-    return str(raw.get("location", ""))
+        return f"{str(raw['root']).upper()}:{str(raw['path']).strip('/')}"
+    location = str(raw.get("location", ""))
+    return _rooted(location) if location else ""
+
+
+def _rooted(location: str) -> str:
+    from hcs_studio.paths import to_rooted
+
+    try:
+        return str(to_rooted(location))
+    except Exception:
+        return f"ABSOLUTE:{location}"
+
+
+def already_registered(path: Path) -> bool:
+    """Whether an acquisition of this raw data is already known (watcher restarts)."""
+    rooted = _rooted(str(Path(path)))
+    with session_scope() as session:
+        return session.scalars(select(AutoRun.id).where(AutoRun.raw == rooted)).first() is not None
+
+
+def _same_raw(session: Any, payload: dict[str, Any]) -> AutoRun | None:
+    """An acquisition of the same barcode, raw data and time point received recently."""
+    from datetime import timedelta
+
+    from hcs_studio.config import load_settings
+
+    hours = load_settings().automation.duplicate_window_hours
+    location = raw_location(payload)
+    if hours <= 0 or not location:
+        return None
+    since = datetime.now(UTC) - timedelta(hours=hours)
+    rows = session.scalars(
+        select(AutoRun).where(
+            (AutoRun.barcode == payload["barcode"]) & (AutoRun.raw == location)
+        )
+    ).all()
+    for row in rows:
+        created = row.created if row.created.tzinfo else row.created.replace(tzinfo=UTC)
+        if row.time_point == payload.get("time_point_index") and created >= since:
+            return row
+    return None
 
 
 def _log(
@@ -135,6 +176,8 @@ def receive(message: dict[str, Any] | str | bytes, channel: str) -> Receipt:
     key = acquisition_key(payload)
     with session_scope() as session:
         existing = session.scalars(select(AutoRun).where(AutoRun.key == key)).first()
+        if existing is None:
+            existing = _same_raw(session, payload)
         if existing is None:
             session.add(
                 AutoRun(

@@ -63,11 +63,17 @@ class AutomationSettings(BaseModel):
     #: Where automatic runs write their run folders (empty = next to the raw data's parent).
     output_root: str = ""
     workers: int | None = None
+    #: At night (local hours "20-7") automatic runs may use more worker processes.
+    night_hours: str = Field(default="", pattern=r"^$|^\d{1,2}-\d{1,2}$")
+    night_workers: int | None = None
     #: Send a ``reimage.request`` to the scheduler when a plate fails QC.
     reimage_on_qc_fail: bool = True
     #: How long an event's raw data may take to become complete before the plate is given up.
     data_wait_minutes: float = Field(default=120.0, gt=0)
     poll_seconds: float = Field(default=10.0, gt=0)
+    #: The same raw data (and time point) reported again within this window is a duplicate,
+    #: even with another acquisition ID (e.g. by the scheduler and the folder watcher).
+    duplicate_window_hours: float = Field(default=24.0, ge=0)
     channels: list[Channel] = Field(default_factory=list)
     #: Addresses (emails) that also receive failures.
     admins: list[str] = Field(default_factory=list)
