@@ -669,6 +669,9 @@ def build_parser() -> argparse.ArgumentParser:
             default="",
             help="why (recorded with the change; required for manual exclusions)",
         )
+    from hcs_studio.cli_models import add_parsers
+
+    add_parsers(sub)
     return parser
 
 
@@ -716,6 +719,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _assay(args)
     if args.command == "cellpainting":
         return _cellpainting(args)
+    if args.command in ("gt", "validate-seg"):
+        from hcs_studio.cli_models import run_gt, run_validate
+
+        return run_gt(args) if args.command == "gt" else run_validate(args)
     if args.command == "screen":
         return _screen(args)
     if args.command == "kinetics":

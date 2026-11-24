@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Phase 25a — ground truth and validation metrics
+- Versioned ground-truth sets (`hcs-studio gt import|split|show|list|export`; services
+  `groundtruth.import|create|split`): images, masks, per-field provenance, content hash; splits by
+  plate, well or cell line with a leakage check.
+- `hcs-studio validate-seg`: AP at IoU 0.5–0.95, mAP, precision/recall/F1, merges, splits and
+  count errors, overall and per cell line. Classifier metrics with calibration (ECE, Brier).
+- Synthetic annotated fields (`synthetic/groundtruth.py`: an easy and a hard "cell line").
+
 ### Phase 24c — Cell Painting: profile evaluation
 - `hcs-studio cellpainting evaluate <profiling folder> [--moa moa.csv]` (service
   `cellpainting.evaluate`; also `cellpainting profile … --evaluate`): phenotypic activity by

@@ -32,6 +32,7 @@ PAGES = [
     ("kinetics.md", "Live-cell kinetics"),
     ("screening.md", "Primary screens"),
     ("cellpainting.md", "Cell Painting profiling"),
+    ("models.md", "Training, validating and managing models"),
     ("validation.md", "Validation"),
 ]
 TEMPLATE = """<!doctype html>
