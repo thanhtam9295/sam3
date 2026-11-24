@@ -682,6 +682,9 @@ def build_parser() -> argparse.ArgumentParser:
     from hcs_studio.cli_security import add_parsers as add_security_parsers
 
     add_security_parsers(sub)
+    from hcs_studio.cli_server import add_parsers as add_server_parsers
+
+    add_server_parsers(sub)
     return parser
 
 
@@ -733,6 +736,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from hcs_studio.cli_security import run_accounts, run_audit
 
         return run_accounts(args) if args.command == "accounts" else run_audit(args)
+    if args.command in ("worker", "worker-pool", "queue"):
+        from hcs_studio.cli_server import run as run_server
+
+        return run_server(args)
     if args.command in ("run-state", "sign", "unlock"):
         from hcs_studio.cli_security import run_signoff
 

@@ -7,6 +7,7 @@ queue; it never blocks. Each job may itself use a pool of worker processes for w
 from __future__ import annotations
 
 import multiprocessing
+import os
 import traceback
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -37,8 +38,26 @@ class Job:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
-def run_job(job: Job, events: Any, cancel: Any, pause: Any) -> None:
+def _exit_with_parent(parent: int) -> None:
+    """Stop this job process when the process that started it dies (a killed worker or app):
+    an orphan would keep writing to the run folder while the job is resumed elsewhere."""
+    import os
+    import threading
+    import time
+
+    def watch() -> None:
+        while True:
+            time.sleep(1.0)
+            if os.getppid() != parent:
+                os._exit(3)
+
+    threading.Thread(target=watch, name="parent-watch", daemon=True).start()
+
+
+def run_job(job: Job, events: Any, cancel: Any, pause: Any, parent: int | None = None) -> None:
     """Process entry point: run the job and report through ``events`` (a queue)."""
+    if parent is not None:
+        _exit_with_parent(parent)
     if job.extra.get("task") == "train":  # Phase 25: model training in the queue
         from hcs_studio.training.train import run_training_job
 
@@ -90,7 +109,9 @@ class JobProcess:
         self.cancel = context.Event()
         self.pause = context.Event()
         self.process = context.Process(
-            target=run_job, args=(job, self.events, self.cancel, self.pause), name="hcs-job"
+            target=run_job,
+            args=(job, self.events, self.cancel, self.pause, os.getpid()),
+            name="hcs-job",
         )
 
     def start(self) -> None:

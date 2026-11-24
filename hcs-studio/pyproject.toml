@@ -38,6 +38,7 @@ dependencies = [
     "jsonschema>=4.26,<5",
     "keyring>=25.7,<26",
     "argon2-cffi>=25.1,<26",
+    "httpx>=0.28,<1",
     "lab-events>=1.0,<2",
 ]
 
@@ -53,6 +54,12 @@ gui = [
 ]
 segmentation = [
     "cellpose>=4.2",
+]
+server = [
+    # Server mode (Phase 27; approved 2026-11-24): REST/WebSocket API and PostgreSQL.
+    "fastapi>=0.165,<1",
+    "uvicorn>=0.54,<1",
+    "psycopg[binary]>=3.3,<4",
 ]
 profiling = [
     # Cell Painting profiling (Phase 24; approved 2026-11-24). Pull in duckdb, statsmodels.

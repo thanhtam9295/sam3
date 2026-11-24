@@ -787,6 +787,24 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `signatures.json` + manifest; no registry needed), `audit_rows`, DRAFT mark. The executor
   rewrites the report after the final status when there are no run steps. GUI `SignRunDialog`
   (Tools → Sign the run in Results…).
+- **Phase 27 decisions** (2026-11-24): PostgreSQL-backed job queue (`SELECT … FOR UPDATE SKIP
+  LOCKED`; no Redis); Docker Compose first, Windows service documented (IT not decided); own
+  canvas OME-Zarr viewer in the web portal (no vizarr/OpenSeadragon); extra `server` =
+  fastapi, uvicorn, psycopg[binary]; httpx in the core (desktop connected mode). PostgreSQL 16
+  is installed in the cloud container (`/usr/lib/postgresql/16/bin`) for tests.
+  Start a throwaway cluster as the `postgres` user in `/var/tmp/hcs-pg` (the scratchpad path is
+  not readable by it): `initdb -A trust`, `pg_ctl -o '-p 55432 -c listen_addresses=127.0.0.1'`;
+  then `HCS_TEST_POSTGRES_URL=postgresql+psycopg://postgres@127.0.0.1:55432/postgres pytest …`
+  (tests create and drop one database each).
+- **Phase 27a (built)**: tables `queue_job`/`queue_event`/`queue_worker` (`db/server.py`,
+  migration 0008); `server/queue.py` (`DbJobQueue`: JobQueue protocol + `claim` (atomic
+  conditional UPDATE; Postgres `FOR UPDATE SKIP LOCKED`; order priority → fair share (owner's
+  running jobs) → age; GPU jobs only to GPU workers), `heartbeat` (returns cancel requests),
+  `record` (events numbered under the job row lock), `release`, `reap` (stale heartbeat →
+  queued again with `resume` = run folder; `max_attempts` → interrupted); payload paths are
+  data-root paths), `server/worker.py` (`Worker` runs each job in a `JobProcess`; `run_pool`
+  restarts dead workers and reaps). Job processes exit when their parent dies
+  (`jobs._exit_with_parent`). CLI `cli_server.py`: `worker`, `worker-pool`, `queue`.
 
 ## Commands
 
