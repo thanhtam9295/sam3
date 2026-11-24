@@ -241,6 +241,20 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Cell Painting: profiling pipeline (Phase 24b)
+
+| Check | Result | Test |
+|---|---|---|
+| Real JUMP CellProfiler CSVs (BR00121431, pycytominer test data: 2 wells × 2 sites × 30 cells, 5790 features): aggregate, mad_robustize normalization (120 cells), feature selection (variance, correlation 0.9, NA, blocklist, outliers), consensus vs pycytominer's own functions called directly | identical values (rtol 1e-12) and missing values; identical kept columns; the log of removed features adds up | `test_reproduces_pycytominer_on_jump_data` |
+| Whole chain with a plate map (annotate) on the same data | = annotate → normalize called directly; consensus by the plate-map column; without treatments one profile per well | `test_whole_chain_on_jump_data` |
+| Synthetic 2 plates × 12 wells, plate 2 = plate 1 × 2 + 5 cell by cell, compound A +3 SD on 5 features, B −3 SD on 5 | vehicle well medians 0 on each plate (< 1e-12); per-plate profiles of each compound identical on both plates (< 1e-9); consensus A > 5, B < −5 on the seeded features, DMSO within ±1; pooled normalization leaves the plate effect (P1 < −0.5, P2 > 0.5) | `test_vehicle_normalization_per_plate` |
+| reference all, spherize (ZCA-cor against the vehicles), none; missing vehicles | each plate's medians 0; whitened vehicle mean 0; unchanged; clear errors (no vehicles, a plate without vehicles) | `test_reference_all_and_spherize` |
+| Single-cell QC: 10 cells flagged by object QC, 5 missing 5 of 30 features, 2 missing 1 | 10 + 5 dropped, the 2 kept; well cell counts follow; a constant feature removed by variance, a linear copy by correlation | `test_single_cell_qc_and_feature_selection` |
+| `cellpainting profile` on Parquet and on a run folder | all stage files, selection log and options written | `test_profile_command_writes_stages`, `test_cellpainting_commands` |
+
+Not yet checked: a real plate's profiles against its published JUMP profiles (the subset here
+is too small for that); seeded phenotypes are scored for activity in Phase 24c (mAP).
+
 ## Cell Painting: features, naming, import (Phase 24a)
 
 | Check | Result | Test |

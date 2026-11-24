@@ -293,6 +293,40 @@ def build_parser() -> argparse.ArgumentParser:
     painting_cells.add_argument(
         "--output", type=Path, help="Parquet (default: <run>/profiling/single_cell.parquet)"
     )
+    painting_profile = painting_sub.add_parser(
+        "profile", help="well and treatment profiles (pycytominer: aggregate → consensus)"
+    )
+    painting_profile.add_argument(
+        "sources", type=Path, nargs="+", help="run folders or single-cell Parquet files"
+    )
+    painting_profile.add_argument("--output", type=Path, required=True)
+    painting_profile.add_argument(
+        "--normalize",
+        default="mad_robustize",
+        choices=["mad_robustize", "robustize", "standardize", "spherize", "none"],
+    )
+    painting_profile.add_argument("--reference", default="vehicle", choices=["vehicle", "all"])
+    painting_profile.add_argument(
+        "--across-plates",
+        action="store_true",
+        help="normalize all plates together (default: each plate)",
+    )
+    painting_profile.add_argument(
+        "--operations",
+        default=",".join(
+            [
+                "variance_threshold",
+                "correlation_threshold",
+                "drop_na_columns",
+                "blocklist",
+                "drop_outliers",
+            ]
+        ),
+    )
+    painting_profile.add_argument("--corr-threshold", type=float, default=0.9)
+    painting_profile.add_argument("--consensus-by", default="Metadata_Treatment,Metadata_CellLine")
+    painting_profile.add_argument("--platemap", type=Path, help="plate map CSV (imported data)")
+    painting_profile.add_argument("--reason", default="")
     painting_import = painting_sub.add_parser(
         "import", help="CellProfiler SQLite / CSV folder / Parquet → single-cell Parquet"
     )
@@ -1058,6 +1092,27 @@ def _cellpainting(args: argparse.Namespace) -> int:
 
             path, cells = write_single_cells(args.run, args.output, channel_map(mapping))
             print(f"Single cells: {cells} → {path}")
+        elif args.painting_command == "profile":
+            from hcs_studio.cellpainting.profiles import ProfilingOptions
+            from hcs_studio.services.operations import cellpainting_profiles
+
+            options = ProfilingOptions(
+                normalize=args.normalize,
+                reference=args.reference,
+                per_plate=not args.across_plates,
+                operations=[o for o in args.operations.split(",") if o],
+                corr_threshold=args.corr_threshold,
+                consensus_by=[c for c in args.consensus_by.split(",") if c],
+            )
+            result = cellpainting_profiles(
+                _ctx(args), list(args.sources), args.output, options, args.platemap
+            )
+            log = result.log
+            print(
+                f"Profiles: {log['single_cell_qc']['kept']} cells → {log['wells']} wells → "
+                f"{log['treatments']} consensus profiles; {log['selected_features']} of "
+                f"{log['features']} features kept → {args.output}"
+            )
         else:
             from hcs_studio.cellpainting.cellprofiler import read_cellprofiler
 

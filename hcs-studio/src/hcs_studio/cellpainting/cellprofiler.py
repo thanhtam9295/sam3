@@ -5,9 +5,9 @@ Existing CellProfiler data can be profiled here. Three layouts are read:
 - **SQLite** written by ExportToDatabase / cytominer-database: an ``Image`` table (``Per_Image``)
   and one table per compartment (``Cells``, ``Cytoplasm``, ``Nuclei`` or ``Per_Cells`` …) whose
   feature columns already carry the compartment prefix;
-- **CSV folder** written by ExportToSpreadsheet: ``Image.csv`` and ``<Compartment>.csv`` with
-  unprefixed feature columns (``AreaShape_Area``) and parent columns ``Parent_Cells``,
-  ``Parent_Nuclei`` (prefixes are added);
+- **CSV folder** written by ExportToSpreadsheet: ``Image.csv`` and ``<Compartment>.csv`` (or
+  ``.csv.gz``) with unprefixed feature columns (``AreaShape_Area``) and parent columns
+  ``Parent_Cells``, ``Parent_Nuclei`` (prefixes are added);
 - **Parquet** (e.g. CytoTable or pycytominer output): already one row per cell; read as it is.
 
 Compartments are joined as pycytominer does by default: each cytoplasm row to its cell
@@ -61,8 +61,9 @@ def _merge(tables: dict[str, pd.DataFrame], image: pd.DataFrame) -> pd.DataFrame
     renamed.update({c: f"Metadata_{c}" for c in keys})
     renamed.update({LINKS[n]: f"Metadata_{LINKS[n]}" for n in LINKS if LINKS[n] in merged})
     merged = merged.rename(columns=renamed)
-    if "Metadata_ObjectNumber_nuclei" in merged:
-        merged["Metadata_ObjectNumber"] = merged["Metadata_ObjectNumber_nuclei"]
+    if "Metadata_ObjectNumber_nuclei" in merged:  # assign: no fragmented-frame warning
+        number = merged["Metadata_ObjectNumber_nuclei"].rename("Metadata_ObjectNumber")
+        merged = pd.concat([merged, number], axis=1)
     front = [c for c in merged.columns if c.startswith("Metadata_")]
     return merged[front + [c for c in merged.columns if c not in front]]
 
@@ -90,9 +91,10 @@ def read_csv_folder(folder: Path, compartments: tuple[str, ...] = COMPARTMENTS) 
     folder = Path(folder)
 
     def read(name: str) -> pd.DataFrame:
-        for candidate in (f"{name}.csv", f"{name.lower()}.csv", f"Per_{name}.csv"):
-            if (folder / candidate).exists():
-                return pd.read_csv(folder / candidate)
+        for stem in (name, name.lower(), f"Per_{name}"):
+            for candidate in (f"{stem}.csv", f"{stem}.csv.gz"):
+                if (folder / candidate).exists():
+                    return pd.read_csv(folder / candidate)
         raise ValueError(f"{folder.name}: no {name}.csv")
 
     image = read("Image")

@@ -41,11 +41,26 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
 
 def test_cellprofiler_names() -> None:
     names = rename_objects(
-        ["object_id", "area_um2", "dna_mean", "dna_p25", "er_haralick_contrast_s3",
-         "mito_granularity_r2", "dna_er_correlation", "dna_radial_inner", "dna_radial_outer",
-         "nearest_neighbour_um", "foci_count", "centroid_x_um", "zernike_2_0", "dna_weird"],
-        "nuclei", ["dna", "er", "mito"], {"dna": "DNA", "er": "ER", "mito": "Mito"},
-    )  # fmt: skip
+        [
+            "object_id",
+            "area_um2",
+            "dna_mean",
+            "dna_p25",
+            "er_haralick_contrast_s3",
+            "mito_granularity_r2",
+            "dna_er_correlation",
+            "dna_radial_inner",
+            "dna_radial_outer",
+            "nearest_neighbour_um",
+            "foci_count",
+            "centroid_x_um",
+            "zernike_2_0",
+            "dna_weird",
+        ],
+        "nuclei",
+        ["dna", "er", "mito"],
+        {"dna": "DNA", "er": "ER", "mito": "Mito"},
+    )
     assert names == {
         "area_um2": "Nuclei_AreaShape_Area",
         "dna_mean": "Nuclei_Intensity_MeanIntensity_DNA",
@@ -97,21 +112,34 @@ def painted(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[str, A
     root = tmp_path_factory.mktemp("painted")
     os.environ.setdefault("HCS_STUDIO_HOME", str(root / "home"))
     specs: dict[tuple[int, int], dict[str, float]] = {
-        (0, 0): {}, (0, 1): {"nucleus_size": 1.3}, (0, 2): {"mito_spots": 0.3},
-    }  # fmt: skip
+        (0, 0): {},
+        (0, 1): {"nucleus_size": 1.3},
+        (0, 2): {"mito_spots": 0.3},
+    }
     cells = PaintedCells(spec=lambda r, c: specs[(r, c)])
-    plate = SyntheticPlate(wells=list(specs), features=[cells, ShotNoise(sd=8)],
-                           channels=CHANNELS, size=192, n_fields=2, name="CP1")  # fmt: skip
+    plate = SyntheticPlate(
+        wells=list(specs),
+        features=[cells, ShotNoise(sd=8)],
+        channels=CHANNELS,
+        size=192,
+        n_fields=2,
+        name="CP1",
+    )
     path, truth = plate.write(root / "raw")
     layout = set_role(
         PlateLayout.for_plate_type(96), [(0, 0)], "negative_control", cell_line="U2OS"
     )
     for col, name in ((1, "Bigger"), (2, "Fragmenter")):
-        layout = apply_fields(layout, [(0, col)], treatments=(Treatment(name, 1e-6, "µM"),),
-                              cell_line="U2OS")  # fmt: skip
-    folder = run_pipeline(open_plate(path), preset(MAPPING, channels=list(CHANNELS)),
-                          output_root=root / "runs", layout=replace(layout, barcode="CP1"),
-                          save_images=False).folder  # fmt: skip
+        layout = apply_fields(
+            layout, [(0, col)], treatments=(Treatment(name, 1e-6, "µM"),), cell_line="U2OS"
+        )
+    folder = run_pipeline(
+        open_plate(path),
+        preset(MAPPING, channels=list(CHANNELS)),
+        output_root=root / "runs",
+        layout=replace(layout, barcode="CP1"),
+        save_images=False,
+    ).folder
     return folder, truth
 
 
@@ -227,6 +255,30 @@ def test_cellpainting_commands(painted: tuple[Path, dict[str, Any]], tmp_path: P
         == 0
     )
     assert "Nuclei_Intensity_MeanIntensity_DNA" in pd.read_parquet(out)
+    profiles = tmp_path / "profiles"  # a run folder as the source (Phase 24b)
+    assert (
+        main(
+            [
+                "cellpainting",
+                "profile",
+                str(folder),
+                "--output",
+                str(profiles),
+                "--reference",
+                "all",
+                "--operations",
+                "variance_threshold",
+            ]
+        )
+        == 0
+    )
+    consensus = pd.read_parquet(profiles / "consensus.parquet")
+    assert sorted(consensus["Metadata_Treatment"]) == [
+        "Bigger 1e-06",
+        "Fragmenter 1e-06",
+        "negative_control",
+    ]
+    assert (folder / "profiling" / "single_cell.parquet").exists()
     imported = tmp_path / "imported.parquet"
     assert (
         main(

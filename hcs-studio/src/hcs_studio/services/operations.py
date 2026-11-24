@@ -467,3 +467,19 @@ def cherry_pick_hits(
         },
     )
     return result
+
+
+@service("cellpainting.profile", object_type="profiling")
+def cellpainting_profiles(
+    ctx: ServiceContext,
+    sources: list[Path],
+    output: Path,
+    options: Any = None,
+    platemap: Path | None = None,
+) -> Any:
+    """Well and treatment profiles from single-cell tables (pycytominer pipeline)."""
+    from hcs_studio.cellpainting.profiles import run_profiling as profile
+
+    result = profile([Path(s) for s in sources], Path(output), options, platemap)
+    ctx.note(object_id=object_id(output), after=result.log)
+    return result

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Phase 24b — Cell Painting: profiling pipeline
+- `hcs-studio cellpainting profile <runs or Parquet…> --output <folder>` (service
+  `cellpainting.profile`): single-cell QC (object-QC exclusions, cells missing > 10 % of the
+  features) → pycytominer `aggregate` (median per well, cell counts) → `annotate` (optional plate
+  map for imported data) → `normalize` (mad_robustize against the vehicle wells of each plate by
+  default; robustize, standardize, spherize ZCA-cor, none; reference vehicle or all; per plate or
+  across plates) → feature selection (variance, correlation, NA, blocklist, outliers; what each
+  removed is logged) → `consensus` per treatment × cell line (median or modz).
+- Output folder: `aggregated`, `normalized`, `feature_selected`, `consensus` (.parquet),
+  `feature_selection.json`, `profiling.json` (options, counts, pycytominer version).
+- CellProfiler CSV folders may be gzipped (`Image.csv.gz` …).
+- Reproduces pycytominer's own functions exactly on real JUMP CellProfiler data (test data
+  `tests/data/cellpainting/BR00121431/`).
+
 ### Phase 24a — Cell Painting: features, CellProfiler naming, import
 - `measure_objects` option `correlation`: Pearson correlation of every channel pair per object.
 - `hcs-studio cellpainting preset`: Cell Painting pipeline (DNA/ER/RNA/AGP/Mito or custom roles):

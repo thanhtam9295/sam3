@@ -698,7 +698,7 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
 - **Phase 24 plan** (2026-11-24; pycytominer 1.7.1 + copairs 0.6.0 approved as extra `profiling`,
   they pull duckdb 2.0.1 and statsmodels 0.15): (a) features, CellProfiler naming, CP import —
   built; (b) pycytominer pipeline aggregate → annotate → normalize (mad_robustize vs vehicle per
-  plate, spherize) → feature_select → consensus + single-cell QC + reproduction test; (c) copairs
+  plate, spherize) → feature_select → consensus + single-cell QC + reproduction test — built; (c) copairs
   mAP activity/consistency, similarity, clustered heat maps, UMAP, find-similar, kNN MoA, batch
   checks, report. Ask for a Cell Painting plate with reference compounds and MoA annotations.
 - **Phase 24a (built)**: `features.correlations` (+ `measure_objects.correlation`, readout
@@ -710,6 +710,15 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `cellprofiler.py` (`read_cellprofiler` SQLite/CSV folder/Parquet, pycytominer linking).
   Test data `tests/data/cellpainting/` (pycytominer SQ00014613, BSD-3, licence copied). CLI
   `hcs-studio cellpainting preset|single-cells|import`. Synthetic `synthetic/cellpainting.py`.
+- **Phase 24b (built)**: `cellpainting/profiles.py` (`ProfilingOptions`, `build_profiles`:
+  `single_cell_qc` → `aggregate_wells` → optional `annotate` → `normalize_profiles` (vehicle =
+  `Metadata_Role == 'negative_control'`, per plate; spherize across plates) → `select_features`
+  (pycytominer operations one by one, as `feature_select` does, logging removals) →
+  `consensus_profiles` (falls back to plate+well when `consensus_by` is absent); `run_profiling`
+  (in `WRAPPED`) writes stages + JSON). Service `operations.cellpainting_profiles`; CLI
+  `cellpainting profile`. Every stage must stay equal to pycytominer's direct call
+  (`tests/test_cellpainting_profiles.py`, data `tests/data/cellpainting/BR00121431/`).
+  Spherize needs full-rank vehicles (more wells than features).
 
 ## Commands
 

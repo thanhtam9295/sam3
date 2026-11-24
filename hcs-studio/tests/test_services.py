@@ -139,6 +139,7 @@ WRAPPED = {
     "hcs_studio.qc.review": {"apply_override"},
     "hcs_studio.screening.screen": {"run_screen", "add_override"},
     "hcs_studio.screening.cherrypick": {"run_cherry_pick"},
+    "hcs_studio.cellpainting.profiles": {"run_profiling"},
     "hcs_studio.db.library": {"import_library"},
 }
 ALLOWED = {
