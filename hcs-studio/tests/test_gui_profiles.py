@@ -26,6 +26,18 @@ from tests.test_profiling import make_profile_run  # noqa: E402
 from tests.test_results import LAYOUT, PIPELINE, WELLS, _image  # noqa: E402
 
 
+@pytest.fixture(scope="module", autouse=True)
+def umap_compiled() -> None:
+    """Compile UMAP's numba functions in the main thread first. Compiled in the panel's worker
+    thread instead, while qtbot.waitUntil spins the event loop for the GIL, compiling can take
+    minutes (intermittent faulthandler timeouts, depending on the tests before)."""
+    from hcs_studio.analysis.profiling import umap_embedding
+
+    options = ProfileOptions()
+    x = np.random.default_rng(0).normal(size=(60, 8))
+    umap_embedding(x, options.n_neighbors, options.min_dist, options.metric, options.seed)
+
+
 @pytest.fixture(scope="module")
 def run_folder(tmp_path_factory: pytest.TempPathFactory) -> Path:
     tmp = tmp_path_factory.mktemp("gui_profiles")
