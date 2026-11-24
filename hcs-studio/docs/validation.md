@@ -241,6 +241,19 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Automatic runs (Phase 19)
+
+Checked on synthetic exports (`tests/test_automation*.py`): ImageXpress, Harmony and simulated
+`.nd2` completeness (missing and half-written files are incomplete); a slow copy is not
+started before it is quiet and complete; duplicates (resent event, a new event for the same
+acquisition, the watcher reporting raw data the scheduler already sent) do not run twice; a
+dropped export runs QC → analysis → report → email with real job processes and an SMTP server;
+a QC failure sends a schema-valid `reimage.request` with the failed wells and fields.
+
+**Not checked:** real MetaXpress, Harmony and NIS-Elements exports on the lab shares (copy
+speeds, temporary file names, `.nd2` files being written), the real scheduler and the lab's
+SMTP relay.
+
 ## Lab assistant (Phase 28)
 
 Checked against a mocked Claude client (`tests/test_assistant*.py`):

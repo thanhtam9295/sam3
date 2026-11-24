@@ -130,6 +130,7 @@ def test_cli_records_reason_and_refuses_exclusions_without_one(
 
 # Core functions that change state; the GUI and the CLI must call the services instead.
 WRAPPED = {
+    "hcs_studio.automation.runner": {"retry"},
     "hcs_studio.pipeline.executor": {"run_pipeline", "analyze_run", "annotate_run"},
     "hcs_studio.output.report": {"write_report"},
     "hcs_studio.analysis.classifier": {"save_classifier"},
@@ -164,6 +165,9 @@ def test_gui_and_cli_change_state_only_through_services() -> None:
         SRC / "app.py",
         SRC / "cli_models.py",
         SRC / "cli_security.py",
+        SRC / "cli_server.py",
+        SRC / "cli_assistant.py",
+        SRC / "cli_automation.py",
         *sorted((SRC / "gui").glob("*.py")),
     ]
     for path in files:

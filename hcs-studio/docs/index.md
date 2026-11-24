@@ -673,6 +673,12 @@ Set up ilastik under **Tools → ilastik settings…** (or `hcs-studio ilastik -
 Studio finds the installation, checks its version and blocks releases known not to work.
 Running projects follows in the next build steps. Details: [ilastik.md](ilastik.md).
 
+## Automatic runs
+
+When a plate finishes imaging, a scheduler event or a watched export folder starts QC, the
+analysis, the report and an email by itself; the **Automation** tab shows the runs and the
+event log. See [automation.md](automation.md).
+
 ## Lab assistant
 
 The **Assistant** tab answers questions about results in plain language with Claude, from a

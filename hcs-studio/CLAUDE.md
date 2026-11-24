@@ -352,7 +352,7 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `HCS_ILASTIK=<executable>` / `HCS_FIJI=<launcher>` are set (skipped with a note otherwise).
 - The tiny bundled `.ilp` must be created in ilastik (it cannot be made without ilastik).
 
-## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17, 18, 20–28 built; 19 paused
+## Platform phases 17–28 (PROMPT_PLATFORM.md) — architecture approved and built 2026-11-19; Phases 17–28 built
 
 Assumptions until the user says otherwise: the scheduler uses the `lab_events` JSON Schemas (a
 Python package sits beside them); one PC uses the local registry before server mode.
@@ -530,14 +530,30 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `qc/report.py` writes `qc_report.html` from `write_qc` (every QC write). GUI `gui/qc_panel.py`
   (QC tab; widget is `metric_combo` — `metric` shadows `QWidget.metric()`). CLI `qc-review`,
   `qc-train`.
-- **Phase 19 — PAUSED** (user: "Skip 19, go to 20", 2026-11-21) at WIP commit 703cd85: built
-  `automation/completeness.py` (per-reader checkers in `CHECKERS`), `automation/settings.py`
-  (`AppSettings.automation`), `db/automation.py` (`lab_event`, `auto_run`; migration 0005),
-  `automation/intake.py` (validate/log/dedupe, `EventServer`, `poll_inbox`, `send`). Untested and
-  not wired: watcher, routing, runner, notifications, `auto serve`, Automation tab, tests.
-  Defaults chosen when the user declined the questions: stdlib only (no watchdog/httpx), all
-  formats, all notification channels off until configured, HTTP + folder intake. Before resuming
-  ask again for instrument export paths, notification channels and scheduler transport.
+- **Phase 19 decisions** (2026-11-24): exports from ImageXpress (MetaXpress), Operetta
+  (Harmony) and Nikon NIS-Elements `.nd2` are watched; notifications by email (SMTP);
+  scheduler events over both HTTP and a drop folder. Stdlib only (polling watcher, no
+  watchdog — polling also works on network shares; urllib/smtplib).
+- **Phase 19 (built)**: `automation/completeness.py` (`CHECKERS` per reader; ImageXpress counts
+  TIFFs from the `.HTD` and checks pixel data is fully written), `automation/watcher.py`
+  (`FolderWatcher.scan(now)`: candidates = sub-folders and `.nd2` files; signature = files,
+  bytes, newest mtime; quiet period then completeness; `plate_imaged_event` — naive instrument
+  times become local-aware; already-registered raw data is skipped after a restart),
+  `automation/intake.py` (`receive`: schema validation, event log `lab_event`, key = barcode +
+  acquisition ID/start + time point, plus same barcode + raw + time point within
+  `duplicate_window_hours`; `send` writes `<outbox>/<µs time>_<type>_<id>.json` and/or POSTs),
+  `automation/routing.py` (`Rule.matches`: every given criterion; `default`; `check_routing`),
+  `automation/runner.py` (`AutoRunner.step()`: inbox, watchers, `queue.poll()`, then each
+  pending/waiting/running `auto_run`: completeness → route → layout by barcode → `submit_job`
+  with system actor `automation`, priority `auto` → on finish pharmacology/screen/kinetics,
+  `scan_folders`, `write_report`, `summarise` (verdict + key numbers), `analysis.*` events;
+  `qc_failed` → `reimage.request` + `analysis.failed`; `retry` (in `WRAPPED`), `is_night`),
+  `automation/notify.py` (`Notifier`, `Notice`; secrets via `secret:` refs), `automation/status.py`
+  (read-only lists). Service `services/automation.retry_auto_run` (`automation.retry`, reason).
+  CLI `cli_automation.py` (`auto serve|status|events|check|retry|test-notify|send`; server mode
+  = PostgreSQL → `DbJobQueue`). GUI `gui/automation_panel.py` (Automation tab, event-log viewer;
+  `reason` injectable). Tests use synthetic ImageXpress exports with real job processes and an
+  in-test SMTP server (`tests/test_automation_flow.py`).
 - **Phase 20 (oncology assays)**: one module per step, stop after each (20a cell cycle — built;
   20b foci, 20c apoptosis, 20d translocation, 20e proliferation). Ask the user for one real control
   plate per assay plus their current results.
@@ -875,6 +891,7 @@ Run from this folder (`hcs-studio/`).
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
 - ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
 - Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; assays: `hcs-studio assay list | preset cell_cycle --map dna=DAPI [--map edu=EdU] --channels … --output p.yaml | run <run> cell_cycle --map dna=DAPI`; kinetics: `hcs-studio kinetics table <run> [<run>… --output c.csv] [--treated-at ISO]` | `analyse <run> [<run>…] [--readout R --interval-h H --output dir]`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
+- Automatic runs: `hcs-studio auto serve | status | events [--status rejected] | check | retry <key> --reason R | test-notify | send <event.json>` (docs/automation.md)
 - Lab assistant: `hcs-studio assistant ask "…" [--strong --ids-only] | preview | status | configure --enable | set-key | eval --workdir <new>` (live eval costs tokens; also `HCS_ASSISTANT_EVAL=1 pytest tests/test_assistant_eval.py`)
 - Figures: `hcs-studio figure --regenerate <file>.json` / `--run <run> --per-compound`
 - Synthetic 384-well plate: `python scripts/make_test_plate.py <folder> --wells 384 --sites 2`

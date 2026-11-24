@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Phase 19 — scheduler integration and automatic runs
+- Triggers: `plate.imaged` events from the scheduler over HTTP (local intake or the server's
+  `/api/events`) and a drop folder; watched export folders (ImageXpress, Harmony, Nikon
+  `.nd2`) as a fallback — a plate starts only after a quiet period and a format-specific
+  completeness check, so half-copied plates never start.
+- Each acquisition runs once (barcode + acquisition ID/time + time point, and the same raw
+  data within 24 h); a re-imaged plate runs again.
+- Routing rules (YAML: barcode prefix/regex, instrument, protocol, registry assay, default)
+  pick the pipeline, image-QC rules, pharmacology, hit calling and kinetics; layouts are
+  attached by barcode (owners asked to annotate when missing).
+- Automatic flow: QC → pipeline (job priority `auto`, interactive first; more workers at
+  night) → pharmacology / hits / kinetics → registry → report → `analysis.completed`; QC
+  failures send `reimage.request` + `analysis.failed`; every outgoing event is schema-checked.
+- Email notifications (SMTP; password in the keychain) with barcode, assay, QC verdict, Z′,
+  mean counts and the report; failures to owners and admins. Teams/Slack webhooks optional.
+- `hcs-studio auto serve|status|events|retry|check|test-notify|send`; Automation tab with the
+  automatic runs and the event-log viewer; retry through an audited service (reason).
+- docs/automation.md.
+
 ### Phase 28 — Claude lab assistant
 - Assistant tab, `hcs-studio assistant ask|preview|status`: plain-language questions about
   results, answered with the Claude API from curated, read-only views of the registry. Every

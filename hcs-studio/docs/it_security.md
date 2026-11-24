@@ -18,6 +18,9 @@ for the installation.
 - ☐ Lab assistant (only if enabled, [assistant](assistant.md)): the API container needs
   outbound HTTPS to `api.anthropic.com`; the key is in the server's keychain or
   `HCS_SECRET_ANTHROPIC_API_KEY`, and only curated, scrubbed result tables are sent.
+- ☐ Automatic runs (if used, [automation](automation.md)): SMTP to the mail relay (usually
+  587/TCP); the local event intake listens on 127.0.0.1 unless `automation.http_host` is
+  changed; in server mode the scheduler posts to `/api/events` through the proxy.
 - Otherwise no outbound internet access is needed at run time. Cellpose/SAM weights come from
   huggingface.co once (pre-load them into the image or the settings volume if the server has
   no internet access).

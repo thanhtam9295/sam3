@@ -36,6 +36,7 @@ PAGES = [
     ("security.md", "Accounts, audit trail and sign-off"),
     ("server.md", "Server mode"),
     ("it_security.md", "IT security checklist"),
+    ("automation.md", "Automatic runs and the scheduler"),
     ("assistant.md", "Lab assistant (Claude)"),
     ("validation.md", "Validation"),
 ]

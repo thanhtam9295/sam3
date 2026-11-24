@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from hcs_studio import __version__
 from hcs_studio.gui.assistant_panel import AssistantPanel, AssistantSettingsDialog
+from hcs_studio.gui.automation_panel import AutomationPanel
 from hcs_studio.gui.browser import BrowserPanel
 from hcs_studio.gui.classify_panel import ClassifyPanel
 from hcs_studio.gui.compare_panel import ComparePanel
@@ -125,6 +126,10 @@ class MainWindow(QMainWindow):
         self.experiments_panel.open_run.connect(self.show_results)
         self.experiments_panel.log.connect(self.log)
         self.tabs.addTab(self.experiments_panel, "Experiments")
+        self.automation_panel = AutomationPanel()
+        self.automation_panel.log.connect(self.log)
+        self.automation_panel.open_run.connect(self.show_results)
+        self.tabs.addTab(self.automation_panel, "Automation")
         self.assistant_panel = AssistantPanel()
         self.assistant_panel.log.connect(self.log)
         self.assistant_panel.ui_action.connect(self.on_assistant_action)
@@ -923,6 +928,8 @@ class MainWindow(QMainWindow):
     def _on_tab_changed(self, index: int) -> None:
         if self.tabs.widget(index) is self.assistant_panel:
             self.assistant_panel.refresh_status()
+        if self.tabs.widget(index) is self.automation_panel:
+            self.automation_panel.refresh()
         if self.tabs.widget(index) is self.experiments_panel:
             self.experiments_panel.refresh()  # the registry may have changed meanwhile
         # show the editor's (possibly unsaved) annotation on the plate map
