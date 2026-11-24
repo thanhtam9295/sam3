@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Phase 16b — ilastik Pixel Classification and Autocontext
+- Steps `ilastik_pixel` and `ilastik_autocontext`: a trained ilastik project runs headless,
+  once per well with all its fields; one channel per class (`ilastik_<class>`, probabilities
+  or Simple Segmentation masks) is added to the image.
+- `probabilities_to_objects` (threshold, hysteresis, splitting by distance or seeds, size
+  filter) and `ilastik_class_areas` (`ilastik_area_pct_<class>` per field and well).
+- Run folder `ilastik/` (projects used, command-line logs, input cache) and
+  `wells/<W>/ilastik/`; the manifest records the project's SHA-256, ilastik's version and the
+  runner; the project must not change during a run.
+- `hcs-studio ilastik --info <ilp>` and `--preset <ilp> --output p.yaml`.
+- Executor: steps can process a well's fields together (`batch_scope = "well"`).
+- Tested with a stand-in for ilastik's command line; a real trained project is still needed.
+
 ### Phase 19 — scheduler integration and automatic runs
 - Triggers: `plate.imaged` events from the scheduler over HTTP (local intake or the server's
   `/api/events`) and a drop folder; watched export folders (ImageXpress, Harmony, Nikon

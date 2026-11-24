@@ -249,10 +249,12 @@ PlateLayout (model/annotation.py)
 
 Not added: lmfit (`scipy.optimize.least_squares` covers bounds, robust loss, covariance CIs), weasyprint (needs system Pango/Cairo; hard on Windows).
 
-## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; step (a) built; PAUSED
+## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a) and (b) built
 
-**Paused 2026-11-19** at the user's request after step (a); resume with step (b) once sample `.ilp`
-projects and images arrive. Phases 21, 22 and 25 use ilastik only as one option (see below).
+Paused 2026-11-19 after step (a); resumed 2026-11-24 (user: "CONTINUE"): step (b) built against a
+fake ilastik (no `.ilp` samples yet; installing ilastik in the container was not permitted this
+time). Real-ilastik tests stay opt-in (`HCS_ILASTIK`). Phases 21, 22 and 25 use ilastik only as one
+option (see below).
 
 Build order (stop for review after each): (a) settings, detection, HDF5/axis utilities — built;
 (b) HeadlessRunner + Pixel Classification/Autocontext + Probabilities → Objects; (c) Object
@@ -344,6 +346,30 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   < 1.3.3post3, warns on pre-releases. `environment()` sets `LAZYFLOW_*` only when not default.
   Starting ilastik for `--version` takes seconds: the GUI runs detection in a `BackgroundTask`.
 - GUI: `gui/ilastik_settings.py` (Tools → ilastik settings…). CLI: `hcs-studio ilastik`.
+
+### Conventions (step b, built)
+
+- Executor hook: `Module.batch_scope = "well"` + `apply_batch(images, state, keys, workdir)`
+  (`keys` = (field, timepoint); `workdir` = `BatchFolders(run, well, well_name)` or None for
+  previews). `process_well` runs every field up to the first well-batch step
+  (`PipelineRunner.batch_index`), calls it once (`PipelineRunner.apply_batch`, under the
+  exclusive lock), then continues each field with `process(begin=…, raw=…, corrected=…)`.
+  Measurement steps before a well-batch step are refused (their tables would be lost).
+- `project.py` (`read_project` → `ProjectInfo`; `workflow_key`; `check_compatible`; never
+  unpickles), `job.py` (`IlastikJob`, `IlastikResult`, `EXPORT_SOURCES`, `IlastikError`),
+  `runners/headless.py` (`HeadlessRunner.command/run`: `--headless --project= --export_source=
+  --output_format=hdf5 --output_filename_format=<dir>/{nickname}_<suffix>.h5 --raw_data …`;
+  no `--readonly`; SHA-256 before/after; outputs matched by prefix), `steps.py`
+  (`ilastik_pixel`, `ilastik_autocontext`: needs_fit (detect ilastik + project info →
+  manifest), exclusive, batch_scope well; class channels `ilastik_<class>` appended, linear
+  unchanged; `probabilities_to_objects` (`probabilities_to_labels`); `ilastik_class_areas`
+  (MeasurementModule → fields `ilastik_area_pct_<class>`, prefix in
+  `FIELD_MEASUREMENT_PREFIXES`)), `presets.py` (`pixel_preset`). Probabilities are channels,
+  not label sets (measure_objects measures every label set by default).
+- Tests: `tests/fake_ilastik_headless.py` (real flag set; ramp of channel 1 between the
+  project's `fake/lo`/`fake/hi`; `FAKE_ILASTIK_LOG`, `FAKE_ILASTIK_FAIL_ON`,
+  `FAKE_ILASTIK_TOUCH_PROJECT`), `tests/test_ilastik_steps.py` (`make_project` writes a minimal
+  `.ilp`). CLI `hcs-studio ilastik --info <ilp> | --preset <ilp> --output p.yaml`.
 
 ### Testing plan
 
@@ -889,7 +915,7 @@ Run from this folder (`hcs-studio/`).
 - Layouts: `hcs-studio layout <file> --validate [--export out.xlsx [--plate-map]]`; re-annotate a run: `hcs-studio annotate <run> --layout <file>`
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
-- ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
+- ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--save] | --info <ilp> | --preset <ilp> [--class C --channels 1] --output p.yaml`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`
 - Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; assays: `hcs-studio assay list | preset cell_cycle --map dna=DAPI [--map edu=EdU] --channels … --output p.yaml | run <run> cell_cycle --map dna=DAPI`; kinetics: `hcs-studio kinetics table <run> [<run>… --output c.csv] [--treated-at ISO]` | `analyse <run> [<run>…] [--readout R --interval-h H --output dir]`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
 - Automatic runs: `hcs-studio auto serve | status | events [--status rejected] | check | retry <key> --reason R | test-notify | send <event.json>` (docs/automation.md)
 - Lab assistant: `hcs-studio assistant ask "…" [--strong --ids-only] | preview | status | configure --enable | set-key | eval --workdir <new>` (live eval costs tokens; also `HCS_ASSISTANT_EVAL=1 pytest tests/test_assistant_eval.py`)

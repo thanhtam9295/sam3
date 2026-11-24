@@ -241,6 +241,20 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## ilastik Pixel Classification (Phase 16b)
+
+Checked with a stand-in program that accepts ilastik's headless command line
+(`tests/fake_ilastik_headless.py`): one call per well with all its fields, the command line
+(project, export source, output pattern, inputs), `LAZYFLOW_*` limits, outputs read back on
+the field grid, failures and resume, the read-only project check, and objects from the class
+probabilities equal to the synthetic truth. `probabilities_to_objects` has known-answer tests
+(touching discs split, hysteresis, seeds).
+
+**Not checked:** a real trained project with the real ilastik (no `.ilp` samples yet; the
+container could not install ilastik this time). Unconfirmed: where trained projects store the
+training data's axes and channel count (the compatibility check uses them only when found), and
+how ilastik names the export of an HDF5 input (`{nickname}`; outputs are matched by prefix).
+
 ## Automatic runs (Phase 19)
 
 Checked on synthetic exports (`tests/test_automation*.py`): ImageXpress, Harmony and simulated

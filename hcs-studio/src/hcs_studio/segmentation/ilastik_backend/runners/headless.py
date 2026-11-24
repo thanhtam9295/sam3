@@ -95,8 +95,9 @@ class HeadlessRunner:
                 "results are not traceable to the recorded classifier"
             )
         outputs = [_find_output(Path(p)) for p in job.expected_outputs()]
-        missing = [p for p, found in zip(job.expected_outputs(), outputs, strict=True)
-                   if found is None]  # fmt: skip
+        missing = [
+            p for p, found in zip(job.expected_outputs(), outputs, strict=True) if found is None
+        ]
         if missing:
             raise IlastikError(
                 f"ilastik finished but wrote no {job.export_source!r} output for "
@@ -131,5 +132,8 @@ def _explain(code: int, tail: str) -> str:
     }
     text = hints.get(code, f"ilastik stopped with exit code {code}")
     if "MemoryError" in tail or "Cannot allocate memory" in tail:
-        text = "ilastik ran out of memory: lower the RAM limit in the ilastik settings or the field size"
+        text = (
+            "ilastik ran out of memory: lower the RAM limit in the ilastik settings or the "
+            "field size"
+        )
     return f"{text}\n{tail}" if tail else text

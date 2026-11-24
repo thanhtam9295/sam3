@@ -33,7 +33,6 @@ import pandas as pd
 from pydantic import Field
 from scipy import ndimage
 
-from hcs_studio.analysis.measure import MeasureContext, MeasurementModule
 from hcs_studio.model.plate import ChannelInfo, ImageMetadata
 from hcs_studio.processing.base import (
     MODULES,
@@ -41,6 +40,8 @@ from hcs_studio.processing.base import (
     FitContext,
     ImageData,
     LabelSet,
+    MeasureContext,
+    MeasurementModule,
     Module,
     ModuleError,
     ModuleParams,
@@ -139,9 +140,13 @@ class IlastikPixel(Module):
         found = detect(settings)
         if not found.ilastik_ok:
             raise ModuleError(
-                "ilastik is not available: " + (found.version_check.message if found.ilastik
-                                                else "set its path in Tools → ilastik settings")
-            )  # fmt: skip
+                "ilastik is not available: "
+                + (
+                    found.version_check.message
+                    if found.ilastik
+                    else "set its path in Tools → ilastik settings"
+                )
+            )
         info = self.project_info()
         return {
             "project": info.path,
@@ -186,7 +191,11 @@ class IlastikPixel(Module):
             raise ModuleError("The ilastik project changed since the run started")
         temporary = None
         if isinstance(workdir, BatchFolders):
-            run_folder, well_folder, well = Path(workdir.run) / "ilastik", Path(workdir.well), workdir.well_name
+            run_folder, well_folder, well = (
+                Path(workdir.run) / "ilastik",
+                Path(workdir.well),
+                workdir.well_name,
+            )
         else:
             temporary = Path(tempfile.mkdtemp(prefix="hcs-ilastik-"))
             run_folder, well_folder, well = temporary, temporary / "well", "preview"
@@ -198,13 +207,14 @@ class IlastikPixel(Module):
             for image, (field_index, t) in zip(images, keys, strict=True):
                 data = image.data if selected is None else image.data[selected]
                 stack = data[np.newaxis]  # (T=1, C, Z, Y, X)
-                axes = ilastik_axes(stack.shape)  # type: ignore[arg-type]
+                axes = ilastik_axes(stack.shape)
                 problems = check_compatible(info, axes, stack.shape[1])
                 if problems:
                     raise ModuleError("; ".join(problems))
                 name = f"f{field_index:03d}_t{t}"
-                path = write_h5(inputs / f"{name}.h5", to_ilastik(stack, axes), axes,
-                                compression=None)  # fmt: skip
+                path = write_h5(
+                    inputs / f"{name}.h5", to_ilastik(stack, axes), axes, compression=None
+                )
                 specs.append(input_spec(path))
                 names.append(name)
             suffix = self.sources[params.export].replace(" ", "_")
@@ -229,30 +239,46 @@ class IlastikPixel(Module):
             for image, name, output in zip(images, names, result.outputs, strict=True):
                 array, axes = read_h5(Path(output))
                 planes = _class_planes(array, axes, len(classes), params.export, image.data.shape)
-                summary[name] = {c: round(float(p.mean()) * 100, 3) for c, p in zip(classes, planes, strict=True)}
+                summary[name] = {
+                    c: round(float(p.mean()) * 100, 3) for c, p in zip(classes, planes, strict=True)
+                }
                 metadata = replace(
                     image.metadata,
-                    channels=(*image.metadata.channels,
-                              *(ChannelInfo(class_channel(c)) for c in classes)),
-                )  # fmt: skip
+                    channels=(
+                        *image.metadata.channels,
+                        *(ChannelInfo(class_channel(c)) for c in classes),
+                    ),
+                )
                 out_images.append(
                     ImageData(
                         data=np.concatenate([image.data, planes], axis=0).astype(np.float32),
                         metadata=metadata,
                         linear=image.linear,
                         history=(*image.history, self.name),
-                        reports=(*image.reports, {"module": self.name,
-                                                  "seconds_per_field": result.seconds / len(images)}),
+                        reports=(
+                            *image.reports,
+                            {
+                                "module": self.name,
+                                "seconds_per_field": result.seconds / len(images),
+                            },
+                        ),
                         labels=image.labels,
-                    )  # fmt: skip
+                    )
                 )
             if temporary is None:
                 outputs.mkdir(parents=True, exist_ok=True)
                 (outputs / "class_summary.json").write_text(
-                    json.dumps({"classes": classes, "area_pct_by_field": summary,
-                                "command": result.command, "seconds": result.seconds}, indent=2),
+                    json.dumps(
+                        {
+                            "classes": classes,
+                            "area_pct_by_field": summary,
+                            "command": result.command,
+                            "seconds": result.seconds,
+                        },
+                        indent=2,
+                    ),
                     encoding="utf-8",
-                )  # fmt: skip
+                )
                 _projects_used(run_folder, state, result.runner)
             return out_images
         finally:
@@ -307,8 +333,9 @@ def _class_planes(
             )
         planes = tczyx.astype(np.float32)
     if planes.shape[1:] != tuple(shape[1:]):
-        raise ModuleError(f"ilastik's output {planes.shape[1:]} does not match the field "
-                          f"{tuple(shape[1:])}")  # fmt: skip
+        raise ModuleError(
+            f"ilastik's output {planes.shape[1:]} does not match the field {tuple(shape[1:])}"
+        )
     return planes
 
 
@@ -317,8 +344,18 @@ def _projects_used(folder: Path, state: dict[str, Any], runner: str) -> None:
     if path.exists():
         return
     folder.mkdir(parents=True, exist_ok=True)
-    record = {k: state.get(k) for k in ("project", "sha256", "workflow", "saved_with",
-                                         "ilastik", "ilastik_version", "classes")}  # fmt: skip
+    record = {
+        k: state.get(k)
+        for k in (
+            "project",
+            "sha256",
+            "workflow",
+            "saved_with",
+            "ilastik",
+            "ilastik_version",
+            "classes",
+        )
+    }
     record["runner"] = runner
     path.write_text(json.dumps([record], indent=2), encoding="utf-8")
 
@@ -332,9 +369,11 @@ class ProbObjectsParams(ModuleParams):
     )
     threshold: float = Field(default=0.5, gt=0, lt=1, description="Probability for an object.")
     low_threshold: float | None = Field(
-        default=None, gt=0, lt=1,
+        default=None,
+        gt=0,
+        lt=1,
         description="Hysteresis: grow objects into pixels above this (≤ threshold).",
-    )  # fmt: skip
+    )
     smoothing_px: float = Field(default=1.0, ge=0, description="Gaussian smoothing first.")
     min_size_px: int = Field(default=20, ge=0, description="Remove smaller objects.")
     max_size_px: int | None = Field(default=None, ge=1, description="Remove larger objects.")
@@ -377,11 +416,20 @@ class ProbabilitiesToObjects(Module):
         params: ProbObjectsParams = self.params
         self.validate(image.metadata)
         prob = image.data[self._index(image.metadata)]
-        seeds = image.label_set(params.seeds).data if params.split == "seeds" and params.seeds else None
+        seeds = (
+            image.label_set(params.seeds).data if params.split == "seeds" and params.seeds else None
+        )
         labels = probabilities_to_labels(
-            prob, params.threshold, params.low_threshold, params.smoothing_px,
-            params.min_size_px, params.max_size_px, params.split, params.min_distance_px, seeds,
-        )  # fmt: skip
+            prob,
+            params.threshold,
+            params.low_threshold,
+            params.smoothing_px,
+            params.min_size_px,
+            params.max_size_px,
+            params.split,
+            params.min_distance_px,
+            seeds,
+        )
         label_set = LabelSet(params.name, labels, source=self.name)
         report = {"module": self.name, "objects": int(label_set.count)}
         return image.with_labels(label_set, self.name, report)
@@ -401,28 +449,31 @@ def probabilities_to_labels(
     """Instance labels (int32, Z, Y, X) from a probability map (Z, Y, X); 2D per plane."""
     from skimage.feature import peak_local_max
     from skimage.filters import apply_hysteresis_threshold
-    from skimage.morphology import remove_small_objects
     from skimage.segmentation import watershed
 
     out = np.zeros(prob.shape, dtype=np.int32)
     next_id = 0
     for z in range(prob.shape[0]):
-        plane = ndimage.gaussian_filter(prob[z].astype(np.float32), smoothing) if smoothing else prob[z]
+        plane = (
+            ndimage.gaussian_filter(prob[z].astype(np.float32), smoothing) if smoothing else prob[z]
+        )
         if low is not None:
             mask = apply_hysteresis_threshold(plane, low, threshold)
         else:
             mask = plane >= threshold
         mask = ndimage.binary_fill_holes(mask)
-        if min_size:
-            mask = remove_small_objects(mask, min_size=min_size)
         if split == "seeds" and seeds is not None:
             markers = np.where(mask, seeds[z], 0)
             labels = watershed(-plane, markers=markers, mask=mask)
         elif split == "distance":
             distance = ndimage.distance_transform_edt(mask)
             components, _ = ndimage.label(mask)
-            peaks = peak_local_max(distance, min_distance=max(1, int(min_distance)),
-                                   labels=components, exclude_border=False)  # fmt: skip
+            peaks = peak_local_max(
+                distance,
+                min_distance=max(1, int(min_distance)),
+                labels=components,
+                exclude_border=False,
+            )
             markers = np.zeros(mask.shape, dtype=np.int32)
             markers[tuple(peaks.T)] = np.arange(1, len(peaks) + 1)
             labels = watershed(-distance, markers=markers, mask=mask)
@@ -464,13 +515,15 @@ class IlastikClassAreas(MeasurementModule):
 
     def measure(self, context: MeasureContext) -> dict[str, pd.DataFrame]:
         image = context.corrected
-        index = [i for i, c in enumerate(image.metadata.channels)
-                 if c.name.startswith(CHANNEL_PREFIX)]  # fmt: skip
+        index = [
+            i for i, c in enumerate(image.metadata.channels) if c.name.startswith(CHANNEL_PREFIX)
+        ]
         planes = image.data[index]
         winner = np.argmax(planes, axis=0)
         row = {
-            f"ilastik_area_pct_{image.metadata.channels[i].name[len(CHANNEL_PREFIX):]}":
-                float((winner == k).mean() * 100)
+            f"ilastik_area_pct_{image.metadata.channels[i].name[len(CHANNEL_PREFIX) :]}": float(
+                (winner == k).mean() * 100
+            )
             for k, i in enumerate(index)
-        }  # fmt: skip
+        }
         return {"fields": pd.DataFrame([row])}

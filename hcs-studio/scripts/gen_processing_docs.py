@@ -190,6 +190,20 @@ NOTES = {
     "cover the same area throughout). A jump between two time points larger than max_shift_um "
     "is a stage move: not corrected, reported. Cannot be combined with stitch_well. Put it "
     "first. See the Kinetics guide.",
+    "ilastik_pixel": "ilastik (Phase 16b): runs a trained Pixel Classification project with "
+    "ilastik's headless command line, once per well with all its fields (ilastik starts slowly). "
+    "Adds one channel per class, `ilastik_<class>`: probabilities (0–1) or 0/1 masks from Simple "
+    "Segmentation; the original channels are unchanged and stay measurable. The project's SHA-256, "
+    "ilastik's version and the command lines are recorded (manifest, ilastik/ folder). Needs "
+    "ilastik (Tools → ilastik settings). See the ilastik guide.",
+    "ilastik_autocontext": "ilastik (Phase 16b): as ilastik_pixel for an Autocontext project "
+    "(the second stage's probabilities or segmentation).",
+    "probabilities_to_objects": "ilastik (Phase 16b): objects from a class channel: smoothing, "
+    "threshold (with optional hysteresis from low_threshold), holes filled, touching objects "
+    "split by the distance transform (min_distance_px) or by seeds from another label set, "
+    "size filter. Known-answer test: two touching discs become two objects.",
+    "ilastik_class_areas": "ilastik (Phase 16b): % of each field where each class is the most "
+    "likely (`ilastik_area_pct_<class>`; per-well means in the summary).",
     "confluence": "Kinetics (Phase 22a): % of the field covered by cells, per field and time "
     "point (`confluence_pct`, `confluence_area_um2`; per-well means in the summary). texture "
     "(brightfield/phase): local SD of the image minus its median filter, threshold calibrated "

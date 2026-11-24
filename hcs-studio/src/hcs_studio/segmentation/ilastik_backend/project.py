@@ -17,6 +17,7 @@ manifests so results trace back to the exact trained classifier.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -110,25 +111,17 @@ def read_project(path: str | Path) -> ProjectInfo:
             leaf = name.rsplit("/", 1)[-1]
             if isinstance(obj, h5py.Dataset):
                 if leaf == "LabelNames" and not names:
-                    try:
+                    with contextlib.suppress(TypeError, ValueError):
                         names.extend(_text(v) for v in obj[()])
-                    except (TypeError, ValueError):
-                        pass
                 elif leaf == "axistags" and name.startswith("Input Data"):
-                    try:
+                    with contextlib.suppress(ValueError, KeyError):
                         axes_found.append(parse_axistags(_text(obj[()])))
-                    except (ValueError, KeyError):
-                        pass
                 elif leaf == "shape" and name.startswith("Input Data"):
-                    try:
+                    with contextlib.suppress(TypeError, ValueError):
                         shapes.append(tuple(int(v) for v in obj[()]))
-                    except (TypeError, ValueError):
-                        pass
             if name.startswith("Input Data") and "axistags" in obj.attrs:
-                try:
+                with contextlib.suppress(ValueError, KeyError):
                     axes_found.append(parse_axistags(_text(obj.attrs["axistags"])))
-                except (ValueError, KeyError):
-                    pass
 
         f.visititems(visit)
         info.label_names = names

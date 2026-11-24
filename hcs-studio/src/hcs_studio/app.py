@@ -196,6 +196,15 @@ def build_parser() -> argparse.ArgumentParser:
     ilastik_cmd.add_argument(
         "--save", action="store_true", help="save the given settings (and the paths found)"
     )
+    ilastik_cmd.add_argument("--info", type=Path, help="what an ilastik project (.ilp) holds")
+    ilastik_cmd.add_argument(
+        "--preset", type=Path, help="write a pipeline for this project (.ilp) to --output"
+    )
+    ilastik_cmd.add_argument("--output", type=Path, help="pipeline file for --preset")
+    ilastik_cmd.add_argument("--class", dest="object_class", help="class that becomes objects")
+    ilastik_cmd.add_argument(
+        "--channels", type=int, nargs="+", help="channels sent to ilastik (from 1)"
+    )
     qc_cmd = sub.add_parser(
         "qc", help="image QC of a plate from raw data (focus, saturation, artifacts …)"
     )
@@ -1908,6 +1917,8 @@ def _ilastik(args: argparse.Namespace) -> int:
 
     from hcs_studio.segmentation.ilastik_backend.settings import IlastikSettings, detect
 
+    if args.info or args.preset:
+        return _ilastik_project(args)
     settings = IlastikSettings.load()
     changes: dict[str, object] = {}
     if args.set_ilastik:
@@ -1936,6 +1947,38 @@ def _ilastik(args: argparse.Namespace) -> int:
     if not found.ilastik:
         return 2
     return 0 if found.ilastik_ok else 1
+
+
+def _ilastik_project(args: argparse.Namespace) -> int:
+    """``--info``: the project's workflow, classes, training axes; ``--preset``: a pipeline."""
+    import json
+
+    from hcs_studio.segmentation.ilastik_backend.project import read_project
+
+    path = args.info or args.preset
+    try:
+        info = read_project(path)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"ERROR: {exc}")
+        return 2
+    if args.info:
+        print(json.dumps(info.to_dict(), indent=2))
+        return 0
+    if not args.output:
+        print("ERROR: give --output for the pipeline file")
+        return 2
+    from hcs_studio.segmentation.ilastik_backend.presets import pixel_preset
+
+    try:
+        pipeline = pixel_preset(path, info, object_class=args.object_class, channels=args.channels)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 2
+    import yaml
+
+    args.output.write_text(yaml.safe_dump(pipeline.to_dict(), sort_keys=False), encoding="utf-8")
+    print(f"Pipeline written to {args.output}")
+    return 0
 
 
 def _layout(args: argparse.Namespace) -> int:

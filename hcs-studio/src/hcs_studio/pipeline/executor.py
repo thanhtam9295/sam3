@@ -235,9 +235,7 @@ class PipelineRunner:
 
     def batch_index(self) -> int | None:
         """The first step that processes a well's fields together (``batch_scope == "well"``)."""
-        return next(
-            (i for i, m in enumerate(self.modules) if m.batch_scope == "well"), None
-        )
+        return next((i for i, m in enumerate(self.modules) if m.batch_scope == "well"), None)
 
     def apply_batch(
         self, index: int, images: list[ImageData], keys: list[tuple[int, int]], workdir: Any
@@ -565,9 +563,7 @@ def process_well(
                     keys.append((item.index, t))
             from hcs_studio.processing.base import BatchFolders
 
-            folders = BatchFolders(
-                run=plan.folder, well=well_dir, well_name=name
-            )
+            folders = BatchFolders(run=plan.folder, well=well_dir, well_name=name)
             outputs = runner.apply_batch(batch, [p.final for p in partials], keys, folders)
             for key_, raw_image, part, out in zip(keys, raws, partials, outputs, strict=True):
                 prepared[key_] = (raw_image, out, out if out.linear else part.corrected)

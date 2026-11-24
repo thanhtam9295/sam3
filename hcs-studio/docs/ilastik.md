@@ -96,3 +96,55 @@ ilastik's own results come back as HDF5 (`exported_data`) and are read with thei
 Checked with ilastik 1.4.2: files written by HCS Studio in all four layouts (2D single
 channel, 2D multichannel, 3D multichannel, 2D + time) go through ilastik's Data Conversion
 workflow and come back identical, with the same axis order (`tests/test_ilastik.py`).
+
+## Pixel Classification and Autocontext in a pipeline
+
+Train a Pixel Classification (or Autocontext) project in ilastik on images at the **same
+processing stage** the pipeline will send (e.g. after Z projection and background removal),
+then add the steps:
+
+| Step | What it does |
+|---|---|
+| `ilastik_pixel` / `ilastik_autocontext` | runs the project on every field; adds one channel per class, `ilastik_<class>` (probabilities 0–1, or 0/1 masks with `export: segmentation`) |
+| `probabilities_to_objects` | a class channel → objects: threshold (optional hysteresis), holes filled, touching objects split by distance transform or by seeds (e.g. nuclei), size filter |
+| `measure_objects` | as usual; the class channels can be measured too (mean class probability per object) |
+| `ilastik_class_areas` | % of each field per class (`ilastik_area_pct_<class>`, averaged per well; a plate readout for pharmacology) |
+
+```
+hcs-studio ilastik --info nuclei.ilp                     # workflow, classes, training axes
+hcs-studio ilastik --preset nuclei.ilp --class nuclei --channels 1 --output ilastik.yaml
+hcs-studio run --pipeline ilastik.yaml --input <plate> --wells A01-P24
+```
+
+- **One ilastik call per well.** ilastik takes many seconds to start, so all the fields (and
+  time points) of a well go to one headless call (`--raw_data` with several files). Steps before
+  the ilastik step run first for the whole well; measurement steps must come after it.
+- **Channels:** `channels` chooses what is sent, in the trained order (default: all). A project
+  trained on 2D data refuses Z stacks (add a projection step) and a different number of
+  channels, when the project states it.
+- **Class names** come from the project; give `class_names` if they are not found.
+- **Projects** may be files or model-registry references (`registry:NAME@VERSION`). Headless
+  ilastik opens projects read-only; HCS Studio checks the file's SHA-256 before and after every
+  call and stops if it changed.
+- **Resume:** a well that failed (e.g. ilastik ran out of memory) is redone on resume; finished
+  wells are not.
+
+Run folder:
+
+```
+<run>/ilastik/projects_used.json   # project path, SHA-256, workflow, ilastik version, runner
+<run>/ilastik/logs/<well>.log      # the exact command lines and ilastik's output
+<run>/ilastik/inputs/              # HDF5 sent to ilastik (deleted after each well unless keep_inputs)
+<run>/wells/<W>/ilastik/f001_t0_Probabilities.h5 …   # ilastik's own outputs, per field
+<run>/wells/<W>/ilastik/class_summary.json            # class areas per field, command, time
+```
+
+The run manifest's fitted state records the project SHA-256, ilastik's version and the runner.
+
+**Validation status:** tested with a stand-in program that accepts ilastik's command line and
+writes known answers (`tests/test_ilastik_steps.py`), including one call per well, resume after a
+failed well, and the read-only check. **Not yet run with a real trained project**: please send
+one or two `.ilp` files (Pixel Classification, Autocontext) with a few matching images; then
+`HCS_ILASTIK=<ilastik> pytest tests/test_ilastik.py tests/test_ilastik_steps.py` checks the real
+program, and the project reader's guesses (where the training axes and channels are stored) can
+be confirmed. Object Classification, Multicut, Tracking and the Fiji runner follow (steps c–e).

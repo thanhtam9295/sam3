@@ -391,6 +391,43 @@ Table step: runs on the object tables after all wells are processed, and can be 
 | `rules` | [] | Feature thresholds (min and/or max, inclusive). |
 | `combine` | 'all' | Inside the gate when all rules hold, or any. |
 
+## ilastik Autocontext (`ilastik_autocontext`)
+
+ilastik (Phase 16b): as ilastik_pixel for an Autocontext project (the second stage's probabilities or segmentation).
+
+Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `project` | '' | The trained ilastik project (.ilp). |
+| `export` | 'probabilities' | Class probabilities (0–1) or ilastik's Simple Segmentation (0/1 masks). |
+| `channels` | None | Channels sent to ilastik, in the trained order; empty = all. |
+| `class_names` | None | Class names when the project does not hold them. |
+| `keep_inputs` | False | Keep the HDF5 copies sent to ilastik. |
+| `timeout_min` | 120.0 | Give up on one well after this. |
+
+## ilastik class areas (`ilastik_class_areas`)
+
+ilastik (Phase 16b): % of each field where each class is the most likely (`ilastik_area_pct_<class>`; per-well means in the summary).
+
+| Parameter | Default | Meaning |
+|---|---|---|
+
+## ilastik Pixel Classification (`ilastik_pixel`)
+
+ilastik (Phase 16b): runs a trained Pixel Classification project with ilastik's headless command line, once per well with all its fields (ilastik starts slowly). Adds one channel per class, `ilastik_<class>`: probabilities (0–1) or 0/1 masks from Simple Segmentation; the original channels are unchanged and stay measurable. The project's SHA-256, ilastik's version and the command lines are recorded (manifest, ilastik/ folder). Needs ilastik (Tools → ilastik settings). See the ilastik guide.
+
+Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `project` | '' | The trained ilastik project (.ilp). |
+| `export` | 'probabilities' | Class probabilities (0–1) or ilastik's Simple Segmentation (0/1 masks). |
+| `channels` | None | Channels sent to ilastik, in the trained order; empty = all. |
+| `class_names` | None | Class names when the project does not hold them. |
+| `keep_inputs` | False | Keep the HDF5 copies sent to ilastik. |
+| `timeout_min` | 120.0 | Give up on one well after this. |
+
 ## Kinetics (growth, IC50(t), GR) (`kinetics`)
 
 Kinetics (Phase 22b): table step for time-lapse runs. Per well a growth fit on the log of the readout (exponential, lag_exponential, logistic; AICc) → `kn_doubling_h`, `kn_growth_rate_per_h`, `kn_lag_h`, `kn_capacity`, plus AUC, fold changes and times to a fold change or level. With compounds in the layout: IC50 per time point, GR from treatment (each well's own value before treatment as time zero) and GR over intervals (interval_h, else consecutive time points); GR50/GRmax per compound and time. Kinetic QC (Phase 22c): gaps and missing time points, focus drift, edge evaporation, vehicle growth vs the registry history (`kn_qc_flags`). Writes `kinetics/` with `report.html` (plate map with sparklines, condition × time heat map, curve overlays, QC). See the Kinetics guide.
@@ -534,6 +571,23 @@ Table step: runs on the object tables after all wells are processed, and can be 
 | `pca_components` | 0 | Reduce to this many principal components; 0 = off. |
 | `max_fit_objects` | 50000 | Objects sampled across the plate to learn from. |
 | `seed` | 0 | Random seed (sampling, k-means, Leiden). |
+
+## Probabilities → objects (`probabilities_to_objects`)
+
+ilastik (Phase 16b): objects from a class channel: smoothing, threshold (with optional hysteresis from low_threshold), holes filled, touching objects split by the distance transform (min_distance_px) or by seeds from another label set, size filter. Known-answer test: two touching discs become two objects.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `channel` | '' | Class channel (e.g. ilastik_nuclei, or the class name). |
+| `threshold` | 0.5 | Probability for an object. |
+| `low_threshold` | None | Hysteresis: grow objects into pixels above this (≤ threshold). |
+| `smoothing_px` | 1.0 | Gaussian smoothing first. |
+| `min_size_px` | 20 | Remove smaller objects. |
+| `max_size_px` | None | Remove larger objects. |
+| `split` | 'distance' | Split touching objects. |
+| `min_distance_px` | 5.0 | Distance split: centre spacing. |
+| `seeds` | None | Seeds: a label set (e.g. nuclei). |
+| `name` | 'objects' | Name of the new label set. |
 
 ## Z projection (`projection`)
 

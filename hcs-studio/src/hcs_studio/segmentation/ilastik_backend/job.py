@@ -8,10 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field
 #: workflow → the export sources it offers (as ilastik names them; checked on 1.4.2)
 EXPORT_SOURCES = {
     "pixel": ("Probabilities", "Simple Segmentation", "Uncertainty", "Features", "Labels"),
-    "autocontext": ("Probabilities Stage 2", "Simple Segmentation Stage 2",
-                    "Probabilities Stage 1", "Simple Segmentation Stage 1",
-                    "Probabilities All Stages"),
-}  # fmt: skip
+    "autocontext": (
+        "Probabilities Stage 2",
+        "Simple Segmentation Stage 2",
+        "Probabilities Stage 1",
+        "Simple Segmentation Stage 1",
+        "Probabilities All Stages",
+    ),
+}
 
 
 class IlastikError(RuntimeError):
