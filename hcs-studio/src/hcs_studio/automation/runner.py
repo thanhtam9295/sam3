@@ -36,8 +36,15 @@ from hcs_studio.services import Actor, ServiceContext
 log = logging.getLogger("hcs_studio.automation")
 
 ACTOR = Actor("automation", "Automatic runs", "system", "admin")
-FINAL = ("completed", "completed_with_failures", "qc_failed", "cancelled", "error",
-         "interrupted", "failed")  # fmt: skip
+FINAL = (
+    "completed",
+    "completed_with_failures",
+    "qc_failed",
+    "cancelled",
+    "error",
+    "interrupted",
+    "failed",
+)
 
 
 def _now_iso() -> str:
@@ -91,7 +98,9 @@ class AutoRunner:
             self.queue.poll()
         with session_scope() as session:
             keys = session.scalars(
-                select(AutoRun.key).where(AutoRun.status.in_(("pending", "waiting_data", "running")))
+                select(AutoRun.key).where(
+                    AutoRun.status.in_(("pending", "waiting_data", "running"))
+                )
             ).all()
         for key in keys:
             try:
@@ -145,9 +154,12 @@ class AutoRunner:
             created = run.created if run.created.tzinfo else run.created.replace(tzinfo=UTC)
             waited = (datetime.now(UTC) - created).total_seconds() / 60
             if waited > self.settings.data_wait_minutes:
-                self._fail(run.key, "registration",
-                           f"the raw data is still incomplete after {waited:.0f} min: "
-                           f"{completeness.reason}")  # fmt: skip
+                self._fail(
+                    run.key,
+                    "registration",
+                    f"the raw data is still incomplete after {waited:.0f} min: "
+                    f"{completeness.reason}",
+                )
                 return
             self._update(run.key, status="waiting_data", detail=completeness.reason)
             return
@@ -161,27 +173,55 @@ class AutoRunner:
         rule = routing.route(plate_info) if routing is not None else None
         if routing is None or rule is None:
             self._update(run.key, status="unrouted", detail="no routing rule matches")
-            self.notifier.notify(Notice("unrouted", run.barcode, "no routing rule matches",
-                                        [f"Instrument {run.instrument}, protocol "
-                                         f"{run.protocol or '–'}, raw data {run.raw}"]))  # fmt: skip
+            self.notifier.notify(
+                Notice(
+                    "unrouted",
+                    run.barcode,
+                    "no routing rule matches",
+                    [
+                        f"Instrument {run.instrument}, protocol "
+                        f"{run.protocol or '–'}, raw data {run.raw}"
+                    ],
+                )
+            )
             return
         layout_path = self._layout(run.barcode)
         job = self._job(run, raw, routing, rule, layout_path)
         from hcs_studio.services.operations import submit_job
 
         job_id = submit_job(_context(), self.queue, job, priority="auto")
-        self._update(run.key, status="running", route=rule.name, job_id=job_id,
-                     detail="" if layout_path else "needs_layout")  # fmt: skip
-        self._send("analysis.started", {"barcode": run.barcode, "acquisition_id":
-                   run.acquisition_id or run.key, "run_id": job_id, "pipeline": rule.pipeline,
-                   "started_at": _now_iso()}, run)  # fmt: skip
+        self._update(
+            run.key,
+            status="running",
+            route=rule.name,
+            job_id=job_id,
+            detail="" if layout_path else "needs_layout",
+        )
+        self._send(
+            "analysis.started",
+            {
+                "barcode": run.barcode,
+                "acquisition_id": run.acquisition_id or run.key,
+                "run_id": job_id,
+                "pipeline": rule.pipeline,
+                "started_at": _now_iso(),
+            },
+            run,
+        )
         if layout_path is None:
-            self.notifier.notify(Notice(
-                "needs_layout", run.barcode, "please annotate this plate",
-                ["No plate layout is saved for this barcode. The image analysis runs; "
-                 "pharmacology and hit calling wait until the plate is annotated "
-                 "(Layout tab, then 'annotate' the run)."], owners=rule.notify,
-            ))  # fmt: skip
+            self.notifier.notify(
+                Notice(
+                    "needs_layout",
+                    run.barcode,
+                    "please annotate this plate",
+                    [
+                        "No plate layout is saved for this barcode. The image analysis runs; "
+                        "pharmacology and hit calling wait until the plate is annotated "
+                        "(Layout tab, then 'annotate' the run)."
+                    ],
+                    owners=rule.notify,
+                )
+            )
         log.info("Automatic run of %s started (rule %s, job %s)", run.barcode, rule.name, job_id)
 
     def _layout(self, barcode: str) -> Path | None:
@@ -282,17 +322,32 @@ class AutoRunner:
         verdict, numbers = summarise(folder)
         from hcs_studio.output.manifest import rooted_text
 
-        self._send("analysis.completed", {
-            "barcode": run.barcode, "acquisition_id": run.acquisition_id or run.key,
-            "run_id": folder.name, "qc_verdict": verdict, "report_path": rooted_text(report),
-            "key_numbers": numbers, "finished_at": _now_iso()}, run)  # fmt: skip
+        self._send(
+            "analysis.completed",
+            {
+                "barcode": run.barcode,
+                "acquisition_id": run.acquisition_id or run.key,
+                "run_id": folder.name,
+                "qc_verdict": verdict,
+                "report_path": rooted_text(report),
+                "key_numbers": numbers,
+                "finished_at": _now_iso(),
+            },
+            run,
+        )
         self._update(run.key, status="completed", detail="; ".join(notes))
         title = "analysis completed" + (" with failed wells" if status != "completed" else "")
-        self.notifier.notify(Notice(
-            "completed", run.barcode, f"{title} (QC {verdict})",
-            [f"Assay: {registry_assay(run.barcode) or '–'}; rule {run.route}"] + notes,
-            numbers, str(report), owners=rule.notify if rule else [],
-        ))  # fmt: skip
+        self.notifier.notify(
+            Notice(
+                "completed",
+                run.barcode,
+                f"{title} (QC {verdict})",
+                [f"Assay: {registry_assay(run.barcode) or '–'}; rule {run.route}", *notes],
+                numbers,
+                str(report),
+                owners=rule.notify if rule else [],
+            )
+        )
 
     def _kinetics(self, barcode: str) -> None:
         """Analyse all finished time points of the plate together (Phase 22)."""
@@ -326,8 +381,11 @@ class AutoRunner:
             reasons, wells, fields = ["the plate failed image QC"], [], []
         reason = "; ".join(str(r) for r in reasons)
         if self.settings.reimage_on_qc_fail:
-            payload: dict[str, Any] = {"barcode": run.barcode, "reason": reason,
-                                       "requested_by": "hcs-studio"}  # fmt: skip
+            payload: dict[str, Any] = {
+                "barcode": run.barcode,
+                "reason": reason,
+                "requested_by": "hcs-studio",
+            }
             if run.acquisition_id:
                 payload["acquisition_id"] = run.acquisition_id
             if wells:
@@ -335,40 +393,80 @@ class AutoRunner:
             if fields:
                 payload["fields"] = [{"well": w, "field": int(f)} for w, f in fields]
             self._send("reimage.request", payload, run)
-        self._send("analysis.failed", {"barcode": run.barcode, "acquisition_id":
-                   run.acquisition_id or run.key, "run_id": folder.name, "stage": "qc",
-                   "error": reason, "finished_at": _now_iso()}, run)  # fmt: skip
+        self._send(
+            "analysis.failed",
+            {
+                "barcode": run.barcode,
+                "acquisition_id": run.acquisition_id or run.key,
+                "run_id": folder.name,
+                "stage": "qc",
+                "error": reason,
+                "finished_at": _now_iso(),
+            },
+            run,
+        )
         self._update(run.key, status="qc_failed", detail=reason)
-        self.notifier.notify(Notice(
-            "qc_failed", run.barcode, "the plate failed image QC",
-            [reason] + ([f"Failed wells: {', '.join(wells[:24])}"] if wells else [])
-            + (["A re-imaging request was sent to the scheduler."]
-               if self.settings.reimage_on_qc_fail else []),
-            report=str(folder / "qc_report.html"), owners=rule.notify if rule else [],
-        ))  # fmt: skip
+        self.notifier.notify(
+            Notice(
+                "qc_failed",
+                run.barcode,
+                "the plate failed image QC",
+                [reason]
+                + ([f"Failed wells: {', '.join(wells[:24])}"] if wells else [])
+                + (
+                    ["A re-imaging request was sent to the scheduler."]
+                    if self.settings.reimage_on_qc_fail
+                    else []
+                ),
+                report=str(folder / "qc_report.html"),
+                owners=rule.notify if rule else [],
+            )
+        )
 
     def _fail(self, key: str, stage: str, error: str) -> None:
         run = self._load(key)
         _, rule = self._rule(run) if run.route else (None, None)
         self._update(key, status="failed", detail=error)
-        self._send("analysis.failed", {"barcode": run.barcode, "acquisition_id":
-                   run.acquisition_id or run.key, "stage": stage, "error": error[:2000],
-                   "finished_at": _now_iso()}, run)  # fmt: skip
-        self.notifier.notify(Notice("failed", run.barcode, f"automatic run failed ({stage})",
-                                    [error], owners=rule.notify if rule else []))  # fmt: skip
+        self._send(
+            "analysis.failed",
+            {
+                "barcode": run.barcode,
+                "acquisition_id": run.acquisition_id or run.key,
+                "stage": stage,
+                "error": error[:2000],
+                "finished_at": _now_iso(),
+            },
+            run,
+        )
+        self.notifier.notify(
+            Notice(
+                "failed",
+                run.barcode,
+                f"automatic run failed ({stage})",
+                [error],
+                owners=rule.notify if rule else [],
+            )
+        )
 
     def _send(self, event_type: str, payload: dict[str, Any], run: AutoRun) -> None:
         from hcs_studio.automation.intake import send
 
         try:
-            send(event_type, payload, outbox=self.settings.outbox,
-                 scheduler_url=self.settings.scheduler_url,
-                 correlation_id=run.event_id or None)  # fmt: skip
+            send(
+                event_type,
+                payload,
+                outbox=self.settings.outbox,
+                scheduler_url=self.settings.scheduler_url,
+                correlation_id=run.event_id or None,
+            )
         except Exception:
             log.exception("Could not send %s for %s", event_type, run.barcode)
 
     def status(self) -> dict[str, Any]:
-        return {"watch": [w.status() for w in self.watchers], "notifications": self.notifier.summary()}
+        return {
+            "watch": [w.status() for w in self.watchers],
+            "notifications": self.notifier.summary(),
+        }
 
 
 def summarise(folder: Path) -> tuple[str, dict[str, float | None]]:
@@ -413,5 +511,3 @@ def retry(key: str) -> None:
         run = session.scalars(select(AutoRun).where(AutoRun.key == key)).one()
         run.status, run.job_id, run.detail = "pending", "", "retried"
         run.created = datetime.now(UTC)
-
-

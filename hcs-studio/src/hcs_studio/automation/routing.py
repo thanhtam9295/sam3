@@ -56,15 +56,22 @@ class Rule(BaseModel):
     @classmethod
     def _regex(cls, value: str) -> str:
         if value:
-            re.compile(value)
+            try:
+                re.compile(value)
+            except re.error as exc:
+                raise ValueError(f"barcode_regex is not a valid regular expression: {exc}") from exc
         return value
 
     def matches(self, plate: dict[str, Any]) -> bool:
         if self.default:
             return True
         criteria = [
-            self.barcode_prefix, self.barcode_regex, self.instrument, self.protocol, self.assay
-        ]  # fmt: skip
+            self.barcode_prefix,
+            self.barcode_regex,
+            self.instrument,
+            self.protocol,
+            self.assay,
+        ]
         if not any(criteria):
             return False  # a rule without criteria must say ``default: true``
         barcode = str(plate.get("barcode", ""))
@@ -114,8 +121,11 @@ def check_routing(routing: Routing) -> list[str]:
         if seen_default:
             problems.append(f"{rule.name}: never used (a default rule comes before it)")
         seen_default = seen_default or rule.default
-        for label, value in (("pipeline", rule.pipeline), ("qc_rules", rule.qc_rules),
-                             ("screen", rule.screen)):  # fmt: skip
+        for label, value in (
+            ("pipeline", rule.pipeline),
+            ("qc_rules", rule.qc_rules),
+            ("screen", rule.screen),
+        ):
             if not value:
                 continue
             target = routing.path(value)

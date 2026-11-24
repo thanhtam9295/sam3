@@ -12,10 +12,10 @@ from typing import Any
 
 import pytest
 
-from tests.builders import make_imagexpress, make_operetta
 from hcs_studio.automation.completeness import check
 from hcs_studio.automation.settings import WatchFolder
 from hcs_studio.automation.watcher import FolderWatcher
+from tests.builders import make_imagexpress, make_operetta
 
 
 @pytest.fixture
@@ -40,7 +40,9 @@ def _imaged(barcode: str = "AUTO-001", **payload: Any) -> dict[str, Any]:
         "raw_data": {"location": "/data/raw/AUTO-001"},
         **payload,
     }
-    return make_event("plate.imaged", body, source={"system": "scheduler", "host": "lab", "version": "1"})
+    return make_event(
+        "plate.imaged", body, source={"system": "scheduler", "host": "lab", "version": "1"}
+    )
 
 
 # --- completeness ---------------------------------------------------------------------------------
@@ -109,8 +111,9 @@ def test_slow_copy_is_not_started_early(home: Path) -> None:
     watched = home / "exports"
     watched.mkdir()
     target = watched / "AUTO-002"
-    watcher = FolderWatcher(WatchFolder(path=str(watched), instrument="ImageXpress",
-                                        quiet_seconds=30))  # fmt: skip
+    watcher = FolderWatcher(
+        WatchFolder(path=str(watched), instrument="ImageXpress", quiet_seconds=30)
+    )
     files = sorted(p for p in source.rglob("*") if p.is_file())
     htd = next(p for p in files if p.suffix.upper() == ".HTD")
     order = [htd] + [p for p in files if p != htd]  # MetaXpress writes the HTD first
@@ -176,9 +179,11 @@ def test_http_and_inbox_intake(home: Path) -> None:
     server = EventServer(port=0).start()
     try:
         request = urllib.request.Request(
-            server.url, data=json.dumps(_imaged("HTTP-1")).encode(),
-            headers={"Content-Type": "application/json"}, method="POST",
-        )  # fmt: skip
+            server.url,
+            data=json.dumps(_imaged("HTTP-1")).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         with urllib.request.urlopen(request, timeout=10) as response:
             assert response.status == 202
             assert json.loads(response.read())["status"] == "accepted"
@@ -204,5 +209,9 @@ def test_http_and_inbox_intake(home: Path) -> None:
     assert (inbox / "rejected" / "b.json.error.txt").read_text()
     with session_scope() as session:
         statuses = {(r.channel, r.status) for r in session.query(LabEventRecord)}
-    assert {("http", "accepted"), ("http", "rejected"), ("inbox", "accepted"),
-            ("inbox", "rejected")} <= statuses  # fmt: skip
+    assert {
+        ("http", "accepted"),
+        ("http", "rejected"),
+        ("inbox", "accepted"),
+        ("inbox", "rejected"),
+    } <= statuses

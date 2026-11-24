@@ -43,7 +43,7 @@ class Notice:
         return f"[HCS Studio] {self.barcode}: {self.title}"
 
     def text(self) -> str:
-        body = [self.title, ""] + list(self.lines)
+        body = [self.title, "", *list(self.lines)]
         if self.numbers:
             body += [""] + [
                 f"{k}: {'–' if v is None else f'{v:.3g}'}" for k, v in self.numbers.items()
@@ -86,9 +86,11 @@ def send_webhook(channel: Channel, notice: Notice) -> None:
         raise RuntimeError(f"no webhook stored for {channel.webhook or channel.name}")
     body = {"text": f"**{notice.subject}**\n\n{notice.text()}"}
     request = urllib.request.Request(
-        url, data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"}, method="POST",
-    )  # fmt: skip
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     with urllib.request.urlopen(request, timeout=15):
         pass
 

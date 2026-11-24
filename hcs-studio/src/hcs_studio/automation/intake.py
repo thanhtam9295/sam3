@@ -82,7 +82,7 @@ def already_registered(path: Path) -> bool:
         return session.scalars(select(AutoRun.id).where(AutoRun.raw == rooted)).first() is not None
 
 
-def _same_raw(session: Any, payload: dict[str, Any]) -> AutoRun | None:
+def _same_raw(session: Any, payload: dict[str, Any]) -> Any:
     """An acquisition of the same barcode, raw data and time point received recently."""
     from datetime import timedelta
 
@@ -94,9 +94,7 @@ def _same_raw(session: Any, payload: dict[str, Any]) -> AutoRun | None:
         return None
     since = datetime.now(UTC) - timedelta(hours=hours)
     rows = session.scalars(
-        select(AutoRun).where(
-            (AutoRun.barcode == payload["barcode"]) & (AutoRun.raw == location)
-        )
+        select(AutoRun).where((AutoRun.barcode == payload["barcode"]) & (AutoRun.raw == location))
     ).all()
     for row in rows:
         created = row.created if row.created.tzinfo else row.created.replace(tzinfo=UTC)
@@ -225,7 +223,7 @@ def send(
     if outbox:
         folder = Path(outbox)
         folder.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")  # sorts in sending order
         target = folder / f"{stamp}_{event_type}_{event['event_id']}.json"
         part = target.with_name(target.name + ".part")
         part.write_text(json.dumps(event, indent=1), encoding="utf-8")

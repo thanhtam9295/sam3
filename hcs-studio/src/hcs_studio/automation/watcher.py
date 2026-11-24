@@ -62,8 +62,13 @@ class Candidate:
     checked: Completeness | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"path": str(self.path), "state": self.state, "reason": self.reason,
-                "files": self.signature[0], "bytes": self.signature[1]}  # fmt: skip
+        return {
+            "path": str(self.path),
+            "state": self.state,
+            "reason": self.reason,
+            "files": self.signature[0],
+            "bytes": self.signature[1],
+        }
 
 
 def plate_imaged_event(path: Path, watch: WatchFolder, newest: float) -> dict[str, Any]:
@@ -79,9 +84,10 @@ def plate_imaged_event(path: Path, watch: WatchFolder, newest: float) -> dict[st
     started = _aware(plate.acquired_at) or datetime.fromtimestamp(newest, UTC).isoformat()
     rooted = to_rooted(path)
     raw: dict[str, Any] = (
-        {"location": str(path)} if rooted.root == "ABSOLUTE" else
-        {"root": rooted.root, "path": rooted.rel}
-    )  # fmt: skip
+        {"location": str(path)}
+        if rooted.root == "ABSOLUTE"
+        else {"root": rooted.root, "path": rooted.rel}
+    )
     payload: dict[str, Any] = {
         "barcode": barcode,
         "instrument": watch.instrument or plate.vendor or "unknown",
@@ -124,7 +130,11 @@ class FolderWatcher:
 
         text = self.watch.path
         try:
-            return resolve(text) if ":" in text.split("/", 1)[0] and len(text.split(":")[0]) > 1 else Path(text)
+            return (
+                resolve(text)
+                if ":" in text.split("/", 1)[0] and len(text.split(":")[0]) > 1
+                else Path(text)
+            )
         except (KeyError, ValueError):
             return Path(text)
 
