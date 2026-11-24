@@ -400,6 +400,10 @@ def _builtin() -> list[ReadoutSpec]:
         specs += _object_and_well(
             "{channel}_" + feat, display, unit, direction, text, "measure_objects"
         )
+    specs += _object_and_well(
+        "{channel}_{partner}_correlation", "{channel} × {partner} correlation", "", "either",
+        "Pearson correlation of two channels over the object's pixels", "measure_objects",
+    )  # fmt: skip
     for feat, (display, unit, direction, text) in CHILD_FEATURES.items():
         specs += _object_and_well(feat, display, unit, direction, text, "measure_objects")
     for feat, (display, unit, direction, text) in SPHEROID_FEATURES.items():

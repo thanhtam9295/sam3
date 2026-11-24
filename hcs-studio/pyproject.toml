@@ -53,6 +53,11 @@ gui = [
 segmentation = [
     "cellpose>=4.2",
 ]
+profiling = [
+    # Cell Painting profiling (Phase 24; approved 2026-11-24). Pull in duckdb, statsmodels.
+    "pycytominer==1.7.1",
+    "copairs==0.6.0",
+]
 gpu = [
     # Install the CUDA build that matches your driver, see https://pytorch.org/get-started/
     "torch>=2.2",
@@ -115,6 +120,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # µ and × are intended in scientific 
 "src/hcs_studio/assays/spheroids.py" = ["E501"]  # HTML page template
 "src/hcs_studio/kinetics/report.py" = ["E501"]  # HTML page template
 "src/hcs_studio/screening/report.py" = ["E501"]  # HTML page template
+"src/hcs_studio/cellpainting/naming.py" = ["E501"]  # the name mapping table
 
 [tool.mypy]
 python_version = "3.11"
@@ -122,6 +128,6 @@ strict = true
 files = ["src", "tests", "../lab_events/src"]
 
 [[tool.mypy.overrides]]
-module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*", "sklearn.*", "joblib.*", "igraph.*", "leidenalg.*", "umap", "umap.*", "matplotlib", "matplotlib.*", "openpyxl", "reportlab", "reportlab.*", "imageio_ffmpeg", "imageio_ffmpeg.*", "openpyxl.*", "h5py", "h5py.*", "jsonschema", "jsonschema.*"]
+module = ["napari.*", "torch.*", "cupy.*", "dask.*", "zarr.*", "skimage.*", "pyqtgraph.*", "psfmodels.*", "cellpose.*", "sam3.*", "mahotas.*", "pyarrow.*", "sklearn.*", "joblib.*", "igraph.*", "leidenalg.*", "umap", "umap.*", "matplotlib", "matplotlib.*", "openpyxl", "reportlab", "reportlab.*", "imageio_ffmpeg", "imageio_ffmpeg.*", "openpyxl.*", "h5py", "h5py.*", "jsonschema", "jsonschema.*", "pycytominer", "pycytominer.*", "copairs", "copairs.*"]
 ignore_missing_imports = true
 follow_imports = "skip"

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Phase 24a — Cell Painting: features, CellProfiler naming, import
+- `measure_objects` option `correlation`: Pearson correlation of every channel pair per object.
+- `hcs-studio cellpainting preset`: Cell Painting pipeline (DNA/ER/RNA/AGP/Mito or custom roles):
+  nuclei, cells grown within the cell stain, cytoplasm = cell − nucleus, all feature groups
+  (texture at 1/3/5 px, granularity, correlation) on the three compartments, QC.
+- `hcs-studio cellpainting single-cells`: one row per cell with CellProfiler-style names
+  (`Compartment_Category_Feature_Channel[_Scale]`) and `Metadata_` columns from the run and
+  layout (`profiling/single_cell.parquet`, streamed well by well).
+- `hcs-studio cellpainting import`: CellProfiler SQLite, CSV folders or merged Parquet joined as
+  pycytominer does.
+- Optional extra `profiling` (pycytominer 1.7.1, copairs 0.6.0). Synthetic `PaintedCells`.
+  Docs: cellpainting.md.
+
 ### Phase 23c — primary screens: cherry-picking and confirmation
 - `hcs-studio screen cherrypick` (service `screen.cherrypick`): confirmation plates for the hits —
   spread replicates or dose–response series on a control template, volumes rounded to Echo

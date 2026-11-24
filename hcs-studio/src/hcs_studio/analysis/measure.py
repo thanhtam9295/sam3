@@ -43,6 +43,9 @@ class MeasureObjectsParams(ModuleParams):
         default=6, ge=1, le=30, description="Largest opening radius."
     )
     zernike: bool = Field(default=False, description="Zernike shape moments (2D).")
+    correlation: bool = Field(
+        default=False, description="Pearson correlation of every channel pair per object."
+    )
     neighbor_radius_um: float = Field(
         default=20.0, gt=0, description="Radius for neighbour counts."
     )
@@ -84,6 +87,7 @@ class MeasureObjects(MeasurementModule):
             zernike=params.zernike,
             neighbor_radius_um=params.neighbor_radius_um,
             nucleus_labels=params.nucleus_labels,
+            correlation=params.correlation,
         )
         wanted = params.labels or [ls.name for ls in context.labels]
         sets = {ls.name: ls for ls in context.labels}

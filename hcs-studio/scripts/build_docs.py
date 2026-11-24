@@ -31,6 +31,7 @@ PAGES = [
     ("spheroids.md", "Spheroids and organoids"),
     ("kinetics.md", "Live-cell kinetics"),
     ("screening.md", "Primary screens"),
+    ("cellpainting.md", "Cell Painting profiling"),
     ("validation.md", "Validation"),
 ]
 TEMPLATE = """<!doctype html>

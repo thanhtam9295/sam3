@@ -695,12 +695,27 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   via `LayoutStore.save`, sends events via `automation.intake.send`). `report.write_summary` →
   `summary.html` (after scoring and cherry-pick). CLI `screen cherrypick`. Echo format unverified:
   ask for the user's sample pick list.
+- **Phase 24 plan** (2026-11-24; pycytominer 1.7.1 + copairs 0.6.0 approved as extra `profiling`,
+  they pull duckdb 2.0.1 and statsmodels 0.15): (a) features, CellProfiler naming, CP import —
+  built; (b) pycytominer pipeline aggregate → annotate → normalize (mad_robustize vs vehicle per
+  plate, spherize) → feature_select → consensus + single-cell QC + reproduction test; (c) copairs
+  mAP activity/consistency, similarity, clustered heat maps, UMAP, find-similar, kNN MoA, batch
+  checks, report. Ask for a Cell Painting plate with reference compounds and MoA annotations.
+- **Phase 24a (built)**: `features.correlations` (+ `measure_objects.correlation`, readout
+  `{channel}_{partner}_correlation`); package `cellpainting/`: `naming.py` (`rename_objects`,
+  `cp_name`, `compartment`; table in the docstring; E501-exempt), `single_cell.py`
+  (`well_single_cells` joins compartments on (field, timepoint, object_id), drops other
+  compartments' child summaries, `Metadata_` columns from layout; `write_parquet_stream`;
+  `write_single_cells`; `feature_columns`), `preset.py` (`preset`, `channel_map`, ROLES),
+  `cellprofiler.py` (`read_cellprofiler` SQLite/CSV folder/Parquet, pycytominer linking).
+  Test data `tests/data/cellpainting/` (pycytominer SQ00014613, BSD-3, licence copied). CLI
+  `hcs-studio cellpainting preset|single-cells|import`. Synthetic `synthetic/cellpainting.py`.
 
 ## Commands
 
 Run from this folder (`hcs-studio/`).
 
-- Environment: `uv venv --python 3.12 .venv` then `uv pip install --python .venv/bin/python -e ".[gui,dev,segmentation]"`
+- Environment: `uv venv --python 3.12 .venv` then `uv pip install --python .venv/bin/python -e ".[gui,dev,segmentation,profiling]"`
 - Launch: `python -m hcs_studio` (or `hcs-studio`); `hcs-studio info` prints version and GPU status
 - Describe how a path is read: `hcs-studio inspect <path>`
 - Run a pipeline: `hcs-studio run --pipeline p.yaml --input <plate> --wells A01-H12 --workers auto`; `--resume <folder>`, `--retry-failed <folder>`; list modules: `hcs-studio modules`

@@ -241,6 +241,21 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Cell Painting: features, naming, import (Phase 24a)
+
+| Check | Result | Test |
+|---|---|---|
+| Name mapping (shape, intensity, quartiles, radial rings, Haralick, granularity, correlation, neighbours, children, Zernike, unknown) | CellProfiler names as listed in naming.py | `test_cellprofiler_names` |
+| Channel correlation on known images (copy ×2 + 1, negation, independent noise) | 1.0, −1.0, \|r\| < 0.2 | `test_correlation_known_answers` |
+| Synthetic Cell Painting plate (3 wells × 2 fields × 25 cells; larger nuclei ×1.3, fragmented mitochondria) through the preset | 150 cells, one row each; > 250 features per compartment; Metadata from the layout; no duplicated child summaries; pycytominer's `infer_cp_features` finds exactly our features; nuclear area ×1.69 (±12 %); mitochondrial granularity differs | `test_preset_single_cell_table` |
+| pycytominer's example SQLite (SQ00014613, 2 cells, 1790 features) | imported features = pycytominer's merged single cells exactly (max difference 0, same missing values) | `test_cellprofiler_sqlite_matches_pycytominer` |
+| Same data as ExportToSpreadsheet CSVs and as Parquet | same features | `test_cellprofiler_csv_folder_and_parquet` |
+
+Not yet checked: a real Cell Painting plate (asked for, with reference compounds and MoA
+annotations); CellProfiler's own texture/granularity values (our definitions differ in detail:
+texture averaged over directions, granularity scales in pixels), so features computed here and
+in CellProfiler are not interchangeable — profile one source at a time.
+
 ## Primary screens: cherry-picking and confirmation (Phase 23c)
 
 | Check | Result | Test |

@@ -269,6 +269,36 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", type=Path, default=None, help="folder (default: <run>/kinetics)"
     )
 
+    painting = sub.add_parser("cellpainting", help="Cell Painting profiling (CellProfiler style)")
+    painting_sub = painting.add_subparsers(dest="painting_command", required=True)
+    painting_preset = painting_sub.add_parser("preset", help="write the Cell Painting pipeline")
+    painting_preset.add_argument(
+        "--channels", required=True, help="the plate's channel names, comma-separated"
+    )
+    painting_preset.add_argument(
+        "--map",
+        action="append",
+        default=[],
+        metavar="ROLE=CHANNEL",
+        help="dna, er, rna, agp, mito (and cell: the channel outlining cells)",
+    )
+    painting_preset.add_argument("--nucleus-um", type=float, default=10.0)
+    painting_preset.add_argument("--cell-um", type=float, default=12.0, help="cell growth (µm)")
+    painting_preset.add_argument("--output", type=Path, required=True)
+    painting_cells = painting_sub.add_parser(
+        "single-cells", help="one row per cell, CellProfiler names, Metadata_ columns"
+    )
+    painting_cells.add_argument("run", type=Path)
+    painting_cells.add_argument("--map", action="append", default=[], metavar="ROLE=CHANNEL")
+    painting_cells.add_argument(
+        "--output", type=Path, help="Parquet (default: <run>/profiling/single_cell.parquet)"
+    )
+    painting_import = painting_sub.add_parser(
+        "import", help="CellProfiler SQLite / CSV folder / Parquet → single-cell Parquet"
+    )
+    painting_import.add_argument("source", type=Path)
+    painting_import.add_argument("--output", type=Path, required=True)
+
     screen = sub.add_parser("screen", help="primary screens: hit calling, library maps")
     screen_sub = screen.add_subparsers(dest="screen_command", required=True)
     screen_score = screen_sub.add_parser("score", help="score plates and call hits")
@@ -624,6 +654,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _qc(args)
     if args.command == "assay":
         return _assay(args)
+    if args.command == "cellpainting":
+        return _cellpainting(args)
     if args.command == "screen":
         return _screen(args)
     if args.command == "kinetics":
@@ -998,6 +1030,44 @@ def _kinetics_analyse(args: argparse.Namespace, folders: list[Path]) -> int:
         f"Readout: {result.readout}; {len(result.fits)} wells; files in {output}: "
         + ", ".join(files)
     )
+    return 0
+
+
+def _cellpainting(args: argparse.Namespace) -> int:
+    try:
+        mapping = dict(item.split("=", 1) for item in args.map) if hasattr(args, "map") else {}
+    except ValueError:
+        print("Error: --map takes ROLE=CHANNEL")
+        return 2
+    try:
+        if args.painting_command == "preset":
+            from hcs_studio.cellpainting.preset import preset
+
+            channels = [c.strip() for c in args.channels.split(",") if c.strip()]
+            pipeline = preset(
+                mapping,
+                channels=channels,
+                nucleus_diameter_um=args.nucleus_um,
+                cell_distance_um=args.cell_um,
+            )
+            pipeline.save(args.output)
+            print(f"Pipeline: {args.output}")
+        elif args.painting_command == "single-cells":
+            from hcs_studio.cellpainting.preset import channel_map
+            from hcs_studio.cellpainting.single_cell import write_single_cells
+
+            path, cells = write_single_cells(args.run, args.output, channel_map(mapping))
+            print(f"Single cells: {cells} → {path}")
+        else:
+            from hcs_studio.cellpainting.cellprofiler import read_cellprofiler
+
+            table = read_cellprofiler(args.source)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            table.to_parquet(args.output, index=False)
+            print(f"Imported {len(table)} cells, {table.shape[1]} columns → {args.output}")
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Error: {exc}")
+        return 2
     return 0
 
 

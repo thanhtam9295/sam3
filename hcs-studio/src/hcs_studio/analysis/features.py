@@ -65,6 +65,7 @@ class FeatureOptions:
     zernike_degree: int = 8
     neighbor_radius_um: float = 20.0
     nucleus_labels: str | None = "nuclei"
+    correlation: bool = False
 
 
 def _spacing(metadata: ImageMetadata, three_d: bool) -> tuple[float, ...]:
@@ -370,6 +371,34 @@ def nuclear_cytoplasmic(
     return result[result.object_id.isin(present[present > 0])]
 
 
+def correlations(
+    labels: NDArray[Any], image: NDArray[Any], prefixes: list[str], channels: list[int]
+) -> pd.DataFrame:
+    """Pearson correlation of every pair of channels over each object's pixels
+    (``<a>_<b>_correlation``; CellProfiler's Correlation_Correlation). Computed from per-object
+    sums in one pass; NaN where an object has no variance in a channel."""
+    flat = labels.reshape(-1)
+    inside = flat > 0
+    ids = flat[inside]
+    n_ids = int(flat.max()) + 1
+    count = np.bincount(ids, minlength=n_ids).astype(np.float64)
+    out = pd.DataFrame({"object_id": np.arange(n_ids)[count > 0]})
+    values = {c: image[c].reshape(-1)[inside].astype(np.float64) for c in channels}
+    sums = {c: np.bincount(ids, weights=v, minlength=n_ids) for c, v in values.items()}
+    squares = {c: np.bincount(ids, weights=v * v, minlength=n_ids) for c, v in values.items()}
+    present = count > 0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        for i, a in enumerate(channels):
+            for b in channels[i + 1 :]:
+                cross = np.bincount(ids, weights=values[a] * values[b], minlength=n_ids)
+                cov = cross - sums[a] * sums[b] / count
+                var_a = squares[a] - sums[a] ** 2 / count
+                var_b = squares[b] - sums[b] ** 2 / count
+                r = cov / np.sqrt(var_a * var_b)
+                out[f"{prefixes[a]}_{prefixes[b]}_correlation"] = np.clip(r[present], -1, 1)
+    return out
+
+
 def neighbours(table: pd.DataFrame, radius_um: float) -> pd.DataFrame:
     """Neighbours within ``radius_um`` (centroid distance) and nearest-neighbour distance."""
     from scipy.spatial import cKDTree
@@ -410,6 +439,12 @@ def measure_label_set(
         table = table.merge(
             texture(label_set.data, image, prefixes, options), on="object_id", how="left"
         )
+    if options.correlation:
+        chosen = options.channels if options.channels is not None else list(range(image.shape[0]))
+        if len(chosen) > 1:
+            table = table.merge(
+                correlations(label_set.data, image, prefixes, chosen), on="object_id", how="left"
+            )
     if label_set.parent_ids is not None:
         parent_ids = label_set.parent_ids
         table.insert(

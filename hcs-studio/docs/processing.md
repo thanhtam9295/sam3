@@ -425,6 +425,7 @@ Measures every object of the chosen label sets on the linear image (never on con
 | `granularity` | True | Granularity spectrum. |
 | `granularity_max_radius_px` | 6 | Largest opening radius. |
 | `zernike` | False | Zernike shape moments (2D). |
+| `correlation` | False | Pearson correlation of every channel pair per object. |
 | `neighbor_radius_um` | 20.0 | Radius for neighbour counts. |
 | `nucleus_labels` | 'nuclei' | Label set used for nuclear/cytoplasmic ratios of its children. |
 

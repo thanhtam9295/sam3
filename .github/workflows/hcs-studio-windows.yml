@@ -31,7 +31,7 @@ jobs:
           python -m pip install uv
           uv venv --python 3.12 .venv
           uv pip install --python .venv\Scripts\python.exe torch --index-url https://download.pytorch.org/whl/cpu
-          uv pip install --python .venv\Scripts\python.exe -e ".[gui,dev,segmentation]"
+          uv pip install --python .venv\Scripts\python.exe -e ".[gui,dev,segmentation,profiling]"
       - name: Lint and type check
         run: |
           .venv\Scripts\ruff.exe check .
