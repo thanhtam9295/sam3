@@ -241,6 +241,20 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Cell Painting: profile evaluation (Phase 24c)
+
+| Check | Result | Test |
+|---|---|---|
+| Synthetic single cells, 2 plates (gain 2 + offset 5), 6 vehicle wells per plate: a strong (+3 SD on 5 features), a weak (+1 SD on 2) and an inert compound | strong mAP 1 and active; weak active (FDR < 0.05); inert and held-out vehicle wells not active (p > 0.05) | `test_seeded_phenotypes_active_vehicles_not` |
+| 3 MoAs × 4 compounds (shared feature block + a compound-specific feature) and 2 unannotated queries | all 3 MoAs consistent, mAP > 0.9; cosine/Pearson matrices symmetric with unit diagonal; nearest of a compound are its MoA; kNN leave-one-compound-out accuracy 100 %; the queries get the right MoA | `test_consistency_similarity_and_moa_suggestions` |
+| 4 plates, 2 days (gain/offset by day), per-plate feature offsets SD 1 | vehicle wells by plate: mAP 1.0, silhouette ≈ 0.97 before normalization; ≈ 0.22 and −0.1 after; by day 1.0 → ≈ 0.5 (chance) | `test_batch_effect_before_and_after_normalization` |
+| Synthetic Cell Painting **images** (8 vehicle wells, 4 wells larger nuclei, 4 fragmented mitochondria) → preset → profiles → evaluation | both phenotypes active, held-out vehicle wells not | `test_painted_plate_end_to_end` |
+| MoA files (CSV with `Metadata_` names, XLSX, missing columns); CLI `profile --evaluate`, `evaluate`, `similar` | read / clear error; every file and figure written | `test_read_moa`, `test_profile_and_evaluate_commands` |
+
+Not yet checked: a real Cell Painting plate with reference compounds and MoA annotations
+(asked for); with 6 vehicle wells and 3 replicates the test had too little power (perfect mAP,
+p = 0.054), hence the guidance in docs/cellpainting.md.
+
 ## Cell Painting: profiling pipeline (Phase 24b)
 
 | Check | Result | Test |

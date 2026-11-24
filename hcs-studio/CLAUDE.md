@@ -698,7 +698,7 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
 - **Phase 24 plan** (2026-11-24; pycytominer 1.7.1 + copairs 0.6.0 approved as extra `profiling`,
   they pull duckdb 2.0.1 and statsmodels 0.15): (a) features, CellProfiler naming, CP import —
   built; (b) pycytominer pipeline aggregate → annotate → normalize (mad_robustize vs vehicle per
-  plate, spherize) → feature_select → consensus + single-cell QC + reproduction test — built; (c) copairs
+  plate, spherize) → feature_select → consensus + single-cell QC + reproduction test — built; (c) — built: copairs
   mAP activity/consistency, similarity, clustered heat maps, UMAP, find-similar, kNN MoA, batch
   checks, report. Ask for a Cell Painting plate with reference compounds and MoA annotations.
 - **Phase 24a (built)**: `features.correlations` (+ `measure_objects.correlation`, readout
@@ -719,6 +719,15 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `cellpainting profile`. Every stage must stay equal to pycytominer's direct call
   (`tests/test_cellpainting_profiles.py`, data `tests/data/cellpainting/BR00121431/`).
   Spherize needs full-rank vehicles (more wells than features).
+- **Phase 24c (built)**: `cellpainting/evaluation.py` (`EvaluationOptions`, `evaluate`:
+  `activity` (copairs `average_precision` + `mean_average_precision`; reference vehicles get a
+  unique `Metadata_reference_index`, held-out vehicles = treatment `vehicle (held out)`, ≤ ⅓ of
+  a plate's vehicles), `consistency` (active consensus profiles by MoA, pos_diffby compound),
+  `similarity`, `similar`, `moa_suggestions` (kNN, leave one compound out), `batch_effects`
+  (plate/date/batch, before = globally standardised aggregated, after = selected), `_umap`;
+  `write_evaluation` → CSV/JSON/figures/`evaluation.html`; `run_evaluation` (in `WRAPPED`)).
+  copairs needs NaN-free numpy features. Service `operations.cellpainting_evaluation`; CLI
+  `cellpainting evaluate|similar`, `profile --evaluate`. Synthetic `profile_cells` (no images).
 
 ## Commands
 

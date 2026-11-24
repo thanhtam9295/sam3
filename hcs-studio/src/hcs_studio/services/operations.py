@@ -483,3 +483,15 @@ def cellpainting_profiles(
     result = profile([Path(s) for s in sources], Path(output), options, platemap)
     ctx.note(object_id=object_id(output), after=result.log)
     return result
+
+
+@service("cellpainting.evaluate", object_type="profiling")
+def cellpainting_evaluation(
+    ctx: ServiceContext, folder: Path, options: Any = None, moa: Path | None = None
+) -> Any:
+    """mAP activity/consistency, similarity, MoA suggestions and batch checks of profiles."""
+    from hcs_studio.cellpainting.evaluation import run_evaluation as evaluate
+
+    result = evaluate(Path(folder), options, moa)
+    ctx.note(object_id=object_id(folder), after=result.log)
+    return result

@@ -80,3 +80,55 @@ class PaintedCells:
         for c, plane in enumerate((dna, er, rna, agp, mito)):
             ctx.image[c, :] += 100 + ndimage.gaussian_filter(plane, 0.8)[None]
         return {"count": count, "phenotype": phenotype}
+
+
+def profile_cells(
+    phenotypes: Mapping[str, Mapping[int, float]],
+    *,
+    n_features: int = 30,
+    plates: tuple[tuple[float, float], ...] = ((1.0, 0.0), (2.0, 5.0)),
+    vehicles: int = 6,
+    replicates: int = 3,
+    cells: int = 40,
+    seed: int = 0,
+    same_noise: bool = False,
+    moa: Mapping[str, str] | None = None,
+    plate_sd: float = 0.0,
+) -> Any:
+    """A single-cell table in CellProfiler style with known phenotypes (no images).
+
+    ``phenotypes``: compound → {feature index: shift in cell SDs}; every plate gets
+    ``vehicles`` DMSO wells and ``replicates`` wells per compound, ``cells`` cells each, features
+    ``10 + shift + N(0, 1)``. ``plates``: (gain, offset) per plate — a plate effect that per-plate
+    normalization must remove (``same_noise``: every plate = plate 1 transformed, cell by cell).
+    ``plate_sd``: a per-plate, per-feature offset N(0, plate_sd) (a batch effect that differs
+    between features). ``moa`` adds ``Metadata_moa``. The truth is the input."""
+    import pandas as pd
+
+    names = ["DMSO"] * vehicles + [c for c in phenotypes for _ in range(replicates)]
+    rng = np.random.default_rng(seed)
+    noise = rng.normal(0, 1, (len(plates), len(names), cells, n_features))
+    batch = np.random.default_rng([seed, 1]).normal(0, plate_sd, (len(plates), n_features))
+    columns = [f"Cells_Intensity_MeanIntensity_F{i:02d}" for i in range(n_features)]
+    frames = []
+    for p, (gain, offset) in enumerate(plates):
+        for w, compound in enumerate(names):
+            shift = np.zeros(n_features)
+            for index, value in phenotypes.get(compound, {}).items():
+                shift[index] = value
+            values = (10 + shift + batch[p] + noise[0 if same_noise else p, w]) * gain + offset
+            frame = pd.DataFrame(values, columns=columns)
+            meta: dict[str, Any] = {
+                "Metadata_Plate": f"P{p + 1}",
+                "Metadata_Well": f"{chr(65 + w // 24)}{w % 24 + 1:02d}",
+                "Metadata_ObjectNumber": np.arange(1, cells + 1),
+                "Metadata_Role": "negative_control" if compound == "DMSO" else "sample",
+                "Metadata_Compound": compound,
+                "Metadata_Treatment": compound,
+                "Metadata_CellLine": "U2OS",
+                "Metadata_QCExcluded": False,
+            }
+            if moa is not None:
+                meta["Metadata_moa"] = moa.get(compound)
+            frames.append(pd.concat([pd.DataFrame(meta, index=frame.index), frame], axis=1))
+    return pd.concat(frames, ignore_index=True)

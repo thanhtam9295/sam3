@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Phase 24c — Cell Painting: profile evaluation
+- `hcs-studio cellpainting evaluate <profiling folder> [--moa moa.csv]` (service
+  `cellpainting.evaluate`; also `cellpainting profile … --evaluate`): phenotypic activity by
+  copairs mAP against vehicle wells (p, FDR; held-out vehicle wells as a calibration check),
+  MoA consistency, cosine/Pearson similarity with a clustered heat map, nearest treatments,
+  kNN MoA suggestions with leave-one-compound-out accuracy, batch effects (vehicle wells by
+  plate/day before and after normalization: mAP, silhouette), UMAP, `evaluation.html`.
+- `hcs-studio cellpainting similar <folder> --to <treatment>`.
+- Synthetic `profile_cells` (single-cell tables with seeded phenotypes, plate and batch effects).
+
 ### Phase 24b — Cell Painting: profiling pipeline
 - `hcs-studio cellpainting profile <runs or Parquet…> --output <folder>` (service
   `cellpainting.profile`): single-cell QC (object-QC exclusions, cells missing > 10 % of the

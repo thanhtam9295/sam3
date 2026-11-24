@@ -106,8 +106,38 @@ version). Each run is recorded as a service event.
 The stages are checked against pycytominer's own functions on real JUMP CellProfiler data
 (identical values) and against known answers on synthetic plates (docs/validation.md).
 
+## Evaluating profiles (Phase 24c)
+
+```bash
+hcs-studio cellpainting evaluate profiles/ --moa moa.csv
+hcs-studio cellpainting profile <run> --output profiles/ --evaluate --moa moa.csv   # both
+hcs-studio cellpainting similar profiles/ --to "cmpdA 1e-06 | U2OS" -n 10
+```
+
+| Question | How | File |
+|---|---|---|
+| Which treatments do anything? (**activity**) | copairs mean average precision: per well, do the treatment's other wells rank above the vehicle wells of the same plate (cosine)? mAP per treatment, p from a permutation null, Benjamini–Hochberg FDR; active = FDR < 0.05 | `activity.csv`, `figures/activity.png` |
+| Is the test calibrated? | 2–4 vehicle wells per plate (at most a third) are held out and scored as a treatment, `vehicle (held out)`: it should not be active | row in `activity.csv` |
+| Do compounds with the same MoA look alike? (**consistency**) | consensus profiles of *active* treatments; positives = other compounds of the same MoA, negatives = other MoAs; MoAs with ≥ 2 compounds | `consistency.csv` |
+| What is similar to what? | cosine and Pearson matrices of consensus profiles; heat map clustered by average linkage on 1 − cosine; the 10 nearest of each | `similarity_cosine.csv`, `similarity_pearson.csv`, `figures/similarity_heatmap.png`, `similar.csv` |
+| What MoA might an unannotated compound have? | the `k` (5) most similar annotated treatments of other compounds vote with their cosine; top-1 accuracy over the annotated ones (leave one compound out) says how far to trust it | `moa_suggestions.csv` |
+| Batch effects? | do vehicle wells cluster by plate (and `Metadata_Date` / `Metadata_Batch`)? mAP and silhouette (cosine) before normalization (each feature standardised over all wells) and after | `batch.json` |
+| Overview | UMAP of the well profiles (seeded) by treatment and by plate | `umap.csv`, `figures/umap_*.png` |
+
+Everything is summarised in `evaluation.html` (options in `evaluation.json`).
+
+The MoA file is CSV/TSV/XLSX with a compound column (`compound`, `broad_sample`, `pert_iname`,
+`name` or `treatment`, with or without `Metadata_`) and a `moa` (or `mechanism`, `target`)
+column; it is matched on `Metadata_Compound`.
+
+**Power.** p-values depend on how many wells there are: with 3 replicate wells and only 4
+vehicle wells per plate, even a perfect separation (mAP = 1) has p ≈ 0.05. Use ≥ 8 vehicle wells
+per plate (JUMP uses many more) and ≥ 3 replicates.
+
 ## Synthetic data
 
 `hcs_studio.synthetic.cellpainting.PaintedCells` draws five-channel cells (nucleus, perinuclear
 ER, nucleoli, cell edge, mitochondrial puncta) with phenotypes per well — larger nuclei, ER or
 AGP intensity, fragmented mitochondria, nucleolar RNA — as multipliers of the vehicle cell.
+`profile_cells` writes single-cell tables directly (no images) with seeded shifts per compound,
+plate gain/offset and per-plate feature offsets (batch effects) and optional MoA labels.

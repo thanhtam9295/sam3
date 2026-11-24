@@ -326,7 +326,33 @@ def build_parser() -> argparse.ArgumentParser:
     painting_profile.add_argument("--corr-threshold", type=float, default=0.9)
     painting_profile.add_argument("--consensus-by", default="Metadata_Treatment,Metadata_CellLine")
     painting_profile.add_argument("--platemap", type=Path, help="plate map CSV (imported data)")
+    painting_profile.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="also evaluate the profiles (as `cellpainting evaluate`)",
+    )
+    painting_profile.add_argument("--moa", type=Path, help="MoA annotations (with --evaluate)")
     painting_profile.add_argument("--reason", default="")
+    painting_eval = painting_sub.add_parser(
+        "evaluate", help="mAP activity/consistency, similarity, MoA kNN, batch checks, report"
+    )
+    painting_eval.add_argument("folder", type=Path, help="a `cellpainting profile` output folder")
+    painting_eval.add_argument("--moa", type=Path, help="CSV/XLSX: compound, moa")
+    painting_eval.add_argument("--treatment", default="Metadata_Treatment")
+    painting_eval.add_argument("--threshold", type=float, default=0.05, help="FDR")
+    painting_eval.add_argument("--null-size", type=int, default=10000)
+    painting_eval.add_argument(
+        "--any-plate-negatives",
+        action="store_true",
+        help="compare with vehicle wells of all plates",
+    )
+    painting_eval.add_argument("-k", type=int, default=5, help="neighbours for MoA suggestions")
+    painting_eval.add_argument("--no-umap", action="store_true")
+    painting_eval.add_argument("--reason", default="")
+    painting_similar = painting_sub.add_parser("similar", help="most similar treatments")
+    painting_similar.add_argument("folder", type=Path, help="an evaluated profiling folder")
+    painting_similar.add_argument("--to", required=True, help="treatment (row of the matrix)")
+    painting_similar.add_argument("-n", type=int, default=10)
     painting_import = painting_sub.add_parser(
         "import", help="CellProfiler SQLite / CSV folder / Parquet → single-cell Parquet"
     )
@@ -1113,6 +1139,34 @@ def _cellpainting(args: argparse.Namespace) -> int:
                 f"{log['treatments']} consensus profiles; {log['selected_features']} of "
                 f"{log['features']} features kept → {args.output}"
             )
+            if args.evaluate:
+                from hcs_studio.services.operations import cellpainting_evaluation
+
+                evaluation = cellpainting_evaluation(_ctx(args), args.output, None, args.moa)
+                _print_evaluation(evaluation.log, args.output)
+        elif args.painting_command == "evaluate":
+            from hcs_studio.cellpainting.evaluation import EvaluationOptions
+            from hcs_studio.services.operations import cellpainting_evaluation
+
+            evaluation_options = EvaluationOptions(
+                treatment=args.treatment,
+                threshold=args.threshold,
+                null_size=args.null_size,
+                same_plate_negatives=not args.any_plate_negatives,
+                k=args.k,
+                umap=not args.no_umap,
+            )
+            evaluation = cellpainting_evaluation(
+                _ctx(args), args.folder, evaluation_options, args.moa
+            )
+            _print_evaluation(evaluation.log, args.folder)
+        elif args.painting_command == "similar":
+            import pandas as pd
+
+            from hcs_studio.cellpainting.evaluation import similar
+
+            matrix = pd.read_csv(args.folder / "similarity_cosine.csv", index_col=0)
+            print(similar(matrix, args.n, args.to).to_string(index=False))
         else:
             from hcs_studio.cellpainting.cellprofiler import read_cellprofiler
 
@@ -1495,6 +1549,16 @@ def _profile(args: argparse.Namespace) -> int:
         print(f"Note: {note}")
     print(f"Profiles: {result.folder}")
     return 0
+
+
+def _print_evaluation(log: dict[str, Any], folder: Path) -> None:
+    line = (
+        f"Evaluation: {log['active']} of {log['treatments']} treatments active; held-out "
+        f"vehicle wells active: {log['holdout_active']}"
+    )
+    if log.get("moa_accuracy") is not None:
+        line += f"; MoA kNN accuracy {log['moa_accuracy']:.0%}"
+    print(f"{line} → {folder / 'evaluation.html'}")
 
 
 def _acceptance(args: argparse.Namespace) -> int:
