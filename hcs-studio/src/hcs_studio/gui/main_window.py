@@ -33,6 +33,7 @@ from hcs_studio.gui.jobs_panel import JobsPanel
 from hcs_studio.gui.layout_editor import LayoutEditor
 from hcs_studio.gui.measurements_panel import MeasurementsPanel
 from hcs_studio.gui.metadata_panel import MetadataPanel
+from hcs_studio.gui.models_panel import ModelsPanel
 from hcs_studio.gui.pattern_dialog import PatternDialog
 from hcs_studio.gui.pharmacology_panel import PharmacologyPanel
 from hcs_studio.gui.pipeline_panel import PipelinePanel
@@ -112,6 +113,9 @@ class MainWindow(QMainWindow):
         self.screen_panel = ScreenPanel()
         self.screen_panel.log.connect(self.log)
         self.tabs.addTab(self.screen_panel, "Screen")
+        self.models_panel = ModelsPanel()
+        self.models_panel.log.connect(self.log)
+        self.tabs.addTab(self.models_panel, "Models")
         #: The last wells selected anywhere (run folder, wells), for the Compare tab.
         self.last_selection: tuple[Path, list[str]] | None = None
         self.compare_panel = ComparePanel(self.log, lambda: self.last_selection)

@@ -24,6 +24,7 @@ DESCRIPTIONS = {
     "segment_cellpose": "segmentation with Cellpose",
     "segment_classical": "segmentation by thresholding and watershed separation",
     "segment_model": "segmentation with a registered model (pipeline steps stored in the model registry)",
+    "model_qa": "fields queued for human spot checks of the segmentation and a drift check against the model's training data",
     "segment_sam3": "segmentation with SAM 3",
     "expand_cells": "cell regions grown from the nuclei",
     "detect_spots": "spot detection (Laplacian/difference of Gaussians)",

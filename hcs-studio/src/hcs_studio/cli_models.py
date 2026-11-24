@@ -94,6 +94,45 @@ def add_parsers(sub: Any) -> None:
     train.add_argument("--device", default="auto", choices=["auto", "cpu", "gpu"])
     train.add_argument("--notes", default="")
     train.add_argument("--reason", default="")
+    compare = models_sub.add_parser(
+        "compare", help="candidate vs baseline on held-out ground truth"
+    )
+    compare.add_argument("candidate", help="registry:NAME@VERSION or NAME@VERSION")
+    compare.add_argument("--baseline", help="default: the production version, else the base model")
+    compare.add_argument("--set", dest="gt", help="default: the candidate's training set")
+    compare.add_argument("--split", default="test", choices=["train", "validation", "test", "all"])
+    compare.add_argument("--output", type=Path, help="default: the candidate's reports folder")
+    compare.add_argument("--reason", default="")
+    impact = models_sub.add_parser("impact", help="re-run a reference plate with a candidate")
+    impact.add_argument("reference_run", type=Path)
+    impact.add_argument("candidate")
+    impact.add_argument("--output", type=Path, required=True)
+    impact.add_argument("--step", type=int, help="step to replace (from 1)")
+    impact.add_argument("--readout", help="default: <labels>_count")
+    impact.add_argument("--msr", type=float, default=3.0, help="when the registry has no MSR")
+    impact.add_argument("--count-tolerance", type=float, default=10.0, help="% mean difference")
+    impact.add_argument("--workers", type=int, default=1)
+    impact.add_argument("--reason", default="")
+    drift = models_sub.add_parser("drift", help="a run's objects vs the model's training data")
+    drift.add_argument("run", type=Path)
+    drift.add_argument("--model", help="default: the registered model the run used")
+    drift.add_argument("--threshold", type=float, default=1.0, help="IQR")
+    spot = models_sub.add_parser("spot-check", help="queue, list and review field spot checks")
+    spot_sub = spot.add_subparsers(dest="spot_command", required=True)
+    queue = spot_sub.add_parser("queue", help="queue random fields of a run")
+    queue.add_argument("run", type=Path)
+    queue.add_argument("-n", type=int, default=3)
+    queue.add_argument("--seed", type=int)
+    queue.add_argument("--reason", default="")
+    spot_list = spot_sub.add_parser("list", help="spot checks (pending by default)")
+    spot_list.add_argument(
+        "--status", default="pending", choices=["pending", "accepted", "flagged", "all"]
+    )
+    review = spot_sub.add_parser("review", help="accept or flag a spot check")
+    review.add_argument("id", type=int)
+    review.add_argument("status", choices=["accepted", "flagged", "pending"])
+    review.add_argument("--reason", default="")
+    spot_sub.add_parser("summary", help="accept rate per model")
     pin = models_sub.add_parser("pin", help="replace @production references by exact versions")
     pin.add_argument("pipeline", type=Path)
     pin.add_argument("--output", type=Path, help="default: overwrite the pipeline file")
@@ -300,6 +339,61 @@ def run_models(args: argparse.Namespace) -> int:
                     f"Validation AP@0.5: {result.validation['overall']['ap50']:.3f} "
                     f"(base model {result.baseline['overall']['ap50']:.3f})"
                 )
+        elif args.models_command == "compare":
+            ref = (
+                args.candidate
+                if registry.is_ref(args.candidate)
+                else registry.PREFIX + args.candidate
+            )
+            baseline = args.baseline
+            if baseline and not registry.is_ref(baseline):
+                baseline = registry.PREFIX + baseline
+            comparison, report = services.compare_models(
+                _context(args),
+                ref,
+                baseline=baseline,
+                set_ref=args.gt,
+                split="all" if args.split == "all" else args.split,
+                out=args.output,
+            )
+            print(comparison.table().to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+            print(f"Report: {report}")
+        elif args.models_command == "impact":
+            ref = (
+                args.candidate
+                if registry.is_ref(args.candidate)
+                else registry.PREFIX + args.candidate
+            )
+            result, report = services.model_impact(
+                _context(args),
+                args.reference_run,
+                ref,
+                args.output,
+                step=args.step,
+                readout=args.readout,
+                msr=args.msr,
+                count_tolerance_pct=args.count_tolerance,
+                workers=args.workers,
+            )
+            s = result.counts_summary
+            verdict = (
+                "equivalent"
+                if result.verdict["equivalent"]
+                else "; ".join(result.verdict["reasons"])
+            )
+            print(
+                f"{result.replaced}\n{result.readout}: mean difference "
+                f"{s['mean_difference_pct']:+.1f} %"
+                f" (limits of agreement {s['loa_low_pct']:+.1f} to {s['loa_high_pct']:+.1f} %)"
+            )
+            print(f"Verdict: {verdict}\nReport: {report}")
+        elif args.models_command == "drift":
+            from hcs_studio.training.qa import drift_report
+
+            report_data = drift_report(args.run, args.model, args.threshold)
+            print(json.dumps(report_data, indent=1, default=float))
+        elif args.models_command == "spot-check":
+            return _spot_check(args)
         else:
             from hcs_studio.pipeline.schema import Pipeline
 
@@ -309,4 +403,27 @@ def run_models(args: argparse.Namespace) -> int:
     except (ValueError, PermissionError, FileExistsError) as exc:
         print(f"Error: {exc}")
         return 2
+    return 0
+
+
+def _spot_check(args: argparse.Namespace) -> int:
+    from hcs_studio.services import training as services
+    from hcs_studio.training import qa
+
+    if args.spot_command == "queue":
+        ids = services.queue_spot_checks(_context(args), args.run, args.n, args.seed)
+        print(f"{len(ids)} field(s) queued for a spot check: ids {ids}")
+    elif args.spot_command == "list":
+        table = qa.spot_checks(None if args.status == "all" else args.status)
+        columns = ["id", "barcode", "well", "field", "model", "status", "reviewer", "reason"]
+        print(table[columns].to_string(index=False) if len(table) else "No spot checks")
+    elif args.spot_command == "review":
+        record = services.review_spot_check(_context(args), args.id, args.status)
+        print(
+            f"Spot check {record['id']} ({record['well']} field {record['field']}): "
+            f"{record['status']}"
+        )
+    else:
+        summary = qa.spot_check_summary()
+        print(summary.to_string(index=False) if len(summary) else "No spot checks")
     return 0

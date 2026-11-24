@@ -245,3 +245,36 @@ class ExperimentReportStep(RunStep):
             pdf=p.pdf,
         )
         return {"outputs": _relative(folder, files)}
+
+
+class ModelQaParams(ModuleParams):
+    spot_checks: int = Field(
+        default=3, ge=0, description="Fields per plate queued for a human spot check."
+    )
+    seed: int | None = Field(default=None, description="Seed of the field sample (none = random).")
+    drift_threshold: float = Field(
+        default=1.0,
+        gt=0,
+        description="Drift alert when a feature median moves more than this many IQR.",
+    )
+
+
+@MODULES.register("model_qa")
+class ModelQaStep(RunStep):
+    name = "model_qa"
+    title = "Model QA: spot checks and drift"
+    Params = ModelQaParams
+
+    def run(self, folder: Path, log: logging.Logger) -> dict[str, Any]:
+        from hcs_studio.training.qa import model_qa
+
+        p: ModelQaParams = self.params
+        record = model_qa(folder, p.spot_checks, p.seed, p.drift_threshold)
+        drift = record.get("drift") or {}
+        for alert in drift.get("alerts", []):
+            log.warning("Model drift (%s): %s", drift.get("model"), alert)
+        return {
+            "outputs": ["qa/model_qa.json"],
+            "spot_checks": len(record["spot_checks"]),
+            "drift_alerts": len(drift.get("alerts", [])),
+        }

@@ -255,9 +255,16 @@ B-score on a real randomized library screen.
 | Object classifier from a classification set, used by registry reference | balanced accuracy > 0.95; the step loads the registered file | `test_cellpose_and_classifier_accept_registry_references` |
 | Training as a queue job (own process) | completes and registers | `test_training_job_in_the_queue` |
 
+| Comparison report: tuned candidate vs base, then vs the production version | report, figures and JSON saved in the model store; candidate AP@0.5 > base + 0.15 on the test split; registry metrics updated | `test_comparison_report_is_saved` |
+| Downstream impact on the dose–response reference plate (Drug D on MCF7, 24 wells): an equivalent candidate and a broken one | equivalent: counts within 1 %, IC50 fold change < 1.2 (MSR 3); broken: flagged (count difference) | `test_downstream_impact_against_msr` |
+| Drift: a run of the training "cell line" and one of small dim nuclei | no alert / area alert (median < −1 IQR) with a suggestion | `test_drift_and_spot_checks`, `test_drift_maths` |
+| Spot checks: queue once per run, flag needs a reason, accept rate per model | 4 / 5 | `test_drift_and_spot_checks` |
+| Real Cellpose (`HCS_REAL_CELLPOSE=1`, cpsam_v2 weights): 1 epoch on 4 fields on the CPU | fine-tunes, validates against cpsam_v2, registers (68 s, 2026-11-24) | `test_real_cellpose_fine_tune_registers` |
+
 Not yet checked: fine-tuning **Cellpose** on real annotated fields (needs the 20–40 annotated
-fields asked for, and a GPU); the real-Cellpose test (`HCS_REAL_CELLPOSE=1`) only checks the
-integration with 1 epoch on the CPU.
+fields asked for, and a GPU); the drift baseline comes from the model's own masks on its
+training fields, so it is only as representative as those fields; the 1-IQR threshold is a
+starting point.
 
 ## Cell Painting: profile evaluation (Phase 24c)
 

@@ -73,14 +73,30 @@ def _items_with_masks(ann: AnnotationSet, split: str) -> int:
     return sum(1 for i in ann.subset(split))
 
 
-def feature_summary(ann: AnnotationSet, split: str | None = "train") -> dict[str, Any]:
-    """Quantiles of object features in the training masks (area, intensity, shape, density)."""
+def feature_summary(
+    ann: AnnotationSet,
+    split: str | None = "train",
+    steps: list[Any] | None = None,
+    pixel_size_um: float | None = None,
+) -> dict[str, Any]:
+    """Quantiles of object features (area, intensity, shape, objects per field) on the
+    training fields — of the model's own masks when ``steps`` are given, so that drift on a
+    new plate measures a change in the cells, not the model's error."""
     from skimage.measure import regionprops_table
+
+    from hcs_studio.training.validate import predict
 
     rows = []
     per_field = []
     for item in ann.subset(split):
         image, masks = read_item(ann, item)
+        if steps is not None:
+            masks = predict(
+                steps,
+                image,
+                channels=ann.channels,
+                pixel_size_um=item.pixel_size_um or pixel_size_um,
+            )
         if masks is None or not masks.any():
             continue
         props = pd.DataFrame(
@@ -95,7 +111,12 @@ def feature_summary(ann: AnnotationSet, split: str | None = "train") -> dict[str
     if not rows:
         return {}
     table = pd.concat(rows, ignore_index=True)
-    out: dict[str, Any] = {"objects": len(table), "fields": len(per_field), "features": {}}
+    out: dict[str, Any] = {
+        "objects": len(table),
+        "fields": len(per_field),
+        "features": {},
+        "source": "model masks" if steps is not None else "ground truth",
+    }
     for column, name in (
         ("area_um2", "area_um2"),
         ("area", "area_px"),
@@ -173,7 +194,7 @@ def train_steps(ann: AnnotationSet, spec: TrainingSpec, log: Log) -> TrainingRes
                 "train_map": best[1],
             },
             metrics={"validation": validation, "baseline_validation": baseline},
-            feature_summary=feature_summary(ann),
+            feature_summary=feature_summary(ann, "train", steps, spec.pixel_size_um),
             author=spec.author,
             notes=spec.notes,
         )
@@ -236,7 +257,9 @@ def train_cellpose(ann: AnnotationSet, spec: TrainingSpec, log: Log) -> Training
                 "final_train_loss": (history.get("train_loss") or [None])[-1],
             },
             metrics={"validation": validation, "baseline_validation": baseline},
-            feature_summary=feature_summary(ann),
+            feature_summary=feature_summary(
+                ann, "train", [_cellpose_step(str(path), spec)], spec.pixel_size_um
+            ),
             author=spec.author,
             notes=spec.notes,
         )

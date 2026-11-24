@@ -469,6 +469,18 @@ Assay (Phase 20e), right after the nuclear segmentation, 2D: micronuclei = small
 | `threshold_fraction` | 0.4 | DNA threshold, × median nuclear DNA intensity. |
 | `cells` | '' | Cells segmented on a cell stain (not grown from the nuclei): each nucleus is linked to its cell, for nuclei per cell. Empty = no multinucleation. |
 
+## Model QA: spot checks and drift (`model_qa`)
+
+Run step: after the run, queues a random sample of fields for a human spot check (accept or flag, `hcs-studio models spot-check`) and compares the run's objects (area, intensity, shape, objects per field) with the training data of the registered segmentation model it used; features more than `drift_threshold` IQR away are reported as drift in `qa/model_qa.json` and the run log. See [models.md](models.md).
+
+Run step: runs once on the finished run (after all wells, the tables and the report); it does not change images, is not part of the pipeline hash, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `spot_checks` | 3 | Fields per plate queued for a human spot check. |
+| `seed` | None | Seed of the field sample (none = random). |
+| `drift_threshold` | 1.0 | Drift alert when a feature median moves more than this many IQR. |
+
 ## Object QC: outliers (`object_qc`)
 
 Object-level QC: learns the median and robust spread (1.4826 × MAD) of size (log area), shape (solidity) and the mean intensity of the first channel (log) from objects sampled across the plate, and flags objects beyond the robust-Z threshold in any of them (merged cells, fragments, out-of-focus or debris-like objects). Writes `qc_outlier`, `qc_excluded` and `qc_reason` per object and the outlier count and fraction per well. Excluded objects are left out of per-well feature statistics and of later table steps; counts are unchanged. See the Image QC guide.

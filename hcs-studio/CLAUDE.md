@@ -730,7 +730,8 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `cellpainting evaluate|similar`, `profile --evaluate`. Synthetic `profile_cells` (no images).
 - **Phase 25 plan** (2026-11-24; user: build without stopping, review all phases at the end):
   (a) ground truth + metrics — built; (b) registry, pinned models, manifest models, training
-  jobs — built; (c) comparison report, downstream impact vs MSR, spot checks, drift, Models tab.
+  jobs — built; (c) comparison report, downstream impact vs MSR, spot checks, drift, Models tab
+  — built.
   Ask for 20–40 annotated fields of the hardest cell line.
 - **Phase 25a/b (built)**: package `training/`: `metrics.py` (AP = TP/(TP+FP+FN) per IoU,
   one-to-one matching — Hungarian at ≤ 0.5 because IoU exactly 0.5 can tie; merges/splits by
@@ -746,6 +747,15 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   Module `segment_model` (`segmentation/registered.py`). Services `services/training.py`
   (`groundtruth.*`, `models.*`); CLI in `cli_models.py` (`gt`, `validate-seg`, `models`), also
   scanned by the services AST test. Synthetic `synthetic/groundtruth.py` (easy/hard).
+- **Phase 25c (built)**: `training/compare.py` (`compare_candidate`: baseline = production of the
+  same name else base model; test split of the training set; report in
+  `<model store>/vNNNN/reports/`; `update_metrics` "test"), `training/impact.py` (`swap_model`,
+  `rerun` from the manifest's plate source + run layout, counts Bland–Altman, IC50 ratio vs MSR
+  (registry `msr_history` else default 3); counts fall back to objects when the pipeline has no
+  `qc` step), `training/qa.py` (spot checks in `spot_check`, once per run; drift = median shift
+  in training IQR + spread ratio; the training summary is of the **model's own masks** on train
+  fields, not ground truth — else model error reads as drift), run step `model_qa`
+  (`qa/model_qa.json`). GUI `gui/models_panel.py` (Models tab; `confirm` injectable for tests).
 
 ## Commands
 

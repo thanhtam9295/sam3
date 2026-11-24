@@ -144,6 +144,9 @@ WRAPPED = {
     "hcs_studio.training.groundtruth": {"import_pairs", "create_set", "split_set"},
     "hcs_studio.training.registry": {"register_model", "set_status", "update_metrics"},
     "hcs_studio.training.train": {"train", "run_training_job"},
+    "hcs_studio.training.compare": {"compare_candidate"},
+    "hcs_studio.training.impact": {"downstream_impact"},
+    "hcs_studio.training.qa": {"queue_spot_checks", "review_spot_check", "model_qa"},
     "hcs_studio.db.library": {"import_library"},
 }
 ALLOWED = {

@@ -72,6 +72,11 @@ NOTES = {
     "by its registry reference `registry:NAME@VERSION`. The stored steps run exactly as "
     "registered, so a pinned version always gives the same masks; the run manifest records the "
     "version and its SHA-256. See [models.md](models.md).",
+    "model_qa": "Run step: after the run, queues a random sample of fields for a human spot "
+    "check (accept or flag, `hcs-studio models spot-check`) and compares the run's objects (area, "
+    "intensity, shape, objects per field) with the training data of the registered segmentation "
+    "model it used; features more than `drift_threshold` IQR away are reported as drift in "
+    "`qa/model_qa.json` and the run log. See [models.md](models.md).",
     "segment_cellpose": "Cellpose 4 (`cpsam_v2` is the default Cellpose-SAM model). Give one "
     "channel, or two (e.g. cytoplasm plus nuclei) for whole cells. The diameter is optional. "
     "Z stacks are segmented in 3D (`do_3d`), plane by plane with stitching, or plane by plane. "

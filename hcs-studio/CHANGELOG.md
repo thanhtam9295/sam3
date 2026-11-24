@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Phase 25c — model comparison, downstream impact, spot checks, drift
+- `hcs-studio models compare`: candidate vs production (or base model) on the held-out test
+  split; report with metrics per cell line, AP by IoU, count errors and example outlines.
+- `hcs-studio models impact`: re-run a reference plate with the candidate; per-well counts
+  (Bland–Altman) and IC50 ratios against the MSR; verdict equivalent / different.
+- Run step `model_qa` and `hcs-studio models spot-check|drift`: random fields queued for
+  human spot checks (accept / flag with a reason; accept rates per model) and drift alerts
+  when a run's objects move away from the model's training data.
+- Models tab in the app (registry, status changes with confirmation, comparisons, spot checks).
+
 ### Phase 25b — model registry and training
 - Model registry (`hcs-studio models list|show|register|status|pin`; services `models.*`):
   immutable model store, kind, base model, training set and hash, hyperparameters, metrics,

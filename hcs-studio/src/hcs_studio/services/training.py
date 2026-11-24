@@ -137,3 +137,66 @@ def submit_training(
     )
     ctx.note(object_id=f"job:{job_id}", after={"spec": spec.model_dump(mode="json")})
     return job_id
+
+
+@service("models.compare", object_type="model")
+def compare_models(ctx: ServiceContext, candidate: str, **kwargs: Any) -> Any:
+    """Score a candidate against a baseline on held-out ground truth; save the report."""
+    from hcs_studio.training.compare import compare_candidate
+
+    comparison, report = compare_candidate(candidate, **kwargs)
+    ctx.note(
+        object_id=candidate,
+        after={
+            "report": str(report),
+            "set": comparison.set_ref,
+            "ap50": {k: r.overall["ap50"] for k, r in comparison.results.items()},
+        },
+    )
+    return comparison, report
+
+
+@service("models.impact", object_type="model")
+def model_impact(
+    ctx: ServiceContext, reference_run: Path, candidate: str, out: Path, **kwargs: Any
+) -> Any:
+    """Re-run a reference plate with a candidate and compare counts and potencies (MSR)."""
+    from hcs_studio.training.impact import downstream_impact, write_impact
+
+    result = downstream_impact(Path(reference_run), candidate, Path(out), **kwargs)
+    report = write_impact(result, Path(out))
+    ctx.note(
+        object_id=candidate,
+        after={"report": str(report), "verdict": result.verdict, "counts": result.counts_summary},
+    )
+    return result, report
+
+
+@service("qa.spot_check_queue", object_type="run")
+def queue_spot_checks(
+    ctx: ServiceContext, folder: Path, n: int = 3, seed: int | None = None
+) -> list[int]:
+    from hcs_studio.training.qa import queue_spot_checks as queue
+
+    ids = queue(Path(folder), n, seed)
+    ctx.note(object_id=str(folder), after={"spot_checks": ids})
+    return ids
+
+
+@service("qa.spot_check_review", object_type="spot_check")
+def review_spot_check(ctx: ServiceContext, check_id: int, status: str) -> dict[str, Any]:
+    """Accept or flag (reason required) a spot-checked field."""
+    from hcs_studio.training.qa import review_spot_check as review
+
+    record = review(check_id, status, ctx.actor.name, ctx.reason)
+    ctx.note(
+        object_id=f"spot_check:{check_id}",
+        before={"status": record["before"]},
+        after={
+            "status": status,
+            "run": record["run"],
+            "well": record["well"],
+            "field": record["field"],
+        },
+    )
+    return record

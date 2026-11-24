@@ -121,3 +121,64 @@ The run manifest (`run_manifest.json` → `models`) lists every model the pipeli
 module, parameter, value, file (as a data-root path), SHA-256 and, for registered models, the
 name, version, kind, status and training set. Built-in Cellpose models are hashed from the
 Cellpose model folder when the weights are present.
+
+## Comparing a candidate on held-out fields
+
+```bash
+hcs-studio models compare hct116-nuclei@3 [--baseline hct116-nuclei@2] [--set S@V] [--split test]
+```
+
+The candidate and a baseline — the current production version of the same name, else the
+model it was trained from — segment the **test** split of the candidate's training set (fields
+training never saw; another set can be given). The report (`comparison.html` in the model's
+`reports/` folder, or `--output`) shows the metrics side by side, overall and per cell line, AP
+against the IoU threshold, count errors per field and the worst fields with the true and
+predicted outlines. The candidate's registry metrics get the test AP and the report path.
+
+## Downstream impact on a reference plate
+
+```bash
+hcs-studio models impact <reference run> hct116-nuclei@3 --output impact/ [--step 1] [--msr 3]
+```
+
+The reference run's plate is processed again with the candidate in place of the model it
+used (the steps that reference another version of the same name, or `--step N`), with the same
+pipeline and layout otherwise, and the two runs are compared:
+
+- **counts per well** (`<labels>_count`): % differences, Bland–Altman mean and limits of
+  agreement (mean ± 1.96 SD), largest change;
+- **potency**: IC50 of every compound × cell line in both runs (4PL on % inhibition of the
+  count); a ratio beyond the compound's **MSR** — from the registry's potency history (Phase 17)
+  when there is one, else `--msr` (3) — is a significant change.
+
+The verdict is *equivalent* when no potency changes significantly and the mean count difference
+is within ±10 % (`--count-tolerance`); `impact.html`, `impact.json`, `counts.csv` and
+`potency.csv` are written to the output folder.
+
+## Ongoing QA: spot checks and drift
+
+Add the run step `model_qa` to production pipelines. After each run it
+
+- queues a random sample of fields (3 by default) for a **human spot check**: in the Models
+  tab, each pending field shows its preview and outlines; accept it, or flag it with what is
+  wrong. Accept rates per model show real-world accuracy over time;
+- checks **drift**: the run's objects (area, intensity of the segmented channel, eccentricity,
+  objects per field) are compared with the same features of the model's own masks on its
+  training fields. A feature whose median moved more than 1 IQR (`drift_threshold`), or whose
+  spread changed more than twofold, is reported in `qa/model_qa.json` and in the run log, with
+  the suggestion to annotate a few fields of that plate and check or fine-tune the model.
+
+```bash
+hcs-studio models spot-check queue <run> -n 3      # for runs without the model_qa step
+hcs-studio models spot-check list [--status pending]
+hcs-studio models spot-check review 12 flagged --reason "clusters merged"
+hcs-studio models spot-check summary
+hcs-studio models drift <run> [--model NAME@VERSION] [--threshold 1]
+```
+
+## The Models tab
+
+Lists every model version (status, validation and test scores, training set, author). Select a
+version to change its status (a reason is required; production asks for confirmation), compare
+it on held-out ground truth (in the background; the report opens with *Open report*), and review
+the pending spot checks below.
