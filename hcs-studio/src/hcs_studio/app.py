@@ -268,7 +268,16 @@ def build_parser() -> argparse.ArgumentParser:
     screen_score.add_argument("folders", type=Path, nargs="+", help="run folders of the screen")
     screen_score.add_argument("--config", type=Path, required=True, help="screen YAML/JSON")
     screen_score.add_argument("--output", type=Path, required=True, help="screen folder")
+    screen_score.add_argument(
+        "--gallery", type=int, default=0, help="images of the first N hits (hit gallery)"
+    )
     screen_score.add_argument("--reason", default="")
+    screen_report = screen_sub.add_parser(
+        "report", help="rewrite a screen's report (and hit gallery) from its runs"
+    )
+    screen_report.add_argument("output", type=Path, help="screen folder")
+    screen_report.add_argument("--gallery", type=int, default=0, help="first N hits")
+    screen_report.add_argument("--reason", default="")
     screen_review = screen_sub.add_parser("review", help="include or exclude a hit by hand")
     screen_review.add_argument("output", type=Path, help="screen folder")
     screen_review.add_argument("--compound", required=True, help="compound name or key")
@@ -955,7 +964,23 @@ def _screen(args: argparse.Namespace) -> int:
             from hcs_studio.services.operations import run_screen
 
             result = run_screen(
-                _ctx(args), list(args.folders), ScreenConfig.load(args.config), args.output
+                _ctx(args),
+                list(args.folders),
+                ScreenConfig.load(args.config),
+                args.output,
+                gallery=args.gallery,
+            )
+        elif args.screen_command == "report":
+            from hcs_studio.screening.screen import ScreenConfig
+            from hcs_studio.services.operations import run_screen
+
+            summary = json.loads((args.output / "screen.json").read_text(encoding="utf-8"))
+            result = run_screen(
+                _ctx(args),
+                [Path(f) for f in summary["runs"]],
+                ScreenConfig.model_validate(summary["config"]),
+                args.output,
+                gallery=args.gallery,
             )
         elif args.screen_command == "review":
             from hcs_studio.services.operations import review_hit

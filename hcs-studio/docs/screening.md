@@ -1,7 +1,7 @@
 # Primary screens: hit calling
 
-From single-concentration screening plates to a reviewed hit list (Phase 23a). Cherry-picking
-and confirmation plates follow in 23c, the review views in 23b.
+From single-concentration screening plates to a reviewed hit list (Phase 23a) and the views
+to review it (Phase 23b). Cherry-picking and confirmation plates follow in 23c.
 
 ## 1. Library plate maps and assay layouts
 
@@ -108,7 +108,41 @@ hcs-studio screen review screens/kinase1 --compound L01-C07 --action exclude --r
 A reason is required; decisions are appended to `overrides.json` (the latest per compound wins)
 and the hit list is rewritten. A compound can also be included although it missed the threshold.
 
+## 5. Reviewing the screen
+
+Every scoring run writes **`report.html`** into the screen folder (self-contained; opens in any
+browser, also offline):
+
+- the summary (plates, compounds, hits, hit rate, artefact wells, manual decisions) and notes;
+- **plates**: Z′ and robust Z′ per readout (red below 0.5), whether B-score was used, hit rate;
+- **plate heat maps** of the chosen score (blue below 0, red above; % activity 0–100), hits
+  outlined, artefact wells grey with a cross, vehicle (blue dot) and positive control (green
+  dot); hovering shows the well, compound and value;
+- **score vs plate order**: every sample well, the hits in red, the vehicle and positive-control
+  medians per plate as lines, the threshold dashed — drift across the screen shows as a trend;
+- **distribution** of the sample wells' scores with the threshold;
+- **replicates**: each compound's first two clean replicates against each other, the hit region
+  shaded, the hits in red;
+- the ranked **hit list** with scores, SSMD, replicates, manual decisions and their reasons.
+
+The **hit gallery** (`--gallery N`: the first N hits) shows each hit well beside its two nearest
+vehicle wells on the same plate, every image of a row with the **same contrast** (linked, as in
+the comparison view) — so a well with fewer or dimmer cells really looks emptier. The images are
+the runs' saved corrected images of each well's representative field (runs analysed without
+saving images have none; the gallery says so).
+
+```bash
+hcs-studio screen score runs/SCR* --config screen.yaml --output screens/kinase1 --gallery 48
+hcs-studio screen report screens/kinase1 --gallery 96     # rewrite report and gallery
+```
+
+The **Screen** tab of the app opens a screen folder: plate heat maps by plate and score (artefact
+wells hatched), the ranked hits, and **Include as hit / Exclude from hits** for the selected
+compound (or a compound clicked on the plate map) with a required reason — the same
+`screen.review` service as `hcs-studio screen review`; the hit list, report and table are
+rewritten. Buttons open the report and the gallery in the browser.
+
 ## Not yet included
 
 PAINS and other chemistry filters need RDKit (not installed; ask before adding). Echo pick lists,
-confirmation layouts and the screen report come with 23b and 23c.
+confirmation layouts and the screen summary report come with 23c.

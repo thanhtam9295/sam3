@@ -125,6 +125,7 @@ class ScreenResult:
     hits: pd.DataFrame
     plates: pd.DataFrame
     notes: list[str] = field(default_factory=list)
+    run_folders: list[Path] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------- reading
@@ -256,7 +257,9 @@ def score_screen(folders: list[Path], config: ScreenConfig) -> ScreenResult:
     )
     plates["hit_rate_pct"] = 100 * plates["well_hits"] / plates["samples"]
     compounds = _compounds(wells[sample].copy(), config)
-    result = ScreenResult(config, wells, compounds, pd.DataFrame(), plates, notes)
+    result = ScreenResult(
+        config, wells, compounds, pd.DataFrame(), plates, notes, [Path(f) for f in folders]
+    )
     return result
 
 
@@ -398,11 +401,22 @@ def write_screen(result: ScreenResult, out: Path, folders: list[Path]) -> list[s
         "written": datetime.now(UTC).isoformat(),
     }
     (out / "screen.json").write_text(json.dumps(summary, indent=1, default=str), "utf-8")
-    return [*files, "screen.json"]
+    from hcs_studio.screening.report import write_report
+
+    write_report(result, out)
+    return [*files, "screen.json", "report.html"]
 
 
-def run_screen(folders: list[Path], config: ScreenConfig, out: Path) -> ScreenResult:
-    """Score, apply the overrides already in ``out`` and write the screen files."""
+def run_screen(
+    folders: list[Path], config: ScreenConfig, out: Path, gallery: int = 0
+) -> ScreenResult:
+    """Score, apply the overrides already in ``out`` and write the screen files (and the hit
+    gallery of the first ``gallery`` hits)."""
     result = finalize(score_screen(folders, config), load_overrides(out))
+    if gallery:
+        from hcs_studio.screening.report import write_gallery
+
+        Path(out).mkdir(parents=True, exist_ok=True)
+        write_gallery(result, Path(out), max_hits=gallery)
     write_screen(result, out, folders)
     return result

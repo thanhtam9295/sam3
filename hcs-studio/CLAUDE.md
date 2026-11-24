@@ -679,6 +679,13 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `registry.import_library_map` (core functions in `WRAPPED`). CLI `hcs-studio screen
   score|review|library|layouts`. Synthetic `synthetic/screening.write_screen`. The positional
   guard skips single-concentration compounds (speed).
+- **Phase 23b (built)**: `screening/report.py` (`report_data` column-oriented JSON, `write_report`
+  → self-contained `report.html` with canvas plots, `dataset` counts for tests; `write_gallery` →
+  `gallery/` via `compare.sources.load_panel` + `render.auto_contrast` (linked per strip) +
+  `compose`); `rules.thresholds(rule)`; `ScreenResult.run_folders`; `run_screen(..., gallery=N)`
+  writes report (always) and gallery. GUI `gui/screen_panel.py` (Screen tab: `open`, `review`
+  via `services.operations.review_hit`). CLI `screen report <dir> [--gallery N]`, `screen score
+  --gallery N`. Keep backslashes out of f-strings (Python 3.11 target).
 
 ## Commands
 

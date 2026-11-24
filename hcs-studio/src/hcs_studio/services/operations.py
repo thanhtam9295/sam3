@@ -367,13 +367,17 @@ def resume_job(ctx: ServiceContext, queue: Any, job_id: str) -> str | None:
 
 
 @service("screen.score", object_type="screen")
-def run_screen(ctx: ServiceContext, folders: list[Path], config: Any, output: Path) -> Any:
-    """Score a screen and write its hit list (manual decisions already made are kept)."""
+def run_screen(
+    ctx: ServiceContext, folders: list[Path], config: Any, output: Path, gallery: int = 0
+) -> Any:
+    """Score a screen and write its hit list, report and (``gallery`` > 0) hit gallery; manual
+    decisions already made are kept."""
     from hcs_studio.screening.screen import run_screen as score
 
-    result = score([Path(f) for f in folders], config, Path(output))
-    ctx.note(object_id=object_id(output), after={"plates": len(result.plates),
-                                                  "hits": len(result.hits)})  # fmt: skip
+    result = score([Path(f) for f in folders], config, Path(output), gallery=gallery)
+    ctx.note(
+        object_id=object_id(output), after={"plates": len(result.plates), "hits": len(result.hits)}
+    )
     return result
 
 

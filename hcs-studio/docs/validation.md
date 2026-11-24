@@ -241,6 +241,19 @@ moves any of them by more than 2 % (regenerate deliberately with
 Not yet checked: real uniformity plates (edge effects of your plates and instruments);
 B-score on a real randomized library screen.
 
+## Primary screens: review views (Phase 23b)
+
+| Check | Result | Test |
+|---|---|---|
+| Report data of a synthetic screen (4 plates) | summary = tables; thresholds parsed from the rule (`rep_score <= -3`, `count_pct > 60`); replicate pairs for every compound with 2 clean replicates; the replicate hits = the hit list | `test_report_data` |
+| Report in Chromium, offline | no script errors; 4 heat maps × 384 wells; every sample well in the order and distribution plots (also after switching score); hover text | `test_report_works_offline_in_a_browser` |
+| Image screen: 2 replicate plates, one compound with 8 nuclei per field vs 32–39 elsewhere | the only hit; one gallery strip per replicate; with linked contrast the hit image's mean brightness < half its nearest vehicle wells'; linked from the report | `test_hit_gallery_has_linked_contrast` |
+| Screen without images; `screen report` | gallery says "no image"; report rewritten from screen.json | `test_gallery_without_images_says_so`, `test_screen_report_command` |
+| Screen tab | hits table = hits.csv; plate map filled; review without a reason refused; exclude with a reason removes the hit (service, overrides.json) | `test_screen_tab_reviews_hits` |
+
+Found while building: an f-string with a backslash (escaping `</` in the embedded JSON) is only
+valid on Python 3.12; ruff (target 3.11) caught it — the JSON is escaped before the f-string.
+
 ## Primary screens: scoring and hit calling (Phase 23a)
 
 | Check | Result | Test |

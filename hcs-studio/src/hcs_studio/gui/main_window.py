@@ -43,6 +43,7 @@ from hcs_studio.gui.qc_panel import QcPanel
 from hcs_studio.gui.results_panel import ResultsPanel
 from hcs_studio.gui.run_dialog import RunDialog
 from hcs_studio.gui.sam_settings import Sam3SettingsDialog
+from hcs_studio.gui.screen_panel import ScreenPanel
 from hcs_studio.gui.segmentation_panel import SegmentationPanel
 from hcs_studio.gui.viewer import ViewerPanel
 from hcs_studio.gui.workers import BackgroundTask, PlateLoader, PreviewWorker
@@ -108,6 +109,9 @@ class MainWindow(QMainWindow):
         self.qc_panel.log.connect(self.log)
         self.qc_panel.reviewed.connect(lambda folder: self.results_panel.load(Path(folder)))
         self.tabs.addTab(self.qc_panel, "QC")
+        self.screen_panel = ScreenPanel()
+        self.screen_panel.log.connect(self.log)
+        self.tabs.addTab(self.screen_panel, "Screen")
         #: The last wells selected anywhere (run folder, wells), for the Compare tab.
         self.last_selection: tuple[Path, list[str]] | None = None
         self.compare_panel = ComparePanel(self.log, lambda: self.last_selection)

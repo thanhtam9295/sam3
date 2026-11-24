@@ -124,3 +124,38 @@ def _boolean(value: Any, index: pd.Index) -> pd.Series:
     if isinstance(value, pd.Series):
         return value.fillna(False).astype(bool)
     return pd.Series(bool(value), index=index)
+
+
+def thresholds(rule: str) -> dict[str, list[tuple[str, float]]]:
+    """Comparisons of a column with a number, for drawing: {column: [(op, value), …]}
+    (``rep_score <= -3`` → {"rep_score": [("<=", -3.0)]}; negated numbers included)."""
+    symbols = {
+        ast.Lt: "<",
+        ast.LtE: "<=",
+        ast.Gt: ">",
+        ast.GtE: ">=",
+        ast.Eq: "==",
+        ast.NotEq: "!=",
+    }
+    flipped = {"<": ">", "<=": ">=", ">": "<", ">=": "<=", "==": "==", "!=": "!="}
+
+    def number(node: ast.AST) -> float | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, int | float):
+            return float(node.value)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            inner = number(node.operand)
+            return -inner if inner is not None else None
+        return None
+
+    out: dict[str, list[tuple[str, float]]] = {}
+    for node in ast.walk(parse(rule)):
+        if not isinstance(node, ast.Compare):
+            continue
+        items = [node.left, *node.comparators]
+        for op, left, right in zip(node.ops, items, items[1:], strict=False):
+            symbol = symbols[type(op)]
+            if isinstance(left, ast.Name) and number(right) is not None:
+                out.setdefault(left.id, []).append((symbol, float(number(right))))  # type: ignore[arg-type]
+            elif isinstance(right, ast.Name) and number(left) is not None:
+                out.setdefault(right.id, []).append((flipped[symbol], float(number(left))))  # type: ignore[arg-type]
+    return out

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Phase 23b — primary screens: review views
+- `report.html` in every screen folder: summary, plate Z′ table, plate heat maps (hits outlined,
+  artefacts crossed, controls marked), score vs plate order with control medians, score
+  distribution and replicate scatter with the thresholds read from the hit rule, ranked hit list.
+- Hit gallery (`--gallery N`): each hit well beside its nearest vehicle wells with linked
+  contrast (comparison-view rendering of the saved corrected images).
+- Screen tab in the app: plate heat maps, ranked hits, include/exclude with a reason (service).
+  CLI `hcs-studio screen report`.
+
 ### Phase 23a — primary screens: scoring and hit calling
 - Library plate maps (CSV/XLSX, flexible columns and units) into the registry (`hcs-studio screen
   library`); assay-plate layouts from a control template by stamping, 4 × 96 → 384 quadrants or
