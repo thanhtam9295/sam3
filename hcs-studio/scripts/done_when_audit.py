@@ -115,13 +115,17 @@ CRITERIA = [
     Criterion(
         "10",
         "Windows installer",
-        ["tests/test_packaging.py"],
-        "open",
-        "packaging/build_windows.ps1 + the hcs-studio-windows workflow build it on Windows; "
-        "it cannot be built in this Linux container. The spec is checked by tests (worker "
-        "scripts, data, migrations).",
-        "Run the hcs-studio-windows workflow (or the script on a "
-        "Windows PC) and try the installer.",
+        [
+            "tests/test_packaging.py",
+            "tests/test_encoding.py",
+            "tests/test_hardening.py::test_viewer_without_opengl_says_what_to_do",
+        ],
+        "met",
+        "hcs-studio-windows workflow (2026-11-25, run 9): Windows tests 599 passed / 0 failed; "
+        "the installer builds, installs silently and the installed copy passes its self-test "
+        "(10/10). The hosted runner has no OpenGL driver, so the window was only checked to fail "
+        "cleanly there (graphics message, exit code 5).",
+        "Open the installed app on a lab PC with a graphics driver (and over Remote Desktop).",
     ),
     Criterion(
         "§10",
