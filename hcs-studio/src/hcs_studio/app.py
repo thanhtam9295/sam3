@@ -925,6 +925,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(result.summary())
         return 0
     try:
+        from hcs_studio.gui.opengl import prepare_opengl
+
+        prepare_opengl()  # before Qt, napari and PyOpenGL are imported
         from hcs_studio.gui.launch import run_gui
     except ImportError as exc:
         print(

@@ -1024,7 +1024,11 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
 - Paths: compare with `str(Path(...))` (native separators); a path for another OS is text
   (`paths.resolve_text`); test data roots get a location for every platform.
 - GUI start: an OpenGL failure of the viewer writes `<settings>/software_opengl` and restarts with
-  Qt's software OpenGL (`gui/launch.py`; `HCS_SOFTWARE_OPENGL=1|0`); the windowed bundle shows a
+  software OpenGL (`gui/opengl.prepare_opengl`, called by `app.main` before Qt/napari/PyOpenGL
+  are imported: Windows loads Qt's `opengl32sw.dll` copied as `<settings>/opengl/opengl32.dll`
+  and sets `QT_OPENGL_DLL`, so Qt and PyOpenGL share one GL module — Qt's
+  `AA_UseSoftwareOpenGL` alone fails, PyOpenGL keeps the system opengl32; Linux
+  `LIBGL_ALWAYS_SOFTWARE=1`; `HCS_SOFTWARE_OPENGL=1|0`); the windowed bundle shows a
   modal dialog on unhandled errors, so CI smoke-tests the console executable (exit 5 = OpenGL
   failed, then a second start must pass).
 - Windows CI: commit message `[build installer]` on a `claude/**` branch runs

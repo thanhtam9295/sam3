@@ -252,10 +252,11 @@ def test_viewer_without_opengl_switches_to_software_rendering(
     pytest.importorskip("PySide6")
     if not (os.environ.get("DISPLAY") or sys.platform in ("win32", "darwin")):
         pytest.skip("needs a display")
-    from hcs_studio.gui import launch
+    from hcs_studio.gui import launch, opengl
 
     monkeypatch.setenv("HCS_STUDIO_HOME", str(tmp_path))
-    monkeypatch.delenv(launch.SOFTWARE_GL_ENV, raising=False)
+    monkeypatch.delenv(opengl.SOFTWARE_GL_ENV, raising=False)
+    monkeypatch.setenv("LIBGL_ALWAYS_SOFTWARE", "0")  # restored after the test
     gl_error = type("GLError", (Exception,), {"__module__": "OpenGL.error"})
     assert launch.is_opengl_error(gl_error("invalid operation"))
     assert not launch.is_opengl_error(RuntimeError("unrelated"))
@@ -267,14 +268,18 @@ def test_viewer_without_opengl_switches_to_software_rendering(
         raise gl_error("err = 1282, glGetIntegerv GL_MAX_TEXTURE_SIZE")
 
     monkeypatch.setattr(launch, "MainWindow", no_opengl)
-    assert not launch.use_software_opengl()
+    assert not opengl.use_software_opengl()
     assert launch.run_gui(smoke_test=True) == 5
-    assert launch.use_software_opengl()  # remembered for the next start
-    monkeypatch.setenv(launch.SOFTWARE_GL_ENV, "0")
-    assert not launch.use_software_opengl()
-    monkeypatch.setenv(launch.SOFTWARE_GL_ENV, "1")
+    assert opengl.use_software_opengl()  # remembered for the next start
+    monkeypatch.setenv(opengl.SOFTWARE_GL_ENV, "0")
+    assert not opengl.use_software_opengl()
+    monkeypatch.setenv(opengl.SOFTWARE_GL_ENV, "1")
     with pytest.raises(gl_error):  # already in software mode: the error is not hidden
         launch.run_gui(smoke_test=True)
+
+    if sys.platform != "win32":  # Windows: the Mesa DLL swap is checked by the installer job
+        assert "LIBGL_ALWAYS_SOFTWARE" in opengl.prepare_opengl()
+        assert os.environ["LIBGL_ALWAYS_SOFTWARE"] == "1"
 
 
 def test_user_guide_builds_as_html(tmp_path: Path) -> None:

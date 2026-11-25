@@ -16,11 +16,16 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from hcs_studio import __version__
 from hcs_studio.gui.main_window import MainWindow
+from hcs_studio.gui.opengl import (
+    SOFTWARE_GL_ENV,
+    prepare_opengl,
+    software_marker,
+    use_software_opengl,
+)
 from hcs_studio.io.sidecar import config_dir
 
 log = logging.getLogger("hcs_studio")
 SMOKE_TIMEOUT_S = 120.0  # `gui --smoke-test` exits with code 4 when it has not finished by then
-SOFTWARE_GL_ENV = "HCS_SOFTWARE_OPENGL"
 
 
 def app_log_path() -> Path:
@@ -66,21 +71,6 @@ def install_error_handler(window: MainWindow | None) -> None:
     sys.excepthook = handle
 
 
-def _software_marker() -> Path:
-    return config_dir() / "software_opengl"
-
-
-def use_software_opengl() -> bool:
-    """Software OpenGL (Qt's bundled renderer, ``opengl32sw.dll`` on Windows) instead of the
-    graphics driver: when ``HCS_SOFTWARE_OPENGL=1`` or after the driver failed once (remote
-    desktop sessions, virtual machines, old drivers). ``HCS_SOFTWARE_OPENGL=0`` and deleting
-    ``<settings>/software_opengl`` go back to the driver."""
-    choice = os.environ.get(SOFTWARE_GL_ENV, "")
-    if choice in ("0", "1"):
-        return choice == "1"
-    return _software_marker().exists()
-
-
 def is_opengl_error(exc: BaseException) -> bool:
     """The viewer could not get a working OpenGL context (PyOpenGL ``GLError``, vispy)."""
     for error in (exc, exc.__cause__, exc.__context__):
@@ -107,10 +97,7 @@ def run_gui(smoke_test: bool = False) -> int:
     """Run the application. ``smoke_test``: show the window and the test image, then quit
     (exit code 0 when everything loaded; 4 when stuck; 5 when OpenGL failed)."""
     software = use_software_opengl()
-    if software and QApplication.instance() is None:
-        from PySide6.QtCore import Qt
-
-        QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseSoftwareOpenGL)
+    opengl = prepare_opengl()  # normally done already by app.main, before Qt was imported
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("HCS Studio")
     setup_logging()
@@ -118,7 +105,7 @@ def run_gui(smoke_test: bool = False) -> int:
         "HCS Studio %s starting (Python %s%s)",
         __version__,
         sys.version.split()[0],
-        ", software OpenGL" if software else "",
+        f", {opengl}" if opengl else "",
     )
     if not smoke_test:
         return _run(app, smoke_test, software)
@@ -149,8 +136,8 @@ def _run(app: QCoreApplication, smoke_test: bool, software: bool) -> int:
         if not is_opengl_error(exc) or software:
             raise
         log.exception("The image viewer could not start with the graphics driver")
-        _software_marker().parent.mkdir(parents=True, exist_ok=True)
-        _software_marker().write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
+        software_marker().parent.mkdir(parents=True, exist_ok=True)
+        software_marker().write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
         if smoke_test:
             print(f"Smoke test: OpenGL failed ({type(exc).__name__}); next start uses "
                   f"software OpenGL", flush=True)  # fmt: skip
@@ -163,7 +150,7 @@ def _run(app: QCoreApplication, smoke_test: bool, software: bool) -> int:
             "sessions and virtual machines). HCS Studio now uses software rendering"
             + (": it is starting again." if restarted else "; please start it again.")
             + " Updating the graphics driver gives faster rendering; then delete "
-            f"{_software_marker()} to use it.",
+            f"{software_marker()} to use it.",
         )
         return 0 if restarted else 2
     install_error_handler(window)

@@ -87,6 +87,13 @@ WORKER_SCRIPTS = [
 datas += collect_data_files("hcs_studio", includes=WORKER_SCRIPTS, include_py_files=True)
 hiddenimports += collect_submodules("keyring.backends")
 hiddenimports += ["sqlalchemy.dialects.sqlite", "sqlalchemy.dialects.postgresql"]
+# Qt's software OpenGL renderer (Mesa llvmpipe): gui/opengl.py uses it when the graphics driver
+# gives the viewer no OpenGL (remote desktop, virtual machines).
+import PySide6  # noqa: E402
+
+SOFTWARE_OPENGL = Path(PySide6.__file__).parent / "opengl32sw.dll"
+if SOFTWARE_OPENGL.is_file():
+    binaries.append((str(SOFTWARE_OPENGL), "PySide6"))
 # ome-types (used by nd2) registers a napari plugin; its manifest must travel with it.
 datas += collect_data_files("ome_types")
 hiddenimports += ["scipy.special._cdflib", "PySide6.QtOpenGL", "PySide6.QtOpenGLWidgets"]

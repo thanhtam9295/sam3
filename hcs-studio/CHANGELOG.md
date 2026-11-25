@@ -13,8 +13,8 @@
   tree fingerprints in reports, manifests and figure sidecars used `\` on Windows (now `/`
   everywhere, so runs and sidecars move between Windows and Linux).
 - When the graphics driver cannot give the image viewer OpenGL (remote desktop, virtual
-  machines), the app switches to software rendering and starts again instead of crashing
-  (docs/troubleshooting.md).
+  machines), the app switches to software rendering (Qt's Mesa renderer, shared by Qt and
+  PyOpenGL; `gui/opengl.py`) and starts again instead of crashing (docs/troubleshooting.md).
 - Fixed: on Windows a job kept running after its worker or the app was killed (it went on
   writing to a run folder that was being resumed elsewhere); it now stops with its parent, as on
   Linux and macOS.
