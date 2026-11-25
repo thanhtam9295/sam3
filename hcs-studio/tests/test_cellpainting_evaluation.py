@@ -195,9 +195,9 @@ def test_profile_and_evaluate_commands(tmp_path: Path) -> None:
         "figures/umap_plate.png",
     ):
         assert (out / name).exists(), name
-    page = (out / "evaluation.html").read_text()
+    page = (out / "evaluation.html").read_text(encoding="utf-8")
     assert "14 of 14 treatments active" in page and 'src="figures/activity.png"' in page
-    record = json.loads((out / "evaluation.json").read_text())
+    record = json.loads((out / "evaluation.json").read_text(encoding="utf-8"))
     assert record["log"]["holdout_active"] is False and record["options"]["null_size"] == 10000
     assert (
         main(
@@ -217,7 +217,7 @@ def test_profile_and_evaluate_commands(tmp_path: Path) -> None:
         )
         == 0
     )
-    assert json.loads((out / "evaluation.json").read_text())["options"]["k"] == 3
+    assert json.loads((out / "evaluation.json").read_text(encoding="utf-8"))["options"]["k"] == 3
     assert main(["cellpainting", "similar", str(out), "--to", "hdac-0", "-n", "2"]) == 0
 
 

@@ -108,9 +108,9 @@ def test_categories_viable_counts_and_gr_match_truth(tmp_path: Path) -> None:
     out = run / "assays" / "apoptosis"
     assert {p.name for p in out.iterdir()} == {"calibration.json", "apoptosis_wells.csv",
                                               "report.html"}  # fmt: skip
-    calibration = json.loads((out / "calibration.json").read_text())
+    calibration = json.loads((out / "calibration.json").read_text(encoding="utf-8"))
     assert calibration["params"]["threshold_method"] == "vehicle_robust"
-    assert "Z′" in (out / "report.html").read_text()
+    assert "Z′" in (out / "report.html").read_text(encoding="utf-8")
 
 
 def test_annexin_on_cells_and_otsu_on_controls(tmp_path: Path) -> None:

@@ -57,7 +57,7 @@ def test_384_well_projected_plate_unattended_with_kill_and_resume(
     assert modules[:3] == ["projection", "ilastik_pixel", "probabilities_to_objects"]
     assert "measure_objects" in modules
     pipeline_file = tmp_path / "ilastik.yaml"
-    pipeline_file.write_text(yaml.safe_dump(pipeline.to_dict(), sort_keys=False))
+    pipeline_file.write_text(yaml.safe_dump(pipeline.to_dict(), sort_keys=False), encoding="utf-8")
     out = tmp_path / "runs"
     command = [
         sys.executable, "-m", "hcs_studio", "run", "--pipeline", str(pipeline_file),
@@ -81,17 +81,20 @@ def test_384_well_projected_plate_unattended_with_kill_and_resume(
     assert folder is not None, "no wells finished before the deadline"
     done_before = {p.parent.name for p in folder.glob("wells/*/well_summary.json")}
     assert 3 <= len(done_before) < len(wells), "the run should have been interrupted part-way"
-    assert json.loads((folder / "run_manifest.json").read_text())["status"] == "running"
+    assert (
+        json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))["status"]
+        == "running"
+    )
 
     assert main(["run", "--resume", str(folder), "--workers", "2", "--no-checksums"]) == 0
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "completed" and len(manifest["history"]) == 2
     per_well = Counter(_well_of(c) for c in calls(ilastik["log"]))
     assert set(per_well) == {f"{'ABCDEFGHIJKLMNOP'[r]}{c + 1:02d}" for r, c in wells}
     assert all(per_well[w] == 1 for w in done_before)  # finished wells were not redone
 
     # run-folder structure (PROMPT_ILASTIK.md §8) and provenance
-    used = json.loads((folder / "ilastik" / "projects_used.json").read_text())
+    used = json.loads((folder / "ilastik" / "projects_used.json").read_text(encoding="utf-8"))
     assert used[0]["runner"] == "headless" and used[0]["ilastik_version"] == "1.4.2"
     assert len(list((folder / "ilastik" / "logs").glob("*.log"))) == len(wells)
     assert not any((folder / "ilastik" / "inputs").rglob("*.h5"))

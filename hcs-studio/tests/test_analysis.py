@@ -360,7 +360,7 @@ def test_spatial_step_per_field_and_whole_well(tmp_path: Path) -> None:
     assert summary["spatial_colonies"] >= 10
     annotations = pd.read_parquet(folder / "wells" / "A01" / "objects_annotations.parquet")
     assert annotations["spatial_nn_um"].notna().all()
-    details = json.loads((folder / "wells" / "A01" / "analysis.json").read_text())
+    details = json.loads((folder / "wells" / "A01" / "analysis.json").read_text(encoding="utf-8"))
     curves = details["step1_spatial_clusters"]["groups"][0]
     assert len(curves["r_um"]) == len(curves["H"]) and curves["envelope"]["H_high"]
     with pytest.raises(ModuleError, match="Stitch well"):
@@ -468,7 +468,9 @@ def test_run_with_stitching_and_table_steps(tmp_path: Path) -> None:
     result = run_pipeline(plate, Pipeline.from_text(RUN_PIPELINE), output_root=tmp_path / "out")
     folder = result.folder
     assert not result.failed_wells
-    summary = json.loads((folder / "wells" / "A01" / "well_summary.json").read_text())
+    summary = json.loads(
+        (folder / "wells" / "A01" / "well_summary.json").read_text(encoding="utf-8")
+    )
     stitching = summary["stitching"]
     assert stitching["orientation"] == [-1, 1] and stitching["refined_pairs"] >= 4
     offsets = {int(k): np.array(v) for k, v in stitching["field_offsets_um"].items()}
@@ -493,7 +495,7 @@ def test_run_with_stitching_and_table_steps(tmp_path: Path) -> None:
     fractions = a01["cluster_pheno_1_fraction"] + a01["cluster_pheno_2_fraction"]
     assert fractions == pytest.approx(1)
     assert {"gate_big", "spatial_colony", "cluster_pheno"} <= set(objects.columns)
-    analysis = json.loads((folder / "tables" / "analysis_summary.json").read_text())
+    analysis = json.loads((folder / "tables" / "analysis_summary.json").read_text(encoding="utf-8"))
     assert [s["module"] for s in analysis["steps"]] == [
         "gate_objects",
         "spatial_clusters",
@@ -519,7 +521,7 @@ def test_run_with_stitching_and_table_steps(tmp_path: Path) -> None:
     a01 = _summary_row(folder, "A01")
     assert "gate_big_count" in a01  # the run's own table steps are kept
     assert a01["class_class_large_count"] + a01["class_class_small_count"] == truth[0]
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["analyses"][-1]["steps"][-1]["module"] == "classify_objects"
     results = RunResults(folder)
     assert "class_class_large_fraction" in results.readout_columns()

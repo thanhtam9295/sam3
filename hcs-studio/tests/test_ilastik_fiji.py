@@ -39,7 +39,9 @@ def fake_fiji_app(root: Path, plugin: bool = True) -> Path:
         pytest.skip("the fake is a shebang script")
     launcher = root / "Fiji.app" / "ImageJ-linux64"
     launcher.parent.mkdir(parents=True, exist_ok=True)
-    launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE_FIJI}" "$@"\n')
+    launcher.write_text(
+        f'#!/bin/sh\nexec "{sys.executable}" "{FAKE_FIJI}" "$@"\n', encoding="utf-8"
+    )
     launcher.chmod(launcher.stat().st_mode | stat.S_IEXEC)
     if plugin:
         (root / "Fiji.app" / "jars").mkdir(exist_ok=True)
@@ -214,9 +216,9 @@ def test_headless_and_fiji_agree(
     argv = plugin_calls[0]["argv"]
     assert "--readonly=1" in argv and "--input_axes=tzcyx" in argv
     assert any(a.startswith("--raw_data=") for a in argv)
-    macro = (tmp_path / "fiji" / f"fiji_{source.replace(' ', '_')}.ijm").read_text()
+    macro = (tmp_path / "fiji" / f"fiji_{source.replace(' ', '_')}.ijm").read_text(encoding="utf-8")
     assert "maxrammb=1024" in macro
-    assert "-macro" in (tmp_path / "fiji.log").read_text()
+    assert "-macro" in (tmp_path / "fiji.log").read_text(encoding="utf-8")
 
 
 def test_fiji_failures_are_reported(
@@ -266,17 +268,19 @@ def test_pipeline_with_the_fiji_runner_matches_headless(
             checksums=False,
         )
         assert not result.failed_wells, result.failed_wells
-        used = json.loads((result.folder / "ilastik" / "projects_used.json").read_text())
+        used = json.loads(
+            (result.folder / "ilastik" / "projects_used.json").read_text(encoding="utf-8")
+        )
         assert used[0]["runner"] == runner
         tables[runner] = pd.read_csv(result.folder / "tables" / "per_well_summary.csv")
-        manifest = json.loads((result.folder / "run_manifest.json").read_text())
+        manifest = json.loads((result.folder / "run_manifest.json").read_text(encoding="utf-8"))
         fitted = next(s for s in manifest["fitted_state"] if s["module"] == "ilastik_pixel")
         assert fitted["runner"] == runner
     columns = [c for c in tables["headless"].columns if c.startswith(("nuclei_", "ilastik_"))]
     pd.testing.assert_frame_equal(tables["headless"][columns], tables["fiji"][columns])
     assert len(calls(fiji["fiji_log"])) == 6  # 3 wells × 2 fields, one ilastik start each
     log = (tmp_path / "runs_fiji").rglob("A01.log")
-    assert "Run Pixel Classification Prediction" in next(log).read_text()
+    assert "Run Pixel Classification Prediction" in next(log).read_text(encoding="utf-8")
 
 
 def test_fiji_runner_falls_back_for_label_images(fiji: dict[str, Any], tmp_path: Path) -> None:
@@ -304,9 +308,13 @@ def test_fiji_runner_falls_back_for_label_images(fiji: dict[str, Any], tmp_path:
         plate, pipeline, output_root=tmp_path / "runs", workers=1, checksums=False, wells=[(0, 0)]
     )
     assert not result.failed_wells, result.failed_wells
-    used = json.loads((result.folder / "ilastik" / "projects_used.json").read_text())
+    used = json.loads(
+        (result.folder / "ilastik" / "projects_used.json").read_text(encoding="utf-8")
+    )
     assert used[0]["runner"] == "headless"
-    assert "Fiji runner not used" in (result.folder / "ilastik" / "logs" / "A01.log").read_text()
+    assert "Fiji runner not used" in (result.folder / "ilastik" / "logs" / "A01.log").read_text(
+        encoding="utf-8"
+    )
     assert not calls(fiji["fiji_log"])
 
 
@@ -330,7 +338,7 @@ def test_cli_macro_and_hdf5_export(fiji: dict[str, Any], tmp_path: Path, capsys:
 
     macro = tmp_path / "pixel.ijm"
     assert main(["ilastik", "--macro", str(fiji["project"]), "--output", str(macro)]) == 0
-    text = macro.read_text()
+    text = macro.read_text(encoding="utf-8")
     assert '#@ File (label = "Folder of .h5 inputs", style = "directory") inputFolder' in text
     assert 'axisOrder = "yxc";' in text and 'suffix = "_Probabilities";' in text
     assert "pixelclassificationtype=[Probabilities]" in text
@@ -338,7 +346,7 @@ def test_cli_macro_and_hdf5_export(fiji: dict[str, Any], tmp_path: Path, capsys:
     objects = make_project(tmp_path / "o.ilp", workflow="ObjectClassificationWorkflowPrediction")
     options = ["--second", "segmentation", "--export", "identities", "--axes", "zyxc"]
     assert main(["ilastik", "--macro", str(objects), *options, "--output", str(macro)]) == 0
-    text = macro.read_text()
+    text = macro.read_text(encoding="utf-8")
     assert 'secondSuffix = "_segmentation";' in text and "secondinputtype=[Segmentation]" in text
     assert "objectexportsource=[Object Identities]" in text and 'axisOrder = "zyxc";' in text
     assert main(["ilastik", "--macro", str(objects), "--export", "nonsense",

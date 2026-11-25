@@ -152,12 +152,12 @@ def test_report_page_and_link(tmp_path: Path) -> None:
     result = analyse(course, layout, KineticsParams(), (8, 12))
     files = write_kinetics(result, tmp_path / "kinetics", {"rows": 8, "cols": 12})
     assert {"report.html", "heatmap.png", "qc_wells.csv", "qc_timeline.csv"} <= set(files)
-    page = (tmp_path / "kinetics" / "report.html").read_text()
+    page = (tmp_path / "kinetics" / "report.html").read_text(encoding="utf-8")
     data = json.loads(page.split('id="data">')[1].split("</script>")[0])
     assert data["rows"] == 8 and len(data["times"]) == len(TIMES)
     assert data["wells"]["A02"]["compound"] == "Drug"
     assert "http" not in page.replace("http-equiv", "")  # self-contained
-    summary = json.loads((tmp_path / "kinetics" / "kinetics.json").read_text())
+    summary = json.loads((tmp_path / "kinetics" / "kinetics.json").read_text(encoding="utf-8"))
     assert summary["qc"]["status"] == PASS
     assert {"title": "Kinetics report", "href": "kinetics/report.html"} in report_links(tmp_path)
 
@@ -205,7 +205,7 @@ def test_report_page_works_offline_in_a_browser(tmp_path: Path) -> None:
     result = analyse(course, layout, KineticsParams(), (8, 12))
     write_kinetics(result, tmp_path / "kinetics", {"rows": 8, "cols": 12})
     script = tmp_path / "check.js"
-    script.write_text(BROWSER)
+    script.write_text(BROWSER, encoding="utf-8")
     done = subprocess.run(["node", str(script), (tmp_path / "kinetics" / "report.html").as_uri()],
                           capture_output=True, text=True, timeout=120)  # fmt: skip
     assert done.returncode == 0, done.stderr

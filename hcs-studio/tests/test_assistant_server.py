@@ -190,7 +190,7 @@ def test_admin_only_settings_and_cli(
     monkeypatch.setattr("getpass.getpass", lambda prompt="": "sk-ant-cli-test")
     assert main(["assistant", "set-key"]) == 0
     assert stored == {("hcs-studio", "anthropic/api_key"): "sk-ant-cli-test"}
-    settings_text = (home / "home" / "settings.json").read_text()
+    settings_text = (home / "home" / "settings.json").read_text(encoding="utf-8")
     assert "sk-ant-cli-test" not in settings_text
     capsys.readouterr()
     assert main(["assistant", "preview", "Which drug is most potent?"]) == 0

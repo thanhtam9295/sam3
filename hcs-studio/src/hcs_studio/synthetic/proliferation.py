@@ -79,7 +79,9 @@ def write_proliferation_run(
         objects = pd.concat([nuclei, cells], ignore_index=True)
         (folder / "wells" / well).mkdir(parents=True, exist_ok=True)
         objects.to_parquet(folder / "wells" / well / "objects.parquet", index=False)
-        (folder / "wells" / well / "well_summary.json").write_text(json.dumps({"well": well}))
+        (folder / "wells" / well / "well_summary.json").write_text(
+            json.dumps({"well": well}), encoding="utf-8"
+        )
         layout = set_role(layout, [parse_well_name(well)], role, cell_line="HeLa")
         truth[well] = expected
     save_layout(layout, folder / "plate_layout.json")

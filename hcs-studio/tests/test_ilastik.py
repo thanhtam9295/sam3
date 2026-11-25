@@ -185,7 +185,9 @@ def test_settings_save_load_validate_and_environment(
     ):
         with pytest.raises(ValueError, match=message):
             bad.validate()
-    IlastikSettings.path().write_text('{"ram_mb": 12}')  # a bad file falls back to defaults
+    IlastikSettings.path().write_text(
+        '{"ram_mb": 12}', encoding="utf-8"
+    )  # a bad file falls back to defaults
     assert IlastikSettings.load() == IlastikSettings()
 
 
@@ -195,7 +197,9 @@ def test_settings_save_load_validate_and_environment(
 def fake_ilastik(path: Path, version: str) -> Path:
     """A stand-in program that answers ``--version`` like ilastik."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"#!{sys.executable}\nprint('Starting ilastik')\nprint('{version}')\n")
+    path.write_text(
+        f"#!{sys.executable}\nprint('Starting ilastik')\nprint('{version}')\n", encoding="utf-8"
+    )
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
     return path
 
@@ -214,8 +218,8 @@ def test_detection_finds_newest_ilastik_and_fiji_with_ilastik4ij(
     assert ilastik_version(newest) == "1.4.2"
     fiji = home / "Fiji.app"
     (fiji / "jars").mkdir(parents=True)
-    (fiji / "ImageJ-linux64").write_text("")
-    (fiji / "jars" / "ilastik4ij-2.0.3.jar").write_text("")
+    (fiji / "ImageJ-linux64").write_text("", encoding="utf-8")
+    (fiji / "jars" / "ilastik4ij-2.0.3.jar").write_text("", encoding="utf-8")
     found = detect(IlastikSettings(), platform="linux", home=home)
     assert found.ilastik == str(newest) and found.ilastik_source == "detected"
     assert found.ilastik_version == "1.4.2" and found.ilastik_ok
@@ -236,14 +240,9 @@ def test_detection_finds_newest_ilastik_and_fiji_with_ilastik4ij(
 
 
 def test_python_of_an_ilastik_environment_runs_the_module() -> None:
-    assert ilastik_command("/envs/ilastik/bin/python") == [
-        "/envs/ilastik/bin/python",
-        "-m",
-        "ilastik",
-    ]
-    assert ilastik_command("/opt/ilastik-1.4.2-Linux/run_ilastik.sh") == [
-        "/opt/ilastik-1.4.2-Linux/run_ilastik.sh"
-    ]
+    python, script = "/envs/ilastik/bin/python", "/opt/ilastik-1.4.2-Linux/run_ilastik.sh"
+    assert ilastik_command(python) == [str(Path(python)), "-m", "ilastik"]  # native separators
+    assert ilastik_command(script) == [str(Path(script))]
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="shebang scripts")

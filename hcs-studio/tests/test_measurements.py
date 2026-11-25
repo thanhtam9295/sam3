@@ -580,7 +580,7 @@ steps:
         flags.columns
     )
     assert (tables / "per_field.csv").exists() and (tables / "coloc_all.csv").exists()
-    well_json = json.loads((well / "well_summary.json").read_text())
+    well_json = json.loads((well / "well_summary.json").read_text(encoding="utf-8"))
     assert (
         well_json["tables"]["objects"] == "objects.parquet"
         and well_json["summary"]["nuclei_count"] == 10
@@ -613,9 +613,9 @@ def test_coloc_inputs_and_fiji_export(tmp_path: Path) -> None:
     )
     assert tifffile.imread(tmp_path / "fiji" / "channel_a.tif").dtype == np.float32
     assert set(np.unique(tifffile.imread(tmp_path / "fiji" / "mask.tif"))) == {0, 255}
-    saved = json.loads((tmp_path / "fiji" / "hcs_studio_results.json").read_text())
+    saved = json.loads((tmp_path / "fiji" / "hcs_studio_results.json").read_text(encoding="utf-8"))
     assert saved["results"]["pearson"] == pytest.approx(result.pearson) and saved["psf_px"] == 4
-    macro = (tmp_path / "fiji" / "coloc2_compare.ijm").read_text()
+    macro = (tmp_path / "fiji" / "coloc2_compare.ijm").read_text(encoding="utf-8")
     assert 'run("Coloc 2"' in macro and "psf=4 costes_randomisations=20" in macro
     with pytest.raises(ValueError, match="same shape"):
         export_for_fiji(tmp_path / "bad", a, b[:10], mask)

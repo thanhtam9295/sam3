@@ -35,7 +35,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
 def _steps_model(tmp: Path, params: dict[str, object], name: str = "seg") -> registry.ModelRecord:
     path = tmp / "model.json"
     step = PipelineStep(module="segment_classical", params=params)
-    path.write_text(json.dumps({"steps": [step.model_dump(mode="json")]}))
+    path.write_text(json.dumps({"steps": [step.model_dump(mode="json")]}), encoding="utf-8")
     return registry.register_model(name, "steps", path, author="tester")
 
 
@@ -43,7 +43,9 @@ def test_registry_versions_statuses_and_integrity(home: Path, tmp_path: Path) ->
     first = _steps_model(tmp_path, {"channel": 1})
     second = _steps_model(tmp_path, {"channel": 1, "method": "li"})
     assert (first.version, second.version, first.status) == (1, 2, "candidate")
-    assert first.path != second.path and first.path.read_text() != second.path.read_text()
+    assert first.path != second.path and first.path.read_text(
+        encoding="utf-8"
+    ) != second.path.read_text(encoding="utf-8")
     assert (
         registry.get_model("seg").version == 2
         and registry.get_model("seg", 1).sha256 == first.sha256
@@ -66,7 +68,7 @@ def test_registry_versions_statuses_and_integrity(home: Path, tmp_path: Path) ->
     with pytest.raises(ValueError, match="retired"):
         registry.resolve("registry:seg@1")
     os.chmod(second.path, 0o644)  # tamper with the stored file
-    second.path.write_text("{}")
+    second.path.write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="changed"):
         registry.resolve("registry:seg@2")
     with pytest.raises(ValueError, match="steps model, not cellpose"):
@@ -136,7 +138,7 @@ def test_pinned_model_reproduces_masks_and_manifest_records_it(home: Path, tmp_p
             pd.read_parquet(p) for p in sorted(folder.glob("wells/*/objects.parquet"))
         )
         return objects.reset_index(drop=True), json.loads(
-            (folder / "run_manifest.json").read_text()
+            (folder / "run_manifest.json").read_text(encoding="utf-8")
         )
 
     a, manifest = run(first.ref, "a")

@@ -83,10 +83,12 @@ def make_profile_run(
         d = folder / "wells" / well
         d.mkdir(parents=True)
         objects.to_parquet(d / "objects.parquet", index=False)
-        (d / "well_summary.json").write_text(json.dumps({"well": well, "fields": []}))
+        (d / "well_summary.json").write_text(
+            json.dumps({"well": well, "fields": []}), encoding="utf-8"
+        )
         lines.append(f"{well},{compound},{concentration or ''},,{control}")
         summary_rows.append({"well": well, "nuclei_count": cells, "readout_shift": shift})
-    (folder / "plate_layout.csv").write_text("\n".join(lines) + "\n")
+    (folder / "plate_layout.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
     (folder / "tables").mkdir()
     pd.DataFrame(summary_rows).to_csv(folder / "tables" / "per_well_summary.csv", index=False)
     manifest = {
@@ -94,7 +96,7 @@ def make_profile_run(
         "pipeline": {"name": "profile", "steps": []},
         "status": "completed",
     }
-    (folder / "run_manifest.json").write_text(json.dumps(manifest))
+    (folder / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     return folder
 
 
@@ -240,7 +242,7 @@ def test_profiling_two_plates(plates: tuple[Path, Path], tmp_path: Path) -> None
         else "figures/pca_scree.png",
     ):
         assert (folder / name).exists(), name
-    record = json.loads((folder / "profiling.json").read_text())
+    record = json.loads((folder / "profiling.json").read_text(encoding="utf-8"))
     assert record["options"]["seed"] == 0 and record["features_used"] == result.features
     again = load_profile(folder)
     assert again is not None and again.features == result.features
@@ -258,14 +260,14 @@ def test_profiling_is_reproducible(plates: tuple[Path, Path], tmp_path: Path) ->
 
 def test_profiling_without_controls(plates: tuple[Path, Path], tmp_path: Path) -> None:
     layout = plates[0] / "plate_layout.csv"
-    original = layout.read_text()
+    original = layout.read_text(encoding="utf-8")
     try:
-        layout.write_text(original.replace("negative", ""))
+        layout.write_text(original.replace("negative", ""), encoding="utf-8")
         result = run_profiling(
             [plates[0]], ProfileOptions(umap=False, figures=False, max_cells=500), tmp_path
         )
     finally:
-        layout.write_text(original)
+        layout.write_text(original, encoding="utf-8")
     assert any("no negative-control wells" in n for n in result.notes)
     assert result.wells.profile_distance_to_control.isna().all()
 
@@ -353,7 +355,7 @@ def test_cli_profile_results_and_report(plates: tuple[Path, Path], tmp_path: Pat
     ):
         pytest.skip("Node.js with Playwright is not available")
     script = tmp_path / "embed.js"
-    script.write_text(EMBED_SCRIPT)
+    script.write_text(EMBED_SCRIPT, encoding="utf-8")
     result = subprocess.run(
         ["node", str(script), (run / "index.html").as_uri()],
         capture_output=True,

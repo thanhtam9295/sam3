@@ -95,9 +95,9 @@ def test_cell_cycle_step_calibrates_on_vehicle_wells_and_gates_edu_and_ph3(tmp_p
         "cell_cycle_wells.csv",
         "report.html",
     }
-    calibration = json.loads((out / "calibration.json").read_text())
+    calibration = json.loads((out / "calibration.json").read_text(encoding="utf-8"))
     assert calibration["edu_threshold"] > 60 and calibration["params"]["edu_channel"] == "EdU"
-    assert "data:image/png;base64," in (out / "report.html").read_text()
+    assert "data:image/png;base64," in (out / "report.html").read_text(encoding="utf-8")
     phases = pd.read_parquet(tmp_path / "run" / "wells" / "A01" / "objects_annotations.parquet")
     assert set(phases["cc_phase"].dropna()) == set(PHASES) and "cc_dna_n" in phases
 
@@ -107,9 +107,9 @@ def test_warnings_for_max_projections_and_missing_layouts(tmp_path: Path) -> Non
         tmp_path / "run", {"A01": ("negative_control", VEHICLE), "A02": ("sample", ARRESTED)}
     )
     manifest_path = tmp_path / "run" / "run_manifest.json"
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["pipeline"]["steps"] = [{"module": "projection", "params": {"method": "max"}}]
-    manifest_path.write_text(json.dumps(manifest))
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     state = run_cycle(tmp_path / "run").steps[0]["state"]
     assert any("only a sum projection" in w for w in state["warnings"])
     (tmp_path / "run" / "plate_layout.json").unlink()
@@ -162,7 +162,7 @@ def test_preset_pipeline_measures_dna_content_from_images(home: Path) -> None:
             assert row[f"cc_{phase}_pct"] == pytest.approx(expected, abs=2.0), (well, phase)
             assert row[f"cc_edu_{phase}_pct"] == pytest.approx(expected, abs=1.0), (well, phase)
         assert row["cc_g1_cv_pct"] == pytest.approx(4.0, abs=0.6)
-    page = (result.folder / "index.html").read_text()
+    page = (result.folder / "index.html").read_text(encoding="utf-8")
     assert "assays/cell_cycle/report.html" in page
 
 
@@ -183,11 +183,15 @@ def test_command_line_preset_and_run(tmp_path: Path, home: Path) -> None:
     write_cycle_run(
         run, {"A01": ("negative_control", VEHICLE), "A02": ("sample", ARRESTED)}, n=1500
     )
-    (run / "wells" / "A01" / "well_summary.json").write_text(json.dumps({"well": "A01"}))
-    (run / "wells" / "A02" / "well_summary.json").write_text(json.dumps({"well": "A02"}))
-    manifest = json.loads((run / "run_manifest.json").read_text())
+    (run / "wells" / "A01" / "well_summary.json").write_text(
+        json.dumps({"well": "A01"}), encoding="utf-8"
+    )
+    (run / "wells" / "A02" / "well_summary.json").write_text(
+        json.dumps({"well": "A02"}), encoding="utf-8"
+    )
+    manifest = json.loads((run / "run_manifest.json").read_text(encoding="utf-8"))
     manifest["pipeline"] = {"name": "synthetic", "steps": []}
-    (run / "run_manifest.json").write_text(json.dumps(manifest))
+    (run / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     assert (
         main(["assay", "run", str(run), "cell_cycle", "--map", "dna=DAPI", "--reason", "test"]) == 0
     )
@@ -219,10 +223,12 @@ def test_assay_wizard_previews_and_applies(qtbot: Any, tmp_path: Path, home: Pat
         run, {"A01": ("negative_control", VEHICLE), "A02": ("sample", ARRESTED)}, n=1500
     )
     for well in ("A01", "A02"):
-        (run / "wells" / well / "well_summary.json").write_text(json.dumps({"well": well}))
-    manifest = json.loads((run / "run_manifest.json").read_text())
+        (run / "wells" / well / "well_summary.json").write_text(
+            json.dumps({"well": well}), encoding="utf-8"
+        )
+    manifest = json.loads((run / "run_manifest.json").read_text(encoding="utf-8"))
     manifest["plate"]["metadata"]["channels"] = [{"name": "DAPI"}, {"name": "EdU"}]
-    (run / "run_manifest.json").write_text(json.dumps(manifest))
+    (run / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     wizard = AssayWizard(run)
     qtbot.addWidget(wizard)
     assert wizard.assay.currentText() == "apoptosis"  # alphabetical

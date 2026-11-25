@@ -58,7 +58,7 @@ def test_qc_runs_before_segmentation_and_excludes_fields(home: Path) -> None:
     assert kinds.index("qc_finished") < kinds.index("well_started")  # before segmentation
     folder = result.folder
     assert {p.name for p in (folder / "qc").iterdir()} >= {"field_qc.parquet", "well_qc.csv"}
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["image_qc"]["excluded_fields"] == 6  # blur + bubble
     assert "qc" in manifest["pipeline"] and manifest["status"] == "completed"
 
@@ -77,7 +77,7 @@ def test_qc_runs_before_segmentation_and_excludes_fields(home: Path) -> None:
         measured = objects[(objects.well == well) & objects.field.isin(kept)]
         expected = int((measured.object_type == "nuclei").sum())
         assert row.get("nuclei_objects_measured", 0) == expected  # excluded fields left out
-    page = write_report(folder).read_text()
+    page = write_report(folder).read_text(encoding="utf-8")
     assert "Image QC" in page and "Excluded fields" in page and "blur (" in page
 
 
@@ -99,7 +99,7 @@ def test_a_plate_that_fails_qc_can_stop_the_run(home: Path) -> None:
     plate = open_plate(path)
     result = run_pipeline(plate, pipeline, output_root=home / "runs", events=events.append)
     assert "well_started" not in [e["type"] for e in events]
-    manifest = json.loads((result.folder / "run_manifest.json").read_text())
+    manifest = json.loads((result.folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "qc_failed" and not manifest["image_qc"]["passed"]
     assert events[-2]["status"] == "qc_failed"
 
@@ -155,7 +155,7 @@ def test_qc_of_a_384_well_plate_runs_in_the_queue_before_segmentation(home: Path
     qc = pd.read_parquet(folder / "qc" / "field_qc.parquet")
     assert len(qc) == 384
     assert set(qc.loc[qc.excluded, "well"]) == {well_name(*w) for w in blurred}
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     wall = manifest["performance"]["wall_s"]
     assert wall["image_qc"] == manifest["image_qc"]["seconds"] < wall["total"]
 
@@ -174,7 +174,7 @@ def _write_qc(folder: Path, failed: dict[str, str], flags: dict[str, str] | None
     ).to_csv(qc / "well_qc.csv", index=False)
     plate = {"passed": True, "reasons": [], "fields": 0, "excluded_fields": 0,
              "rules": {"name": "test", "version": 1, "sha256": "x"}}  # fmt: skip
-    (qc / "plate_qc.json").write_text(json.dumps(plate))
+    (qc / "plate_qc.json").write_text(json.dumps(plate), encoding="utf-8")
 
 
 def test_wells_failing_image_qc_leave_ic50_fits_and_are_listed(tmp_path: Path) -> None:
@@ -219,7 +219,7 @@ def test_wells_failing_image_qc_leave_ic50_fits_and_are_listed(tmp_path: Path) -
     listed = pd.read_csv(run / "pharmacology" / "excluded_wells.csv")
     reasons = listed.set_index("well").loc[bad, "exclusion_reason"]
     assert reasons.str.startswith("image QC: blur").all()
-    page = (run / "pharmacology" / "pharmacology_report.html").read_text()
+    page = (run / "pharmacology" / "pharmacology_report.html").read_text(encoding="utf-8")
     assert all(w in page for w in bad) and "image QC: blur" in page
 
 

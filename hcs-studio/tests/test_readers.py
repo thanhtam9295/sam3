@@ -256,7 +256,7 @@ def test_tiff_folder_with_pattern(tmp_path: Path) -> None:
         for f in range(2):
             for c in range(2):
                 tifffile.imwrite(tmp_path / f"{well}_f{f + 1}_c{c + 1}.tif", plane(row, col, f, c))
-    (tmp_path / "notes.txt").write_text("ignored")
+    (tmp_path / "notes.txt").write_text("ignored", encoding="utf-8")
     assert detect_reader(tmp_path).vendor == "TIFF"  # type: ignore[union-attr]
     plate = open_plate(tmp_path)
     assert sorted(plate.wells) == [(0, 0), (1, 2)] and plate.shape_tczyx == (1, 2, 1, *SHAPE)
@@ -318,7 +318,7 @@ def test_ome_zarr_plate(tmp_path: Path) -> None:
 
 
 def test_unrecognised_folder(tmp_path: Path) -> None:
-    (tmp_path / "readme.txt").write_text("hello")
+    (tmp_path / "readme.txt").write_text("hello", encoding="utf-8")
     assert detect_reader(tmp_path) is None
     with pytest.raises(ReaderError, match="Could not recognise"):
         open_plate(tmp_path)

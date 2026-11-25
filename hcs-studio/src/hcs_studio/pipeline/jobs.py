@@ -50,9 +50,15 @@ def _exit_with_parent(parent: int) -> None:
         # Windows never re-parents orphans (getppid() keeps the dead parent's id): wait on a
         # handle to the parent, opened now so that a reused process id cannot fool the watch.
         import ctypes
+        from ctypes import wintypes
 
         synchronize, infinite = 0x00100000, 0xFFFFFFFF
         kernel32 = ctypes.windll.kernel32
+        # HANDLE is pointer-sized: ctypes' default C int would truncate it on 64-bit Windows
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
         handle = kernel32.OpenProcess(synchronize, False, parent)
         if not handle:  # the parent is already gone
             os._exit(3)

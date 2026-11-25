@@ -82,7 +82,7 @@ def test_compare_tab(window: MainWindow, qtbot: QtBot, tmp_path: Path) -> None:
     assert crop[2] - crop[0] < 32  # smaller than the field
 
     out = panel.export_to(tmp_path / "figure.png")
-    sidecar = json.loads((tmp_path / "figure.png.json").read_text())
+    sidecar = json.loads((tmp_path / "figure.png.json").read_text(encoding="utf-8"))
     assert out.exists() and len(sidecar["comparison"]["panels"]) == 12
     assert sidecar["comparison"]["panels"][3]["display"] is not None
 

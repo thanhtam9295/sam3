@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Windows
+- First Windows test run (575 tests passed, 20 failed). Fixed: peak memory was never reported
+  on Windows (a 64-bit handle was truncated); rooted paths resolve for another operating system
+  with `paths.resolve_text`. The rest were test problems (tests read the app's UTF-8 reports with
+  the Windows code page, POSIX-only paths, a subprocess without SYSTEMROOT, data roots without a
+  Windows location); a test now requires an explicit encoding for every text file.
+- When the graphics driver cannot give the image viewer OpenGL (remote desktop, virtual
+  machines), the app switches to software rendering and starts again instead of crashing
+  (docs/troubleshooting.md).
 - Fixed: on Windows a job kept running after its worker or the app was killed (it went on
   writing to a run folder that was being resumed elsewhere); it now stops with its parent, as on
   Linux and macOS.

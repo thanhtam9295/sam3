@@ -340,7 +340,7 @@ def test_matches_graphpad_prism(case: Path) -> None:
     """Prism reference: <name>.csv (X = log10 concentration or concentration, Y1…Yn) and
     <name>.json {"log_ec50" | "ec50", "hill", "x_is_log": bool}. Done when: EC50 within
     5 %, Hill within 0.1."""
-    expected = json.loads(case.read_text())
+    expected = json.loads(case.read_text(encoding="utf-8"))
     table = pd.read_csv(case.with_suffix(".csv"))
     x = table.iloc[:, 0].to_numpy(float)
     conc = 10**x if expected.get("x_is_log", True) else x
@@ -361,7 +361,7 @@ def test_matches_synergyfinder(case: Path) -> None:
     """SynergyFinder reference: <name>.csv (rows drug A conc, columns drug B conc, values %
     inhibition, 0 row/column included) and <name>.json {"bliss": score, "hsa": …,
     "loewe": …, "zip": …, "tolerance": 1.0}."""
-    expected = json.loads(case.read_text())
+    expected = json.loads(case.read_text(encoding="utf-8"))
     table = pd.read_csv(case.with_suffix(".csv"), index_col=0)
     result = score_matrix(
         matrix_from_values(
@@ -413,10 +413,10 @@ def test_full_report_from_a_384_well_combo_plate_in_under_a_minute(tmp_path: Pat
     assert {"nuclei_count__percent_inhibition", "pct_caspase_positive__excluded"} <= set(
         wells.columns
     )
-    report = (out / "pharmacology_report.html").read_text()
+    report = (out / "pharmacology_report.html").read_text(encoding="utf-8")
     for text in ("Plate QC", "Dose–response", "Combinations", "Methods", "data:image/png"):
         assert text in report
-    info = json.loads((out / "pharmacology.json").read_text())
+    info = json.loads((out / "pharmacology.json").read_text(encoding="utf-8"))
     assert info["options"]["readouts"] == ["nuclei_count", "pct_caspase_positive"]
     assert "figures/combination_nuclei_count_MCF7_Drug-A_x_Drug-B.svg" in info["files"]
     assert result.folder == out

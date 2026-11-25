@@ -102,7 +102,7 @@ def test_parallel_run_matches_sequential(plate_dir: Path, tmp_path: Path) -> Non
     last = [e for e in events if e["type"] == "field_done"][-1]
     assert last["done"] == last["total"] == 12 and last["eta_s"] == pytest.approx(0)
     assert next(e for e in events if e["type"] == "finished")["status"] == "completed"
-    assert "with 2 worker(s)" in (two.folder / "logs" / "run.log").read_text()
+    assert "with 2 worker(s)" in (two.folder / "logs" / "run.log").read_text(encoding="utf-8")
 
 
 def test_cancel_then_resume_skips_completed_wells(plate_dir: Path, tmp_path: Path) -> None:
@@ -119,7 +119,10 @@ def test_cancel_then_resume_skips_completed_wells(plate_dir: Path, tmp_path: Pat
     )
     folder = first.folder
     assert first.cancelled and first.fields_written == 4
-    assert json.loads((folder / "run_manifest.json").read_text())["status"] == "cancelled"
+    assert (
+        json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))["status"]
+        == "cancelled"
+    )
     done_before = _summary_times(folder)
     assert sorted(done_before) == ["A01", "A02"]
     fitted = (folder / "state" / "fitted.pkl").stat().st_mtime_ns
@@ -129,7 +132,7 @@ def test_cancel_then_resume_skips_completed_wells(plate_dir: Path, tmp_path: Pat
     after = _summary_times(folder)
     assert {w: after[w] for w in done_before} == done_before, "completed wells were redone"
     assert (folder / "state" / "fitted.pkl").stat().st_mtime_ns == fitted  # estimates reused
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "completed" and [h["status"] for h in manifest["history"]] == [
         "cancelled",
         "completed",
@@ -161,7 +164,7 @@ def test_forced_kill_then_cli_resume(plate_dir: Path, tmp_path: Path) -> None:
     """Acceptance: an unattended run resumes after a forced kill."""
     slow = PIPELINE.replace("steps:\n", "steps:\n  - {module: denoise, params: {method: nlm}}\n")
     pipeline_file = tmp_path / "slow.yaml"
-    pipeline_file.write_text(slow)
+    pipeline_file.write_text(slow, encoding="utf-8")
     out = tmp_path / "out"
     command = [
         sys.executable,
@@ -202,13 +205,16 @@ def test_forced_kill_then_cli_resume(plate_dir: Path, tmp_path: Path) -> None:
     assert folder is not None, "no well finished before the deadline"
     done_before = _summary_times(folder)
     assert 1 <= len(done_before) < 6, "the run should have been interrupted part-way"
-    assert json.loads((folder / "run_manifest.json").read_text())["status"] == "running"
+    assert (
+        json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))["status"]
+        == "running"
+    )
 
     assert main(["run", "--resume", str(folder), "--workers", "2", "--no-checksums"]) == 0
     after = _summary_times(folder)
     assert sorted(after) == ["A01", "A02", "A03", "B01", "B02", "B03"]
     assert {w: after[w] for w in done_before} == done_before
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "completed" and len(manifest["history"]) == 2
     assert manifest["history"][0].get("status") is None  # the killed attempt never finished
     full = tmp_path / "full"
@@ -240,7 +246,7 @@ def test_retry_failed_wells(
     good = victim.read_bytes()
     victim.write_bytes(b"broken")
     pipeline_file = tmp_path / "p.yaml"
-    pipeline_file.write_text(PIPELINE.replace("min_fields: 4", "min_fields: 2"))
+    pipeline_file.write_text(PIPELINE.replace("min_fields: 4", "min_fields: 2"), encoding="utf-8")
     out = tmp_path / "out"
     assert (
         main(
@@ -258,7 +264,9 @@ def test_retry_failed_wells(
         == 1
     )
     folder = next(out.iterdir())
-    assert list(json.loads((folder / "run_manifest.json").read_text())["failed_wells"]) == ["B02"]
+    assert list(
+        json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))["failed_wells"]
+    ) == ["B02"]
     capsys.readouterr()
     victim.write_bytes(good)
     before = _summary_times(folder)
@@ -267,7 +275,7 @@ def test_retry_failed_wells(
     assert "Fields written: 2" in printed
     after = _summary_times(folder)
     assert after["B02"] != before["B02"] and after["A01"] == before["A01"]
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["failed_wells"] == {} and manifest["status"] == "completed"
     assert main(["run", "--retry-failed", str(folder)]) == 0
     assert "No failed wells" in capsys.readouterr().out
@@ -279,7 +287,7 @@ def test_cli_multiple_plates_and_workers(
     other = make_imagexpress(tmp_path / "raw" / "ix2", [(0, 0)], n_sites=2, image_fn=_image)
     pipeline_file = tmp_path / "p.yaml"
     pipeline_file.write_text(
-        "name: seg\nsteps: [{module: segment_classical, params: {channel: 1}}]"
+        "name: seg\nsteps: [{module: segment_classical, params: {channel: 1}}]", encoding="utf-8"
     )
     code = main(
         [

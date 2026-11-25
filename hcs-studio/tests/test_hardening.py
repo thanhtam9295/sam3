@@ -49,7 +49,9 @@ def test_run_records_timing_and_performance(plate_dir: Path, tmp_path: Path) -> 
     result = run_pipeline(
         open_plate(plate_dir), Pipeline.from_text(PIPELINE), output_root=tmp_path, checksums=False
     )
-    summary = json.loads((result.folder / "wells" / "A01" / "well_summary.json").read_text())
+    summary = json.loads(
+        (result.folder / "wells" / "A01" / "well_summary.json").read_text(encoding="utf-8")
+    )
     timing = summary["timing"]
     assert timing["total_s"] > 0 and timing["worker_peak_memory_mb"] > 10
     assert set(timing["steps_s"]) == {
@@ -59,7 +61,7 @@ def test_run_records_timing_and_performance(plate_dir: Path, tmp_path: Path) -> 
         "4 measure_objects",
         "5 qc",
     }
-    manifest = json.loads((result.folder / "run_manifest.json").read_text())
+    manifest = json.loads((result.folder / "run_manifest.json").read_text(encoding="utf-8"))
     performance = manifest["performance"]
     assert performance["fields"] == 12 and performance["wells"] == 6
     assert performance["summed_s"]["4 measure_objects"] > 0
@@ -126,7 +128,7 @@ def test_disk_full_stops_the_run_and_it_resumes(
     with pytest.raises(OSError, match="output disk is full"):
         run_pipeline(plate, Pipeline.from_text(PIPELINE), output_root=tmp_path / "out")
     folder = next((tmp_path / "out").iterdir())
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "failed"
     done = [
         w
@@ -163,7 +165,7 @@ def test_ctrl_c_stops_cleanly_and_resumes(plate_dir: Path, tmp_path: Path) -> No
         pytest.skip("SIGINT to a child process is a POSIX test")
     slow = PIPELINE.replace("steps:\n", "steps:\n  - {module: denoise, params: {method: nlm}}\n")
     pipeline_file = tmp_path / "slow.yaml"
-    pipeline_file.write_text(slow)
+    pipeline_file.write_text(slow, encoding="utf-8")
     out = tmp_path / "out"
     process = subprocess.Popen(
         [
@@ -191,7 +193,7 @@ def test_ctrl_c_stops_cleanly_and_resumes(plate_dir: Path, tmp_path: Path) -> No
     assert process.returncode == 130, output
     assert "Stopping after the current field" in output and "--resume" in output
     folder = next(out.iterdir())
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "cancelled"
     assert main(["run", "--resume", str(folder), "--no-checksums"]) == 0
 
@@ -239,6 +241,39 @@ def test_gui_error_handler_logs_and_keeps_running(
     for handler in logging.getLogger("hcs_studio").handlers:
         handler.flush()
     assert "boom in a slot" in app_log_path().read_text(encoding="utf-8")
+
+
+def test_viewer_without_opengl_switches_to_software_rendering(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On a PC whose graphics driver gives napari no OpenGL context (remote desktop, virtual
+    machines; the GitHub Windows runners), the next start uses Qt's software OpenGL."""
+    pytest.importorskip("PySide6")
+    if not (os.environ.get("DISPLAY") or sys.platform in ("win32", "darwin")):
+        pytest.skip("needs a display")
+    from hcs_studio.gui import launch
+
+    monkeypatch.setenv("HCS_STUDIO_HOME", str(tmp_path))
+    monkeypatch.delenv(launch.SOFTWARE_GL_ENV, raising=False)
+    gl_error = type("GLError", (Exception,), {"__module__": "OpenGL.error"})
+    assert launch.is_opengl_error(gl_error("invalid operation"))
+    assert not launch.is_opengl_error(RuntimeError("unrelated"))
+    wrapped = RuntimeError("viewer")
+    wrapped.__cause__ = gl_error("1282")
+    assert launch.is_opengl_error(wrapped)
+
+    def no_opengl() -> None:
+        raise gl_error("err = 1282, glGetIntegerv GL_MAX_TEXTURE_SIZE")
+
+    monkeypatch.setattr(launch, "MainWindow", no_opengl)
+    assert not launch.use_software_opengl()
+    assert launch.run_gui(smoke_test=True) == 5
+    assert launch.use_software_opengl()  # remembered for the next start
+    monkeypatch.setenv(launch.SOFTWARE_GL_ENV, "0")
+    assert not launch.use_software_opengl()
+    monkeypatch.setenv(launch.SOFTWARE_GL_ENV, "1")
+    with pytest.raises(gl_error):  # already in software mode: the error is not hidden
+        launch.run_gui(smoke_test=True)
 
 
 def test_user_guide_builds_as_html(tmp_path: Path) -> None:

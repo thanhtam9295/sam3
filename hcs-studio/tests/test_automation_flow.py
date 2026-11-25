@@ -34,6 +34,17 @@ PIPELINE = Pipeline(
 WELLS = [(0, c) for c in range(6)]  # A01, A02 vehicle; A03, A04 samples; A05, A06 positive
 
 
+def _decoded(raw: str) -> str:
+    """Headers + decoded text body: quoted-printable wraps long lines (e.g. Windows paths)."""
+    import email
+    from email import policy
+
+    message = email.message_from_string(raw, policy=policy.default)
+    headers = "".join(f"{key}: {value}\n" for key, value in message.items())
+    parts = [part for part in message.walk() if part.get_content_maintype() == "text"]
+    return headers + "\n" + "\n".join(str(part.get_content()) for part in parts)
+
+
 class Mailbox(socketserver.ThreadingTCPServer):
     """A tiny SMTP server that keeps the messages it receives."""
 
@@ -74,7 +85,7 @@ class _SmtpHandler(socketserver.StreamRequestHandler):
                         break
                     body.append(data)
                 assert isinstance(self.server, Mailbox)
-                self.server.messages.append({"to": recipients, "data": "".join(body)})
+                self.server.messages.append({"to": recipients, "data": _decoded("".join(body))})
                 say("250 queued")
             elif verb == "QUIT":
                 say("221 bye")
@@ -128,7 +139,7 @@ def lab(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, A
     dispose_engines()
     config = tmp_path / "config"
     config.mkdir()
-    (config / "basic.yaml").write_text(yaml.safe_dump(PIPELINE))
+    (config / "basic.yaml").write_text(yaml.safe_dump(PIPELINE), encoding="utf-8")
     failing = QcRules(
         name="always fails",
         field=[FieldRule(flag="too_bright", metric="p50", above=0, description="test")],
@@ -153,7 +164,7 @@ def lab(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, A
             },
         ]
     }
-    (config / "routing.yaml").write_text(yaml.safe_dump(routing))
+    (config / "routing.yaml").write_text(yaml.safe_dump(routing), encoding="utf-8")
     mailbox = Mailbox()
     threading.Thread(target=mailbox.serve_forever, daemon=True).start()
     for name in ("exports", "inbox", "outbox", "results"):
@@ -210,7 +221,9 @@ def _outbox(root: Path) -> list[dict[str, Any]]:
 
     events = []
     for path in sorted((root / "outbox").glob("*.json")):
-        events.append(validate(json.loads(path.read_text())))  # every outgoing event is valid
+        events.append(
+            validate(json.loads(path.read_text(encoding="utf-8")))
+        )  # every outgoing event is valid
     return events
 
 
@@ -285,7 +298,7 @@ def test_failing_qc_requests_reimaging(lab: dict[str, Any]) -> None:
     import os
 
     inbox = root / "inbox" / "event.json"
-    inbox.write_text(json.dumps(event))
+    inbox.write_text(json.dumps(event), encoding="utf-8")
     os.utime(inbox, (time.time() - 10, time.time() - 10))
     queue = LocalJobQueue(persist=False)
     try:
@@ -359,7 +372,7 @@ def test_unrouted_and_waiting_data(lab: dict[str, Any]) -> None:
 
 
 def test_routing_rules(tmp_path: Path) -> None:
-    (tmp_path / "p.yaml").write_text(yaml.safe_dump(PIPELINE))
+    (tmp_path / "p.yaml").write_text(yaml.safe_dump(PIPELINE), encoding="utf-8")
     routing = Routing(
         base=str(tmp_path),
         rules=[
@@ -379,7 +392,8 @@ def test_routing_rules(tmp_path: Path) -> None:
     assert any("missing.yaml does not exist" in p for p in problems)
     assert any("after default: never used" in p for p in problems)
     (tmp_path / "r.yaml").write_text(
-        yaml.safe_dump({"rules": [{"name": "d", "default": True, "pipeline": "p.yaml"}]})
+        yaml.safe_dump({"rules": [{"name": "d", "default": True, "pipeline": "p.yaml"}]}),
+        encoding="utf-8",
     )
     assert check_routing(load_routing(tmp_path / "r.yaml")) == []
     with pytest.raises(ValueError):

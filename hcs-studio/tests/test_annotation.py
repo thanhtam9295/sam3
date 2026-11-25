@@ -254,8 +254,8 @@ def test_round_trip_csv_xlsx_platemap_json(tmp_path: Path) -> None:
         assert again == layout, name
         save_layout(again, tmp_path / f"again_{name}")
         assert load_layout(tmp_path / f"again_{name}").layout == layout
-    first = (tmp_path / "layout.csv").read_text()
-    assert first == (tmp_path / "again_layout.csv").read_text()  # byte-identical
+    first = (tmp_path / "layout.csv").read_text(encoding="utf-8")
+    assert first == (tmp_path / "again_layout.csv").read_text(encoding="utf-8")  # byte-identical
     write_platemap_xlsx(layout, tmp_path / "map.xlsx")
     assert load_layout(tmp_path / "map.xlsx").layout == layout
 
@@ -386,7 +386,7 @@ def test_layout_in_a_run_and_annotate(tmp_path: Path) -> None:
         plate, pipeline, output_root=tmp_path / "out", layout=layout, checksums=False
     )
     folder = result.folder
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["layout"]["wells"] == 6 and len(manifest["layout"]["sha256"]) == 64
     summary = pd.read_csv(folder / "tables" / "per_well_summary.csv").set_index("well")
     assert list(summary.columns[:3]) == ["cell_line", "role", "compound_1"]
@@ -404,9 +404,9 @@ def test_layout_in_a_run_and_annotate(tmp_path: Path) -> None:
     annotate_run(folder, renamed)
     summary = pd.read_csv(folder / "tables" / "per_well_summary.csv").set_index("well")
     assert summary.loc["B02", "compound_1"] == "Olaparib"
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert len(manifest["layout_history"]) == 1
-    assert "Olaparib" in (folder / "index.html").read_text()
+    assert "Olaparib" in (folder / "index.html").read_text(encoding="utf-8")
     with pytest.raises(ValueError, match="unstained or blank"):
         annotate_run(folder, unstained)
     rows = annotation_rows(renamed)

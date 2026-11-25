@@ -65,7 +65,7 @@ def test_time_lapse_run_counts_drift_and_time_course(home: Path) -> None:
     folder = run_pipeline(open_plate(path), pipeline, output_root=home / "runs", layout=layout,
                           save_images=False).folder  # fmt: skip
 
-    manifest = json.loads((folder / "run_manifest.json").read_text())["plate"]
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))["plate"]
     assert manifest["time_source"] == "instrument" and manifest["time_points_s"] == list(times)
     course = pd.read_parquet(folder / "tables" / "time_course.parquet")
     assert len(course) == 15
@@ -78,7 +78,9 @@ def test_time_lapse_run_counts_drift_and_time_course(home: Path) -> None:
             [1.5 + t / 3600 for t in times]
         )
         assert rows["confluence_pct"].notna().all()
-        record = json.loads((folder / "wells" / well / "well_summary.json").read_text())
+        record = json.loads(
+            (folder / "wells" / well / "well_summary.json").read_text(encoding="utf-8")
+        )
         drift = record["fields"][0]["drift"]
         for got, data_t in zip(drift["shifts_px"], data["fields"]["1"]["timepoints"], strict=True):
             # the correction moves each time point back: minus the drift drawn
@@ -109,7 +111,9 @@ def test_confluence_accuracy_from_texture(home: Path) -> None:
         expected = data["fields"]["1"]["cells"]["confluence_pct"]
         got = summary.loc[well, "confluence_pct"]
         assert abs(got - expected) <= max(1.0, 0.12 * expected), (well, expected, got)
-    fitted = json.loads((folder / "run_manifest.json").read_text())["fitted_state"][0]
+    fitted = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))["fitted_state"][
+        0
+    ]
     assert fitted["module"] == "confluence" and fitted["texture"] > 2 * fitted["noise"]
 
 

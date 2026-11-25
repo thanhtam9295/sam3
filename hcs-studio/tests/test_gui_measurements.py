@@ -77,7 +77,7 @@ def test_tables_cytofluorogram_map_and_export(
     assert "colocalization map (nMDP)" in window.viewer_panel.viewer.layers
 
     panel.export(tmp_path / "fiji")
-    saved = json.loads((tmp_path / "fiji" / "hcs_studio_results.json").read_text())
+    saved = json.loads((tmp_path / "fiji" / "hcs_studio_results.json").read_text(encoding="utf-8"))
     assert saved["results"]["pearson"] == pytest.approx(panel.last_result.pearson)
     assert saved["channel_a"] == "DAPI" and "Run coloc2_compare.ijm" in panel.result_text.text()
 

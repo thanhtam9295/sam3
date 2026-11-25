@@ -60,7 +60,7 @@ def test_rules_round_trip_and_validation(tmp_path: Path) -> None:
     path = save_rules(rules, tmp_path / "rules.yaml")
     again = load_rules(path)
     assert again == rules and again.sha256() == rules.sha256()
-    assert "schema: hcs-studio-qc-rules/1" in path.read_text()
+    assert "schema: hcs-studio-qc-rules/1" in path.read_text(encoding="utf-8")
     with pytest.raises(ValueError, match="Unknown QC metric"):
         FieldRule(flag="x", metric="sharpness", above=1)
     with pytest.raises(ValueError, match="no condition"):
@@ -194,12 +194,12 @@ def test_command_line_writes_qc_files_and_records_the_run(tmp_path: Path) -> Non
     path, truth = qc_plate(tmp_path / "raw", per_kind=2, clean=8, kinds=("blur", "bubble"))
     rules_file = tmp_path / "rules.yaml"
     assert main(["qc", "--write-rules", str(rules_file)]) == 0
-    text = rules_file.read_text()
+    text = rules_file.read_text(encoding="utf-8")
     assert "null" not in text
     text = text.replace(
         "nucleus_diameter_um: 10.0", f"nucleus_diameter_um: {truth['nucleus_diameter_um']}"
     )
-    rules_file.write_text(text)
+    rules_file.write_text(text, encoding="utf-8")
     code = main(["qc", str(path), "--output", str(tmp_path / "out"), "--rules", str(rules_file),
                  "--reason", "new plate"])  # fmt: skip
     assert code == 0

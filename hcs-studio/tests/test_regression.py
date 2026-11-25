@@ -73,7 +73,7 @@ def test_counts_match_the_truth_in_every_well(run: Path) -> None:
 
 
 def test_run_steps_and_outputs(run: Path) -> None:
-    manifest = json.loads((run / "run_manifest.json").read_text())
+    manifest = json.loads((run / "run_manifest.json").read_text(encoding="utf-8"))
     steps = {s["module"]: s for s in manifest["run_steps"]}
     assert [s["status"] for s in manifest["run_steps"]] == ["completed"] * 3, steps
     assert manifest["status"] == "completed"
@@ -93,7 +93,7 @@ def test_run_steps_and_outputs(run: Path) -> None:
         "experiment_report/montages/Drug-A.png",
     ):
         assert (run / name).exists(), name
-    report = (run / "experiment_report" / "experiment_report.html").read_text()
+    report = (run / "experiment_report" / "experiment_report.html").read_text(encoding="utf-8")
     for text in (
         "Plate layout",
         "Quality control",
@@ -151,10 +151,10 @@ def test_matches_the_baseline(run: Path) -> None:
     values = _results(run)
     if os.environ.get("HCS_UPDATE_BASELINE") or not BASELINE.exists():
         BASELINE.parent.mkdir(parents=True, exist_ok=True)
-        BASELINE.write_text(json.dumps(values, indent=1, sort_keys=True))
+        BASELINE.write_text(json.dumps(values, indent=1, sort_keys=True), encoding="utf-8")
         if not os.environ.get("HCS_UPDATE_BASELINE"):
             pytest.skip("baseline written for the first time")
-    baseline = json.loads(BASELINE.read_text())
+    baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     assert set(values) == set(baseline)
     for key, value in baseline.items():
         if math.isfinite(value):
@@ -215,7 +215,7 @@ def test_index_html_pharmacology_offline(run: Path, tmp_path: Path) -> None:
     """index.html: plate coloured by annotation, normalized readouts, curves and heat maps
     whose points and cells open their wells, links to reports and montages — offline."""
     script = tmp_path / "check.js"
-    script.write_text(BROWSER)
+    script.write_text(BROWSER, encoding="utf-8")
     result = subprocess.run(
         ["node", str(script), (run / "index.html").as_uri()],
         capture_output=True,

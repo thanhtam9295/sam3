@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -48,6 +49,7 @@ server:/export /mnt/lab nfs4 rw 0 0
 """
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Linux/macOS mount tables")
 def test_sqlite_on_a_network_share_is_refused() -> None:
     mounts = db._linux_mounts(MOUNTS)
     assert db.filesystem_type(Path("/mnt/lab/x/r.sqlite"), mounts) == "nfs4"
@@ -59,6 +61,16 @@ def test_sqlite_on_a_network_share_is_refused() -> None:
         db.check_local_disk(Path("/mnt/lab/registry.sqlite"), mounts)
     mac = db._mac_mounts("//me@nas/lab on /Volumes/lab (smbfs, nodev, nosuid)\n")
     assert mac == [("/Volumes/lab", "smbfs")]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows drives and UNC paths")
+def test_sqlite_on_a_windows_share_is_refused(tmp_path: Path) -> None:
+    assert db.is_network_path(Path(r"\\LabServer\Screening\registry.sqlite"))
+    assert db.is_network_path(Path("//LabServer/Screening/registry.sqlite"))
+    assert not db.is_network_path(tmp_path / "registry.sqlite")  # the runner's local disk
+    with pytest.raises(db.NetworkDatabaseError, match="server mode"):
+        db.check_local_disk(Path(r"\\LabServer\Screening\registry.sqlite"))
+    db.check_local_disk(tmp_path / "registry.sqlite")
 
 
 def test_database_url_from_settings_and_environment(

@@ -72,7 +72,7 @@ def test_2x6_linked_comparison_png_scale_bars(run: Path, tmp_path: Path) -> None
     assert (comparison.rows, comparison.cols, len(comparison.panels)) == (2, 6, 12)
     assert comparison.linked and not comparison.unlinked()
     path = export_figure(comparison, tmp_path / "cmp.png")
-    sidecar = json.loads((tmp_path / "cmp.png.json").read_text())
+    sidecar = json.loads((tmp_path / "cmp.png.json").read_text(encoding="utf-8"))
     pixels = np.asarray(Image.open(path).convert("RGB")).astype(int)
     magenta = (pixels[..., 0] > 200) & (pixels[..., 1] < 60) & (pixels[..., 2] > 200)
     panels = sidecar["geometry"]["panels"]
@@ -97,8 +97,8 @@ def test_2x6_linked_comparison_png_scale_bars(run: Path, tmp_path: Path) -> None
 def test_2x6_comparison_svg_scale_bars_and_text(run: Path, tmp_path: Path) -> None:
     comparison = _two_by_six(run, "svg")
     path = export_figure(comparison, tmp_path / "cmp.svg")
-    svg = path.read_text()
-    sidecar = json.loads((tmp_path / "cmp.svg.json").read_text())
+    svg = path.read_text(encoding="utf-8")
+    sidecar = json.loads((tmp_path / "cmp.svg.json").read_text(encoding="utf-8"))
     for info in sidecar["geometry"]["panels"]:
         gid = info["scale_bar"]["gid"]
         group = re.search(rf'<g id="{gid}">(.*?)</g>', svg, re.S)
@@ -117,7 +117,7 @@ def test_sidecar_regenerates_a_pixel_identical_png(run: Path, tmp_path: Path) ->
     comparison = _two_by_six(run)
     comparison.panels[0].overlays = ["nuclei"]
     first = export_figure(comparison, tmp_path / "a.png")
-    sidecar = json.loads((tmp_path / "a.png.json").read_text())
+    sidecar = json.loads((tmp_path / "a.png.json").read_text(encoding="utf-8"))
     assert sidecar["format"] == "hcs-studio-figure/1"
     assert all(p["field"] is not None for p in sidecar["comparison"]["panels"])
     assert sidecar["checksums"] and all(len(v) == 64 for v in sidecar["checksums"].values())
@@ -154,8 +154,10 @@ def test_unlinked_contrast_is_flagged_and_crop_applies(run: Path, tmp_path: Path
     comparison.panels[3].display = brighter
     comparison = comparison.model_copy(update={"crop": (4.0, 4.0, 20.0, 24.0)})  # µm
     path = export_figure(comparison, tmp_path / "unlinked.svg")
-    assert path.read_text().count("⚠ contrast unlinked") == 1
-    info = json.loads((tmp_path / "unlinked.svg.json").read_text())["geometry"]["panels"][0]
+    assert path.read_text(encoding="utf-8").count("⚠ contrast unlinked") == 1
+    info = json.loads((tmp_path / "unlinked.svg.json").read_text(encoding="utf-8"))["geometry"][
+        "panels"
+    ][0]
     assert info["image_px"] == [40, 32]  # 20 × 16 µm at 0.5 µm per pixel
 
 
@@ -168,7 +170,7 @@ def test_split_channels_and_headers(run: Path, tmp_path: Path) -> None:
     assert len(rendered.panels) == 12 * 3  # DAPI, GFP, merge per well
     assert {p["channel"] for p in rendered.panels} == {0, 1, None}
     path = export_figure(split, tmp_path / "split.svg")
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert text.count(">merge<") == 6 and "DAPI" in text
 
 
@@ -201,9 +203,9 @@ def test_representative_field(tmp_path: Path) -> None:
     well = tmp_path / "wells" / "A01"
     well.mkdir(parents=True)
     (well / "well_summary.json").write_text(
-        json.dumps({"fields": [{"field": f} for f in (1, 2, 3)]})
+        json.dumps({"fields": [{"field": f} for f in (1, 2, 3)]}), encoding="utf-8"
     )
-    (well / "fields.csv").write_text("field,n_nuclei\n1,10\n2,52\n3,90\n")
+    (well / "fields.csv").write_text("field,n_nuclei\n1,10\n2,52\n3,90\n", encoding="utf-8")
     assert representative_field(tmp_path, "A01", "n_nuclei") == 2  # closest to the median
     assert representative_field(tmp_path, "A01", None) == 1  # nothing to measure → first
 
@@ -248,9 +250,12 @@ def test_data_export(run: Path, tmp_path: Path) -> None:
     assert len(tiffs) == 2
     data = tifffile.imread(tiffs[0])
     assert data.dtype == np.uint16 and data.squeeze().shape == (2, 32, 32)
-    table = (tmp_path / "data" / "panels_readouts.csv").read_text()
+    table = (tmp_path / "data" / "panels_readouts.csv").read_text(encoding="utf-8")
     assert "nuclei_count" in table and "B06" in table
-    assert json.loads((tmp_path / "data" / "panels.json").read_text())["kind"] == "data"
+    assert (
+        json.loads((tmp_path / "data" / "panels.json").read_text(encoding="utf-8"))["kind"]
+        == "data"
+    )
 
 
 def test_movies(run: Path, tmp_path: Path) -> None:
@@ -262,7 +267,7 @@ def test_movies(run: Path, tmp_path: Path) -> None:
     mp4 = export_movie(comparison, tmp_path / "z.mp4")
     frames, _ = imageio_ffmpeg.count_frames_and_secs(str(mp4))
     assert frames == 5
-    assert json.loads((tmp_path / "z.mp4.json").read_text())["frames"] == 5
+    assert json.loads((tmp_path / "z.mp4.json").read_text(encoding="utf-8"))["frames"] == 5
 
 
 def test_presets_and_batch(run: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -452,7 +457,7 @@ def test_review_fixes_layout_cache_unit_order_context_and_folder_fingerprint(
     )
     sources.clear_cache()
     export_figure(raw, tmp_path / "raw.png")
-    sidecar = json.loads((tmp_path / "raw.png.json").read_text())
+    sidecar = json.loads((tmp_path / "raw.png.json").read_text(encoding="utf-8"))
     assert any(v.startswith("tree:") for v in sidecar["checksums"].values())
     store = Path(next(k for k, v in sidecar["checksums"].items() if v.startswith("tree:")))
     chunk = next(p for p in store.rglob("*") if p.is_file() and p.name == "0.0.0.0")

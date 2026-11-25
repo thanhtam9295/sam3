@@ -155,7 +155,8 @@ def test_checkpoints_catch_a_rewritten_chain(home: Path) -> None:
     files = audit.checkpoint_files()
     assert (
         files[0].exists()
-        and json.loads(files[0].read_text().splitlines()[-1])["hash"] == head["hash"]
+        and json.loads(files[0].read_text(encoding="utf-8").splitlines()[-1])["hash"]
+        == head["hash"]
     )
     # a careful forger edits record 2 and recomputes every hash after it
     with session_scope() as session:
@@ -182,7 +183,7 @@ def test_query_and_export(home: Path, tmp_path: Path) -> None:
     assert audit.query(user=accounts.os_username())
     rows = audit.query()
     csv_path = audit.export_csv(rows, tmp_path / "audit.csv")
-    text = csv_path.read_text()
+    text = csv_path.read_text(encoding="utf-8")
     assert "bad well" in text and text.splitlines()[0].startswith("id,utc,actor_id,actor_role")
     pdf = audit.export_pdf(rows, tmp_path / "audit.pdf")
     assert pdf.read_bytes().startswith(b"%PDF")
@@ -269,7 +270,7 @@ def test_audit_and_sign_in_dialogs(
     dialog.verify()
     assert "intact" in dialog.status.text()
     dialog.export(".csv", tmp_path / "shown.csv")
-    assert "two" in (tmp_path / "shown.csv").read_text()
+    assert "two" in (tmp_path / "shown.csv").read_text(encoding="utf-8")
     accounts.create_account("dora", "analyst", password="dora password")
     sign = SignInDialog(username="dora")
     qtbot.addWidget(sign)

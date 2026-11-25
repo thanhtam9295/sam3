@@ -151,7 +151,8 @@ def test_tracking_csv_spellings(tmp_path: Path) -> None:
 
     path = tmp_path / "t.csv"
     path.write_text(
-        "Frame,labelimage_oid,trackId,parentTrackId\n0,1,1,-1\n1,1,2,1\n1,2,3,1\n1,0,0,0\n"
+        "Frame,labelimage_oid,trackId,parentTrackId\n0,1,1,-1\n1,1,2,1\n1,2,3,1\n1,0,0,0\n",
+        encoding="utf-8",
     )
     table = read_tracking_csv(path)
     assert table.to_dict("list") == {
@@ -161,7 +162,7 @@ def test_tracking_csv_spellings(tmp_path: Path) -> None:
         "parent_track_id": [0, 1, 1],
         "lineage_id": [0, 0, 0],
     }
-    (tmp_path / "bad.csv").write_text("frame,something\n0,1\n")
+    (tmp_path / "bad.csv").write_text("frame,something\n0,1\n", encoding="utf-8")
     with pytest.raises(ModuleError, match="no object_id column"):
         read_tracking_csv(tmp_path / "bad.csv")
 
@@ -208,8 +209,14 @@ def test_presets(tmp_path: Path) -> None:
         )
         == 0
     )
-    steps = [s.module for s in Pipeline.model_validate(yaml.safe_load(out.read_text())).steps]
+    steps = [
+        s.module
+        for s in Pipeline.model_validate(yaml.safe_load(out.read_text(encoding="utf-8"))).steps
+    ]
     assert steps == ["ilastik_pixel", "ilastik_multicut", "measure_objects", "qc"]
     assert main(["ilastik", "--preset", str(tracking), "--output", str(out)]) == 0
-    steps = [s.module for s in Pipeline.model_validate(yaml.safe_load(out.read_text())).steps]
+    steps = [
+        s.module
+        for s in Pipeline.model_validate(yaml.safe_load(out.read_text(encoding="utf-8"))).steps
+    ]
     assert steps == ["segment_cellpose", "ilastik_tracking", "measure_objects", "ilastik_tracks"]

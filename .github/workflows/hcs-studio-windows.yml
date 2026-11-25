@@ -76,16 +76,22 @@ jobs:
           path: |
             hcs-studio/dist/HCS-Studio-*-setup*
           if-no-files-found: error
-      - name: GUI smoke test (needs OpenGL; informative only)
+      - name: GUI smoke test (falls back to software OpenGL)
         # The console executable: errors go to the output, not to a dialog that waits for a click.
-        # The app's own watchdog ends a stuck smoke test after 2 minutes (exit code 4).
-        continue-on-error: true
-        timeout-minutes: 5
+        # The app's own watchdog ends a stuck smoke test after 2 minutes (exit code 4). The runners
+        # have no OpenGL driver: the first start exits 5 and remembers software OpenGL, which the
+        # second start must use successfully (as on a lab PC used over remote desktop).
+        timeout-minutes: 8
         env:
           HCS_STUDIO_HOME: ${{ runner.temp }}\hcs-home
         run: |
           & "$env:RUNNER_TEMP\hcs\hcs-studio.exe" gui --smoke-test
           $code = $LASTEXITCODE
+          if ($code -eq 5) {
+            "Driver OpenGL failed; starting again with software OpenGL"
+            & "$env:RUNNER_TEMP\hcs\hcs-studio.exe" gui --smoke-test
+            $code = $LASTEXITCODE
+          }
           $log = Join-Path $env:HCS_STUDIO_HOME "logs\hcs-studio.log"
-          if (Test-Path $log) { Get-Content $log -Tail 60 }
+          if (Test-Path $log) { Get-Content $log -Tail 40 }
           if ($code -ne 0) { throw "GUI smoke test exit code $code" }

@@ -57,7 +57,7 @@ def fake_program(folder: Path) -> Path:
         pytest.skip("the fake is a shebang script")
     program = folder / "run_ilastik.sh"
     program.parent.mkdir(parents=True, exist_ok=True)
-    program.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE}" "$@"\n')
+    program.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE}" "$@"\n', encoding="utf-8")
     program.chmod(program.stat().st_mode | stat.S_IEXEC)
     return program
 
@@ -80,7 +80,7 @@ def ilastik(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[st
 def calls(log: Path) -> list[dict[str, Any]]:
     if not log.exists():
         return []
-    return [json.loads(line) for line in log.read_text().splitlines()]
+    return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
 
 
 # --- project reader
@@ -97,7 +97,7 @@ def test_read_project(tmp_path: Path) -> None:
     assert any("2 channel(s); 3 are sent" in p for p in problems)
     auto = read_project(make_project(tmp_path / "a.ilp", workflow="NewAutocontextWorkflowBase"))
     assert auto.workflow == "autocontext"
-    (tmp_path / "bad.ilp").write_text("not hdf5")
+    (tmp_path / "bad.ilp").write_text("not hdf5", encoding="utf-8")
     with pytest.raises(ValueError):
         read_project(tmp_path / "bad.ilp")
 
@@ -159,7 +159,7 @@ def test_headless_runner_one_call_for_many_inputs(ilastik: dict[str, Any], tmp_p
     assert axes == "yxc" and probs.shape == (16, 16, 2)
     assert probs[0, 0, 1] == pytest.approx(0.8)  # (1000 - lo 200) / (hi 1200 - lo 200)
     assert result.project_sha256_before == result.project_sha256_after
-    assert "--raw_data" in (tmp_path / "logs" / "A01.log").read_text()
+    assert "--raw_data" in (tmp_path / "logs" / "A01.log").read_text(encoding="utf-8")
 
 
 def test_headless_runner_errors(
@@ -284,17 +284,17 @@ def test_pipeline_runs_ilastik_once_per_well(ilastik: dict[str, Any], tmp_path: 
     assert len(made) == 3  # one ilastik call per well, with both fields
     assert all(sum(a.endswith(".h5/data") for a in c["argv"]) == 2 for c in made)
     # run-folder structure (PROMPT_ILASTIK.md §8)
-    used = json.loads((folder / "ilastik" / "projects_used.json").read_text())
+    used = json.loads((folder / "ilastik" / "projects_used.json").read_text(encoding="utf-8"))
     assert used[0]["sha256"] == read_project(ilastik["project"]).sha256
     assert used[0]["runner"] == "headless" and used[0]["ilastik_version"] == "1.4.2"
-    assert "--raw_data" in (folder / "ilastik" / "logs" / "A01.log").read_text()
+    assert "--raw_data" in (folder / "ilastik" / "logs" / "A01.log").read_text(encoding="utf-8")
     assert not any((folder / "ilastik" / "inputs").rglob("*.h5"))  # cache deleted
     well = folder / "wells" / "A02" / "ilastik"
     assert len(list(well.glob("*_Probabilities.h5"))) == 2
-    summary = json.loads((well / "class_summary.json").read_text())
+    summary = json.loads((well / "class_summary.json").read_text(encoding="utf-8"))
     assert summary["classes"] == ["background", "nuclei"]
     # the manifest traces results to the project and ilastik
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     fitted = next(s for s in manifest["fitted_state"] if s["module"] == "ilastik_pixel")
     assert fitted["sha256"] == used[0]["sha256"] and fitted["ilastik_version"] == "1.4.2"
     # objects from ilastik's probabilities match the synthetic truth
@@ -394,7 +394,7 @@ def test_cli_info_and_preset(tmp_path: Path, capsys: Any) -> None:
     assert info["workflow"] == "pixel" and info["label_names"] == ["background", "cell body"]
     out = tmp_path / "p.yaml"
     assert main(["ilastik", "--preset", str(project), "--channels", "1", "--output", str(out)]) == 0
-    pipeline = Pipeline.model_validate(yaml.safe_load(out.read_text()))
+    pipeline = Pipeline.model_validate(yaml.safe_load(out.read_text(encoding="utf-8")))
     modules = [s.module for s in pipeline.steps]
     assert modules == [
         "ilastik_pixel",

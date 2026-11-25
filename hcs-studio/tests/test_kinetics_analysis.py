@@ -117,14 +117,14 @@ def test_doubling_time_from_images(home: Path) -> None:
         assert summary.loc[well, "kn_model"] == "exponential"
     fits = pd.read_csv(folder / "kinetics" / "growth_fits.csv")
     assert len(fits) == 3
-    info = json.loads((folder / "kinetics" / "kinetics.json").read_text())
+    info = json.loads((folder / "kinetics" / "kinetics.json").read_text(encoding="utf-8"))
     assert info["readout"] == "nuclei_objects_measured" and info["time"] == "time_h"
     checks = {c["check"]: c["status"] for c in info["qc"]["checks"]}
     assert checks["time points"] == "pass" and checks["focus drift"] == "pass"
     assert (folder / "kinetics" / "report.html").exists()
     course = pd.read_csv(folder / "tables" / "time_course.csv")
     assert (course["fields_imaged"] == 1).all() and course["focus_score"].notna().all()
-    index = (folder / "index.html").read_text()
+    index = (folder / "index.html").read_text(encoding="utf-8")
     assert "kinetics/report.html" in index
 
 
@@ -250,4 +250,6 @@ def test_kinetics_cli_on_separate_acquisitions(home: Path) -> None:
     assert main(args) == 0
     fits = pd.read_csv(out / "growth_fits.csv")
     assert fits.loc[0, "doubling_h"] == pytest.approx(24.0, rel=0.05)
-    assert json.loads((out / "kinetics.json").read_text())["runs"] == [f.name for f in folders]
+    assert json.loads((out / "kinetics.json").read_text(encoding="utf-8"))["runs"] == [
+        f.name for f in folders
+    ]

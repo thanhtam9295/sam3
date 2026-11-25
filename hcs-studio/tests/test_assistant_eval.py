@@ -95,7 +95,7 @@ def test_ground_truth_and_grading_with_an_oracle(eval_home: Path) -> None:
     assert sorted(by_id["zip_all"].expected) == ["Drug A", "Drug B"]
     assert by_id["most_potent"].expected == ["Drug D"]
     data = report.write(eval_home / "work" / "eval.json")
-    assert json.loads(data.read_text())["score"] == 1.0
+    assert json.loads(data.read_text(encoding="utf-8"))["score"] == 1.0
 
 
 def test_grading_rules() -> None:

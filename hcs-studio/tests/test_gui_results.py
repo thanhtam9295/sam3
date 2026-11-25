@@ -29,7 +29,7 @@ def run_folder(tmp_path_factory: pytest.TempPathFactory) -> Path:
     tmp = tmp_path_factory.mktemp("gui_results")
     root = make_imagexpress(tmp / "raw" / "ix", WELLS, n_sites=2, image_fn=_image)
     layout = tmp / "layout.csv"
-    layout.write_text(LAYOUT)
+    layout.write_text(LAYOUT, encoding="utf-8")
     pipeline = Pipeline.from_text(PIPELINE.replace("steps:\n", "steps:\n  - {module: contrast}\n"))
     return run_pipeline(
         open_plate(root),

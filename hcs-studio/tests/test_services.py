@@ -4,6 +4,7 @@ command line change state only through services."""
 from __future__ import annotations
 
 import ast
+import os
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -104,7 +105,9 @@ def test_layout_and_annotation_services_are_recorded(registry: Path, tmp_path: P
     annotate_run(context("new doses from the Echo file"), run, new)
     event = recent_events(1, "run.annotate")[0]
     assert event["reason"] == "new doses from the Echo file" and event["status"] == "ok"
-    assert event["object_id"] == f"ABSOLUTE:{run}" and event["after"]["wells"] == len(new.wells)
+    assert event["object_id"] == f"ABSOLUTE:{Path(run).as_posix()}" and event["after"][
+        "wells"
+    ] == len(new.wells)
     assert event["before"] is not None and event["before"]["sha256"] != event["after"]["sha256"]
 
 
@@ -114,7 +117,8 @@ def test_cli_records_reason_and_refuses_exclusions_without_one(
     from hcs_studio.pharmacology.synthetic import write_run
 
     run = write_run(tmp_path / "run")
-    env = {"HCS_STUDIO_HOME": str(registry), "PATH": "/usr/bin:/bin"}
+    env = {**os.environ, "HCS_STUDIO_HOME": str(registry)}  # Windows needs SYSTEMROOT etc.
+    env.pop("HCS_DATABASE_URL", None)
     cli = [sys.executable, "-m", "hcs_studio", "pharm", str(run), "--readout", "nuclei_count"]
     cli += ["--normalize", "percent_of_control", "--no-pdf", "--no-figures", "--exclude", "P:B03"]
     refused = subprocess.run(cli, capture_output=True, text=True, env=env, timeout=300)

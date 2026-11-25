@@ -124,7 +124,7 @@ def test_panel_edits_saves_and_loads_a_pipeline(qtbot: QtBot, tmp_path: Path) ->
     qtbot.addWidget(other)
     other.load_file(tmp_path / "demo.yaml")
     assert other.pipeline() == Pipeline.load(tmp_path / "demo.yaml") == panel.pipeline()
-    (tmp_path / "bad.yaml").write_text("steps: [{module: nope}]")
+    (tmp_path / "bad.yaml").write_text("steps: [{module: nope}]", encoding="utf-8")
     other.load_file(tmp_path / "bad.yaml")
     assert "Could not load bad.yaml" in other.error.text()
     assert len(other.pipeline().steps) == 3, "a failed load must keep the current pipeline"

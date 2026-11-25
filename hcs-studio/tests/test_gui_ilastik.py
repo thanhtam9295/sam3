@@ -123,7 +123,9 @@ def test_ilastik_panel_preview_preset_macro_and_training_round_trip(
     # Fiji macro
     panel.choose_save = lambda title, pattern: str(tmp_path / "m.ijm")
     assert panel.export_macro() == tmp_path / "m.ijm"
-    assert "pixelclassificationtype=[Probabilities]" in (tmp_path / "m.ijm").read_text()
+    assert "pixelclassificationtype=[Probabilities]" in (tmp_path / "m.ijm").read_text(
+        encoding="utf-8"
+    )
 
     # library (model registry)
     record = panel.register_project()
@@ -144,7 +146,7 @@ def test_ilastik_panel_preview_preset_macro_and_training_round_trip(
     panel.choose_folder = lambda title: str(tmp_path / "training")
     with qtbot.waitSignal(panel.task.finished, timeout=60000):
         panel.train_in_ilastik()
-    data = json.loads((tmp_path / "training" / "training_set.json").read_text())
+    data = json.loads((tmp_path / "training" / "training_set.json").read_text(encoding="utf-8"))
     assert [f["well"] for f in data["fields"]] == ["A01", "A02"]
     assert launched[0][-2] == f"--new_project={tmp_path / 'training' / 'project.ilp'}"
     assert launched[0][-1] == "--workflow=PixelClassificationWorkflow"

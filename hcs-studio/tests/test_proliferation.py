@@ -153,10 +153,10 @@ def test_markers_micronuclei_and_multinucleation_from_images(home: Path) -> None
     unresolved = [c for c in numeric if resolve(c, "well") is None]
     assert not [c for c in unresolved if c.startswith(("pf_", "micronuclei"))], unresolved
     folder = result.folder / "assays" / "proliferation"
-    calibration = json.loads((folder / "calibration.json").read_text())
+    calibration = json.loads((folder / "calibration.json").read_text(encoding="utf-8"))
     assert calibration["markers"]["ki67"]["method"] == "vehicle_mixture"
     assert calibration["markers"]["ki67"]["ashman_d"] > 4 and calibration["warnings"] == []
-    report = (folder / "report.html").read_text()
+    report = (folder / "report.html").read_text(encoding="utf-8")
     assert report.count("<img") == 1 and "Ki67" in report
 
 

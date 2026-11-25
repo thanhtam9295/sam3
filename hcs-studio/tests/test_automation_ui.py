@@ -43,7 +43,7 @@ def _configure(home: Path) -> None:
     from hcs_studio.automation.settings import AutomationSettings, WatchFolder
     from hcs_studio.config import load_settings, save_settings
 
-    (home / "p.yaml").write_text(yaml.safe_dump({"steps": [{"module": "qc"}]}))
+    (home / "p.yaml").write_text(yaml.safe_dump({"steps": [{"module": "qc"}]}), encoding="utf-8")
     (home / "routing.yaml").write_text(
         yaml.safe_dump(
             {
@@ -52,7 +52,8 @@ def _configure(home: Path) -> None:
                     {"name": "late", "barcode_prefix": "X", "pipeline": "p.yaml"},
                 ]
             }
-        )
+        ),
+        encoding="utf-8",
     )
     settings = load_settings()
     settings.automation = AutomationSettings(
@@ -68,12 +69,12 @@ def test_cli(home: Path, capsys: Any) -> None:
 
     _configure(home)
     event = home / "event.json"
-    event.write_text(json.dumps(_event("CLI-1", str(home / "raw" / "CLI-1"))))
+    event.write_text(json.dumps(_event("CLI-1", str(home / "raw" / "CLI-1"))), encoding="utf-8")
     assert main(["auto", "send", str(event)]) == 0
     assert json.loads(capsys.readouterr().out)["status"] == "accepted"
     assert main(["auto", "send", str(event)]) == 0  # the same event again: a duplicate
     assert json.loads(capsys.readouterr().out)["status"] == "duplicate"
-    (home / "bad.json").write_text('{"type": "plate.imaged"}')
+    (home / "bad.json").write_text('{"type": "plate.imaged"}', encoding="utf-8")
     assert main(["auto", "send", str(home / "bad.json")]) == 1
     capsys.readouterr()
     assert main(["auto", "events", "--json"]) == 0

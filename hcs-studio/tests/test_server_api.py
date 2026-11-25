@@ -43,7 +43,9 @@ def server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str
     lab = tmp_path / "lab"
     (lab / "results").mkdir(parents=True)
     settings = load_settings()
-    settings.data_roots = [DataRootConfig(name="LAB", linux=str(lab))]
+    settings.data_roots = [
+        DataRootConfig(name="LAB", windows=str(lab), linux=str(lab), macos=str(lab))
+    ]
     settings.server.results_root = "LAB:results"
     save_settings(settings)
     accounts.create_account("admin", "admin", "Ada Admin", password="admin password")

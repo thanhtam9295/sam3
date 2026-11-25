@@ -40,8 +40,13 @@ def _windows_peak_working_set() -> int | None:
         counters = Counters()
         counters.cb = ctypes.sizeof(Counters)
         windll = ctypes.windll  # type: ignore[attr-defined,unused-ignore]
+        # HANDLE is pointer-sized: ctypes' default C int would truncate it on 64-bit Windows
+        windll.kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        info = windll.kernel32.K32GetProcessMemoryInfo  # kernel32 since Windows 7
+        info.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+        info.restype = wintypes.BOOL
         handle = windll.kernel32.GetCurrentProcess()
-        if windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+        if info(handle, ctypes.byref(counters), counters.cb):
             return int(counters.PeakWorkingSetSize)
     except Exception:
         return None

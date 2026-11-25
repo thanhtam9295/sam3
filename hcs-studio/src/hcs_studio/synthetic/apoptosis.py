@@ -127,7 +127,9 @@ def write_apoptosis_run(
         objects = pd.concat(parts, ignore_index=True)
         (folder / "wells" / well).mkdir(parents=True, exist_ok=True)
         objects.to_parquet(folder / "wells" / well / "objects.parquet", index=False)
-        (folder / "wells" / well / "well_summary.json").write_text(json.dumps({"well": well}))
+        (folder / "wells" / well / "well_summary.json").write_text(
+            json.dumps({"well": well}), encoding="utf-8"
+        )
         key = parse_well_name(well)
         layout = set_role(layout, [key], role, cell_line="HeLa")
         if time_point is not None:

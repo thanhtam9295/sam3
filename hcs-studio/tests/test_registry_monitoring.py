@@ -97,10 +97,10 @@ def test_bridging_report_of_plates_imaged_on_two_instruments(registry: Path) -> 
     )
     names = {p.name for p in files}
     assert names == {"bridging_report.html", "bridging.json", "agreement.csv", "potency_ratios.csv"}
-    summary = json.loads((registry / "bridge" / "bridging.json").read_text())
+    summary = json.loads((registry / "bridge" / "bridging.json").read_text(encoding="utf-8"))
     assert summary["plates"] == 3 and summary["potency_pairs"] == 3 * 6
     assert summary["equivalent"] and 0.8 < summary["mean_ratio"] < 1.25
-    page = (registry / "bridge" / "bridging_report.html").read_text()
+    page = (registry / "bridge" / "bridging_report.html").read_text(encoding="utf-8")
     assert "data:image/png;base64," in page and "Equivalent" in page
     event = recent_events(1, "registry.bridging_report")[0]
     assert event["reason"] == "instrument change" and event["after"]["equivalent"] is True

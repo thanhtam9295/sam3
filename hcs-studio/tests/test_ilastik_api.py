@@ -74,18 +74,22 @@ def fake_environment(root: Path, api: bool = True) -> Path:
         pytest.skip("the fake is a shebang script")
     package = root / "site"
     (package / "ilastik").mkdir(parents=True)
-    (package / "ilastik" / "__init__.py").write_text("")
+    (package / "ilastik" / "__init__.py").write_text("", encoding="utf-8")
     (package / "ilastik" / "__main__.py").write_text(
-        f"import runpy\nrunpy.run_path({str(FAKE)!r}, run_name='__main__')\n"
+        f"import runpy\nrunpy.run_path({str(FAKE)!r}, run_name='__main__')\n", encoding="utf-8"
     )
     if api:
         (package / "ilastik" / "experimental" / "api").mkdir(parents=True)
-        (package / "ilastik" / "experimental" / "__init__.py").write_text("")
-        (package / "ilastik" / "experimental" / "api" / "__init__.py").write_text(API)
-    (package / "xarray.py").write_text(XARRAY)
+        (package / "ilastik" / "experimental" / "__init__.py").write_text("", encoding="utf-8")
+        (package / "ilastik" / "experimental" / "api" / "__init__.py").write_text(
+            API, encoding="utf-8"
+        )
+    (package / "xarray.py").write_text(XARRAY, encoding="utf-8")
     python = root / "bin" / "python3"
     python.parent.mkdir(parents=True)
-    python.write_text(f'#!/bin/sh\nPYTHONPATH="{package}" exec "{sys.executable}" "$@"\n')
+    python.write_text(
+        f'#!/bin/sh\nPYTHONPATH="{package}" exec "{sys.executable}" "$@"\n', encoding="utf-8"
+    )
     python.chmod(python.stat().st_mode | stat.S_IEXEC)
     return python
 
@@ -180,7 +184,9 @@ def test_pipeline_with_the_api_runner_matches_headless(env: dict[str, Any], tmp_
         result = run_pipeline(plate, _pipeline(env["project"]), output_root=tmp_path / runner,
                               workers=1, checksums=False)  # fmt: skip
         assert not result.failed_wells, result.failed_wells
-        used = json.loads((result.folder / "ilastik" / "projects_used.json").read_text())
+        used = json.loads(
+            (result.folder / "ilastik" / "projects_used.json").read_text(encoding="utf-8")
+        )
         assert used[0]["runner"] == runner
         tables[runner] = pd.read_csv(result.folder / "tables" / "per_well_summary.csv")
     columns = [c for c in tables["headless"].columns if c.startswith(("nuclei_", "ilastik_"))]
@@ -204,10 +210,12 @@ def test_falls_back_to_headless_without_the_api(
     result = run_pipeline(plate, _pipeline(env["project"]), output_root=tmp_path / "runs",
                           workers=1, checksums=False, wells=[(0, 0)])  # fmt: skip
     assert not result.failed_wells
-    used = json.loads((result.folder / "ilastik" / "projects_used.json").read_text())
+    used = json.loads(
+        (result.folder / "ilastik" / "projects_used.json").read_text(encoding="utf-8")
+    )
     assert used[0]["runner"] == "headless"
-    assert (
-        "ilastik.experimental.api" in (result.folder / "ilastik" / "logs" / "A01.log").read_text()
+    assert "ilastik.experimental.api" in (result.folder / "ilastik" / "logs" / "A01.log").read_text(
+        encoding="utf-8"
     )
     from tests.test_ilastik_fiji import field_inputs
 
@@ -215,7 +223,7 @@ def test_falls_back_to_headless_without_the_api(
     with pytest.raises(IlastikError, match="no usable Python API"):
         PythonApiRunner(old).run(_job(env["project"], tmp_path / "o", specs))
     script = tmp_path / "run_ilastik.sh"
-    script.write_text(f'#!/bin/sh\nexec "{old}" -m ilastik "$@"\n')
+    script.write_text(f'#!/bin/sh\nexec "{old}" -m ilastik "$@"\n', encoding="utf-8")
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("HCS_ILASTIK", str(script))
     assert "Python of an ilastik environment" in runner_state()["runner_note"]

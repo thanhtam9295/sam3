@@ -93,7 +93,7 @@ def test_scripted_scenario_is_fully_audited(home: Path) -> None:
     )
     folder = _run(home, "first run of the plate")
     assert signoff.status(folder).state == "completed"
-    report = (folder / "index.html").read_text()
+    report = (folder / "index.html").read_text(encoding="utf-8")
     assert 'class="draftmark"' in report and ">completed" in report
     ops.annotate_run(context("cell line corrected"), folder, replace(saved, assay="viability"))
     ops.analyze_run(context("gate big nuclei"), folder, GATE, include_run_steps=False)
@@ -117,7 +117,7 @@ def test_scripted_scenario_is_fully_audited(home: Path) -> None:
         ops.write_report(context(""), folder)
     mode = (folder / "run_manifest.json").stat().st_mode
     assert not mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
-    report = (folder / "index.html").read_text()
+    report = (folder / "index.html").read_text(encoding="utf-8")
     assert 'class="draftmark"' not in report and "Rita Reviewer" in report and "release" in report
     # re-analysis makes a linked new version
     with pytest.raises(Exception, match="reason"):
@@ -129,12 +129,12 @@ def test_scripted_scenario_is_fully_audited(home: Path) -> None:
     assert new.name == f"{folder.name}_v2" and new.exists()
     state = signoff.status(new)
     assert state.version == 2 and state.parent_run == signoff.run_key(folder) and not state.locked
-    assert json.loads((new / "run_manifest.json").read_text())["parent_run"] == signoff.run_key(
-        folder
-    )
+    assert json.loads((new / "run_manifest.json").read_text(encoding="utf-8"))[
+        "parent_run"
+    ] == signoff.run_key(folder)
     assert signoff.status(folder).locked  # the original stays approved
     assert [v["version"] for v in signoff.versions_of(new)] == [1, 2]
-    assert 'class="draftmark"' in (new / "index.html").read_text()
+    assert 'class="draftmark"' in (new / "index.html").read_text(encoding="utf-8")
     # the audit log has every action, with user and reason
     events = audit.query()
     actions = [(e["type"], e["actor_id"], e["reason"], e["status"]) for e in events]
@@ -158,7 +158,7 @@ def test_scripted_scenario_is_fully_audited(home: Path) -> None:
     assert audit.verify_chain().ok
     run_rows = audit.run_audit(signoff.run_key(folder))
     assert {"run.start", "run.sign"} <= {r["type"] for r in run_rows}
-    assert "Audit trail of this run" in (folder / "index.html").read_text()
+    assert "Audit trail of this run" in (folder / "index.html").read_text(encoding="utf-8")
 
 
 def test_unlock_and_cli(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -228,13 +228,13 @@ def test_regulated_mode_requires_password_and_two_people(home: Path) -> None:
         sec.sign_run(context("", rita), folder, "approved", password="rita password")
     result = sec.sign_run(context("", anna), folder, "approved", password="anna password")
     assert result.locked and all(s["reauthenticated"] for s in result.signatures)
-    assert "password confirmed" in (folder / "index.html").read_text()
+    assert "password confirmed" in (folder / "index.html").read_text(encoding="utf-8")
 
 
 def test_states_of_unfinished_runs(home: Path, tmp_path: Path) -> None:
     run = tmp_path / "draft"
     run.mkdir()
-    (run / "run_manifest.json").write_text(json.dumps({"status": "cancelled"}))
+    (run / "run_manifest.json").write_text(json.dumps({"status": "cancelled"}), encoding="utf-8")
     assert signoff.status(run).state == "draft"
     with pytest.raises(ValueError, match="completed run"):
         signoff.sign(run, "reviewed", username="x")

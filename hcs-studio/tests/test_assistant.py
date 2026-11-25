@@ -57,14 +57,14 @@ def registry(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Any
     dispose_engines()
     runs = registry_runs(home / "runs", n_runs=2)
     manifest_path = runs[0] / "run_manifest.json"
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["pipeline"]["steps"] = [
         {"module": "segment_classical", "params": {"channel": 1}},
         {"module": "measure_objects", "params": {"texture": False}},
         {"module": "classify_objects", "params": {"model_path": str(home / "models" / "m.joblib")}},
     ]
     manifest["operator"] = SECRETS["operator"]
-    manifest_path.write_text(json.dumps(manifest))
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     with session_scope() as session:
         scan(session, [home / "runs"])
         project = Project(name="Combination project", owner=SECRETS["owner"])
@@ -496,7 +496,7 @@ def test_pipeline_proposal_diff(registry: dict[str, Any], tmp_path: Path) -> Non
 
     snapshot = build_snapshot(tmp_path / "v.sqlite")
     box = ToolBox(snapshot)
-    manifest = json.loads((registry["runs"][0] / "run_manifest.json").read_text())
+    manifest = json.loads((registry["runs"][0] / "run_manifest.json").read_text(encoding="utf-8"))
     steps = manifest["pipeline"]["steps"]
     module = steps[0]["module"]
     from hcs_studio.processing.base import MODULES, load_builtin_modules

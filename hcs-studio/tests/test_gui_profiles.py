@@ -43,7 +43,7 @@ def run_folder(tmp_path_factory: pytest.TempPathFactory) -> Path:
     tmp = tmp_path_factory.mktemp("gui_profiles")
     root = make_imagexpress(tmp / "raw" / "ix", WELLS, n_sites=2, image_fn=_image)
     layout = tmp / "layout.csv"
-    layout.write_text(LAYOUT)
+    layout.write_text(LAYOUT, encoding="utf-8")
     return run_pipeline(
         open_plate(root),
         Pipeline.from_text(PIPELINE),

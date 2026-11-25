@@ -88,7 +88,7 @@ def test_384_well_3_channel_20_plane_plate_projects_with_resume(
     after = _times(folder)
     assert len(after) == 384
     assert {w: after[w] for w in done} == done, "completed wells were redone"
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "completed"
 
     # the saved images are the projection + background of the raw stacks
@@ -105,7 +105,9 @@ def test_384_well_3_channel_20_plane_plate_projects_with_resume(
         assert np.array_equal(projected.data[:, 0], raw.max(axis=1))  # MIP: the known maximum
         expected = background.apply(projected, None).data[:, 0]
         np.testing.assert_allclose(saved.squeeze(), expected, rtol=1e-6, atol=1e-4)
-        summary = json.loads((folder / "wells" / name / "well_summary.json").read_text())
+        summary = json.loads(
+            (folder / "wells" / name / "well_summary.json").read_text(encoding="utf-8")
+        )
         reports = summary["fields"][0]["reports"][0]
         assert reports[0]["module"] == "projection"
         assert reports[0]["planes"] == [list(range(1, 21))] * 3
@@ -127,9 +129,9 @@ def test_saved_bit_depth_option(plate_384: Path, tmp_path: Path) -> None:
     saved = tifffile.imread(well / "enhanced" / "f001_corrected.ome.tif")
     assert saved.dtype == np.uint16
     np.testing.assert_array_equal(saved.squeeze(), _field(0, 0, 0).max(axis=1))
-    record = json.loads((well / "well_summary.json").read_text())["fields"][0]
+    record = json.loads((well / "well_summary.json").read_text(encoding="utf-8"))["fields"][0]
     assert record["corrected_saved_as"]["bit_depth_assumed"]  # OME-Zarr has no bit depth
-    manifest = json.loads((result.folder / "run_manifest.json").read_text())
+    manifest = json.loads((result.folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["options"]["image_dtype"] == "original"
 
     stored, info = to_storage_dtype(np.array([-3.0, 2.6, 300.0]), "original", 8)
@@ -154,7 +156,9 @@ def test_background_warning_reaches_the_well_summary(plate_384: Path, tmp_path: 
         checksums=False,
         events=events.append,
     )
-    summary = json.loads((result.folder / "wells" / "A01" / "well_summary.json").read_text())
+    summary = json.loads(
+        (result.folder / "wells" / "A01" / "well_summary.json").read_text(encoding="utf-8")
+    )
     assert any("less than 2×" in w for w in summary["warnings"])
     assert any(e["type"] == "log" and "less than 2×" in e["text"] for e in events)
 
@@ -170,7 +174,7 @@ def test_linear_well_mosaic(tmp_path: Path) -> None:
     result = run_pipeline(open_plate(root), pipeline, output_root=tmp_path / "out")
     assert not result.failed_wells
     well = result.folder / "wells" / "A01"
-    summary = json.loads((well / "well_summary.json").read_text())
+    summary = json.loads((well / "well_summary.json").read_text(encoding="utf-8"))
     assert summary["stitching"]["mosaic_image"] == "mosaic.ome.tif"
     with tifffile.TiffFile(well / "mosaic.ome.tif") as tif:
         mosaic = tif.asarray().squeeze()

@@ -173,7 +173,7 @@ def test_pick_list_formats(tmp_path: Path) -> None:
     )
     files = write_pick_list(result.picks, custom, tmp_path / "b")
     assert [f.name for f in files] == ["picklist_CONF-001.csv"]
-    lines = files[0].read_text().splitlines()
+    lines = files[0].read_text(encoding="utf-8").splitlines()
     assert (
         lines[0] == "Source Plate Name;Source Plate Barcode;Source Well;Destination Plate Name;"
         "Destination Well;Volume;Sample"
@@ -212,7 +212,7 @@ def test_cherry_pick_command_registers_and_sends(home: Path) -> None:
     for name in pd.read_csv(screen / "compounds.csv")["compound"]:
         lib, well = name.split("-")
         rows.append(f"LIB{lib[1:]},{well},{name},10 mM")
-    library.write_text("\n".join(rows))
+    library.write_text("\n".join(rows), encoding="utf-8")
     template = home / "template.json"
     save_layout(_template(), template)
     outbox = home / "outbox"
@@ -250,14 +250,14 @@ def test_cherry_pick_command_registers_and_sends(home: Path) -> None:
     assert sum(len(a.treatments) for a in registered.wells.values()) == 4 * len(hits)
     events = list(outbox.glob("*cherrypick.request*.json"))
     assert len(events) == 1
-    event = validate(json.loads(events[0].read_text()))
+    event = validate(json.loads(events[0].read_text(encoding="utf-8")))
     assert event["payload"]["destination_plate"] == "CONFX-001" and len(
         event["payload"]["picks"]
     ) == 4 * len(hits)
-    summary = (screen / "summary.html").read_text()
+    summary = (screen / "summary.html").read_text(encoding="utf-8")
     assert (
         "Confirmation" in summary and "CONFX-001 v1" in summary and f"{len(hits)} hits" in summary
     )
-    picked = json.loads((screen / "cherrypick" / "cherrypick.json").read_text())
+    picked = json.loads((screen / "cherrypick" / "cherrypick.json").read_text(encoding="utf-8"))
     assert picked["compounds"] == len(hits) and picked["registered"] == ["CONFX-001 v1"]
     assert set(truth["hits"]) >= set(hits["compound"])

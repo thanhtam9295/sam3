@@ -52,7 +52,7 @@ def test_training_set_from_a_plate(tmp_path: Path) -> None:
     plate, _ = _plate(tmp_path)
     fields = ts.representative_fields(sorted(plate.wells), ts.fields_per_well(plate), None)
     target = ts.export_training_set(plate.path, fields, tmp_path / "train", channels=[1])
-    data = json.loads(target.read_text())
+    data = json.loads(target.read_text(encoding="utf-8"))
     assert data["format"] == ts.FORMAT and data["stage"] == "raw"
     assert data["channels"] == ["DAPI"] and len(data["fields"]) == 3
     first = tmp_path / "train" / data["fields"][0]["file"]
@@ -90,7 +90,7 @@ def test_training_set_at_the_stage_the_ilastik_step_sees(
     assert ts.ilastik_stage(result.folder) == ("step:1", [1])
     fields = [ts.TrainingField("A01", 2, reason="test")]
     target = ts.export_training_set(result.folder, fields, tmp_path / "train", stage="ilastik")
-    data = json.loads(target.read_text())
+    data = json.loads(target.read_text(encoding="utf-8"))
     assert data["stage"] == "step:1" and data["channel_numbers"] == [1]
     array, _ = read_h5(tmp_path / "train" / "A01_f002_t0.h5")
     raw = np.asarray(plate.wells[(0, 0)].fields[1].load()[0, 0, 0], dtype=np.float32)
@@ -110,11 +110,11 @@ def test_ilastik_window_command(tmp_path: Path) -> None:
     existing = tmp_path / "p.ilp"
     existing.write_bytes(b"")
     assert ts.ilastik_gui_command("/opt/ilastik/run_ilastik.sh", existing) == [
-        "/opt/ilastik/run_ilastik.sh",
+        str(Path("/opt/ilastik/run_ilastik.sh")),  # native separators
         f"--project={existing}",
     ]
     new = ts.ilastik_gui_command("/env/bin/python", tmp_path / "new.ilp", "objects")
-    assert new[:3] == ["/env/bin/python", "-m", "ilastik"]
+    assert new[:3] == [str(Path("/env/bin/python")), "-m", "ilastik"]
     assert new[3] == f"--new_project={tmp_path / 'new.ilp'}"
     assert new[4] == "--workflow=ObjectClassificationWorkflowPrediction"
     with pytest.raises(ValueError, match="Unknown workflow"):
@@ -152,7 +152,7 @@ def test_cli_training_set_and_run(
     assert main(["ilastik", "--training-set", str(plate.path), "--channels", "1",
                  "--output", str(out)]) == 0  # fmt: skip
     assert "spread over the plate" in capsys.readouterr().out
-    assert len(json.loads((out / "training_set.json").read_text())["fields"]) == 3
+    assert len(json.loads((out / "training_set.json").read_text(encoding="utf-8"))["fields"]) == 3
 
     run = ["--run", str(ilastik["project"]), "--input", str(plate.path), "--channels", "1"]
     code = main(["ilastik", *run, "--wells", "A01-A02", "--runs", str(tmp_path / "runs")])

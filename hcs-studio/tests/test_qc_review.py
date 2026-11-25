@@ -88,9 +88,9 @@ def test_reviews_change_exclusions_everywhere_and_are_recorded(home: Path) -> No
     assert [o.action for o in history] == ["include", "exclude"] and history[0].actor
     event = recent_events(1, "qc.review")[0]
     assert event["reason"] == "plate edge was wet" and event["after"]["well_failed"] is True
-    plate = json.loads((folder / "qc" / "plate_qc.json").read_text())
+    plate = json.loads((folder / "qc" / "plate_qc.json").read_text(encoding="utf-8"))
     assert plate["reviews"] == 2 and "seconds" in plate
-    page = (folder / "qc" / "qc_report.html").read_text()
+    page = (folder / "qc" / "qc_report.html").read_text(encoding="utf-8")
     assert "plate edge was wet" in page and page.count("data:image/png;base64,") > 5
     with pytest.raises(KeyError, match="No field 99"):
         review_qc(context("x"), folder, "field", well, "include", field=99)

@@ -168,13 +168,13 @@ def test_cli_preset_for_spheroids_and_confluence(tmp_path: Path) -> None:
         ("confluence", ["ilastik_pixel", "confluence", "ilastik_class_areas"]),
     ):
         assert main(["ilastik", "--preset", str(project), "--for", use, "--output", str(out)]) == 0
-        pipeline = Pipeline.model_validate(yaml.safe_load(out.read_text()))
+        pipeline = Pipeline.model_validate(yaml.safe_load(out.read_text(encoding="utf-8")))
         assert [s.module for s in pipeline.steps] == expected
     params = pipeline.steps[1].params
     assert params["method"] == "probability" and params["class_channel"] == "ilastik_spheroid"
     organoids = ["ilastik", "--preset", str(project), "--for", "organoids", "--output", str(out)]
     assert main(organoids) == 0
-    steps = Pipeline.model_validate(yaml.safe_load(out.read_text())).steps
+    steps = Pipeline.model_validate(yaml.safe_load(out.read_text(encoding="utf-8"))).steps
     assert steps[-1].params.get("mode") == "organoids"
     objects = make_project(tmp_path / "o.ilp", workflow="ObjectClassificationWorkflowPrediction")
     assert (

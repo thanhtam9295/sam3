@@ -164,7 +164,7 @@ def test_job_queue_runs_retries_and_resumes(qtbot: QtBot, plate_dir: Path, tmp_p
     with qtbot.waitSignal(panel.job_finished, timeout=120000) as retried:
         panel.retry_failed()
     assert retried.args[0].status == "completed" and retried.args[0].folder == state.folder
-    manifest = json.loads((Path(state.folder) / "run_manifest.json").read_text())
+    manifest = json.loads((Path(state.folder) / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["failed_wells"] == {} and len(manifest["history"]) == 2
 
     resume_job = job_for_folder(Path(state.folder))

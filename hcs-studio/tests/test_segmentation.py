@@ -413,7 +413,7 @@ def test_sam_worker_failure_is_reported(tmp_path: Path) -> None:
     if sys.platform.startswith("win"):
         return  # the broken worker below is a shebang script
     broken = tmp_path / "python"
-    broken.write_text("#!/bin/sh\necho 'boom' >&2\nexit 3\n")
+    broken.write_text("#!/bin/sh\necho 'boom' >&2\nexit 3\n", encoding="utf-8")
     broken.chmod(0o755)
     with pytest.raises(ModuleError, match=r"(?s)worker stopped.*boom"):
         sam3_backend.Sam3Client(str(broken))
@@ -504,9 +504,9 @@ steps:
     assert nuclei.dtype == np.uint16 and nuclei.shape == (128, 128) and len(np.unique(nuclei)) == 6
     cells = tifffile.imread(well / "masks" / "f001_cells.ome.tif")
     assert np.all(cells[nuclei > 0] == nuclei[nuclei > 0])
-    links = (well / "masks" / "f001_cells_parents.csv").read_text().splitlines()
+    links = (well / "masks" / "f001_cells_parents.csv").read_text(encoding="utf-8").splitlines()
     assert links[0] == "object_id,nuclei_id" and links[1:] == [f"{i},{i}" for i in range(1, 6)]
-    summary = json.loads((well / "well_summary.json").read_text())
+    summary = json.loads((well / "well_summary.json").read_text(encoding="utf-8"))
     objects = summary["fields"][0]["objects"]
     assert objects["nuclei"]["count"] == 5 and objects["cells"]["parent"] == "nuclei"
     import imagecodecs

@@ -13,7 +13,7 @@ from keyring.backend import KeyringBackend
 
 from hcs_studio import config, secrets
 from hcs_studio.config import AppSettings, DataRootConfig, load_settings, save_settings
-from hcs_studio.paths import ABSOLUTE, RootedPath, resolve, to_rooted
+from hcs_studio.paths import ABSOLUTE, RootedPath, resolve, resolve_text, to_rooted
 
 
 class MemoryKeyring(KeyringBackend):
@@ -57,7 +57,7 @@ def memory_keyring() -> Iterator[MemoryKeyring]:
 
 def test_settings_round_trip_versions_and_legacy_import(home: Path) -> None:
     assert load_settings() == AppSettings()
-    (home / "sam3.json").write_text('{"python": "/envs/sam3/bin/python"}')
+    (home / "sam3.json").write_text('{"python": "/envs/sam3/bin/python"}', encoding="utf-8")
     settings = AppSettings(
         data_roots=[DataRootConfig(name="screening", windows=r"\\lab\screening", linux="/mnt/s")]
     )
@@ -65,10 +65,10 @@ def test_settings_round_trip_versions_and_legacy_import(home: Path) -> None:
     loaded = load_settings()
     assert loaded.root("SCREENING") is not None and loaded.data_roots[0].name == "SCREENING"
     assert loaded.imported["sam3"] == {"python": "/envs/sam3/bin/python"}  # imported once
-    raw = json.loads((home / "settings.json").read_text())
+    raw = json.loads((home / "settings.json").read_text(encoding="utf-8"))
     assert raw["config_version"] == config.CONFIG_VERSION
     raw["config_version"] = config.CONFIG_VERSION + 1
-    (home / "settings.json").write_text(json.dumps(raw))
+    (home / "settings.json").write_text(json.dumps(raw), encoding="utf-8")
     with pytest.raises(ValueError, match="Update HCS Studio"):
         load_settings()
 
@@ -138,10 +138,10 @@ ROOTS = [
 def test_rooted_paths_round_trip_between_windows_and_linux() -> None:
     win = to_rooted(r"\\LabServer\Screening\raw\plate 01\Index.idx.xml", ROOTS, "win32")
     assert win == RootedPath("SCREENING_RAW", "plate 01/Index.idx.xml")  # longest root wins
-    assert str(resolve(win, ROOTS, "linux")) == "/mnt/raw/plate 01/Index.idx.xml"
+    assert resolve_text(win, ROOTS, "linux") == "/mnt/raw/plate 01/Index.idx.xml"
     lin = to_rooted("/data/results/run1/run_manifest.json", ROOTS, "linux")
     assert lin == RootedPath("RESULTS", "run1/run_manifest.json")
-    assert str(resolve(lin, ROOTS, "win32")) == r"D:\Results\run1\run_manifest.json"
+    assert resolve_text(lin, ROOTS, "win32") == r"D:\Results\run1\run_manifest.json"
     assert RootedPath.parse(str(lin)) == lin
     with pytest.raises(ValueError, match="Not a rooted path"):
         RootedPath.parse(r"C:\data\x")  # a drive letter is not a root

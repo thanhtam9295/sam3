@@ -61,7 +61,9 @@ def test_comparison_report_is_saved(home: Path) -> None:
     candidate, base = table.index
     assert base.startswith("base:") and comparison.split == "test"
     assert table.loc[candidate, "AP@0.5"] > table.loc[base, "AP@0.5"] + 0.15
-    assert "hard@2" in report.read_text() and 'src="examples.png"' in report.read_text()
+    assert "hard@2" in report.read_text(
+        encoding="utf-8"
+    ) and 'src="examples.png"' in report.read_text(encoding="utf-8")
     metrics = registry.get_model("hard-nuclei", 1).metrics["test"]
     assert metrics["report"] == str(report) and metrics["ap50"] == pytest.approx(
         table.loc[candidate, "AP@0.5"]
@@ -118,11 +120,11 @@ def test_drift_and_spot_checks(home: Path, tmp_path: Path) -> None:
     model = _hard_model()
     qa_step = PipelineStep(module="model_qa", params={"spot_checks": 2, "seed": 1})
     same = _run(tmp_path, model.ref, [HardNuclei()], "same", [qa_step])
-    record = json.loads((same / "qa" / "model_qa.json").read_text())
+    record = json.loads((same / "qa" / "model_qa.json").read_text(encoding="utf-8"))
     assert len(record["spot_checks"]) == 2 and record["drift"]["model"] == model.ref
     assert record["drift"]["alerts"] == [], record["drift"]
     assert set(record["drift"]["features"]) >= {"area_um2", "intensity_mean", "objects_per_field"}
-    manifest = json.loads((same / "run_manifest.json").read_text())
+    manifest = json.loads((same / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["run_steps"][0]["module"] == "model_qa"
     # small, dim nuclei of another "cell line": the model's training data no longer fits
     other = _run(tmp_path, model.ref, [Nuclei(count=lambda r, c, f: 20, intensity=300)], "other")
@@ -170,7 +172,7 @@ def test_downstream_impact_against_msr(home: Path, tmp_path: Path) -> None:
     def steps_model(params: dict[str, Any]) -> registry.ModelRecord:
         path = tmp_path / "m.json"
         step = PipelineStep(module="segment_classical", params={"channel": 1, **params})
-        path.write_text(json.dumps({"steps": [step.model_dump(mode="json")]}))
+        path.write_text(json.dumps({"steps": [step.model_dump(mode="json")]}), encoding="utf-8")
         return registry.register_model("ref-seg", "steps", path)
 
     reference_model = steps_model({})
@@ -206,7 +208,7 @@ def test_downstream_impact_against_msr(home: Path, tmp_path: Path) -> None:
     report = write_impact(same, tmp_path / "impact_same")
     assert (
         report.parent / "counts_bland_altman.png"
-    ).exists() and "equivalent" in report.read_text()
+    ).exists() and "equivalent" in report.read_text(encoding="utf-8")
     bad = downstream_impact(reference, broken.ref, tmp_path / "impact_bad")
     assert not bad.verdict["equivalent"] and bad.counts_summary["mean_difference_pct"] < -100
     assert any("count difference" in r for r in bad.verdict["reasons"])
@@ -217,7 +219,7 @@ def test_downstream_impact_against_msr(home: Path, tmp_path: Path) -> None:
 def _named_model(tmp: Path) -> registry.ModelRecord:
     path = tmp / "o.json"
     step = PipelineStep(module="segment_classical", params={"channel": 1})
-    path.write_text(json.dumps({"steps": [step.model_dump(mode="json")]}))
+    path.write_text(json.dumps({"steps": [step.model_dump(mode="json")]}), encoding="utf-8")
     return registry.register_model("other", "steps", path)
 
 

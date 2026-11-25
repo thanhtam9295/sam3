@@ -195,8 +195,8 @@ def test_http_and_inbox_intake(home: Path) -> None:
         server.stop()
     inbox = home / "inbox"
     inbox.mkdir()
-    (inbox / "a.json").write_text(json.dumps(_imaged("FILE-1")))
-    (inbox / "b.json").write_text('{"type": "plate.imaged"}')
+    (inbox / "a.json").write_text(json.dumps(_imaged("FILE-1")), encoding="utf-8")
+    (inbox / "b.json").write_text('{"type": "plate.imaged"}', encoding="utf-8")
     import os
     import time
 
@@ -206,7 +206,7 @@ def test_http_and_inbox_intake(home: Path) -> None:
     receipts = poll_inbox(inbox)
     assert sorted(r.status for r in receipts) == ["accepted", "rejected"]
     assert (inbox / "processed" / "a.json").exists()
-    assert (inbox / "rejected" / "b.json.error.txt").read_text()
+    assert (inbox / "rejected" / "b.json.error.txt").read_text(encoding="utf-8")
     with session_scope() as session:
         statuses = {(r.channel, r.status) for r in session.query(LabEventRecord)}
     assert {

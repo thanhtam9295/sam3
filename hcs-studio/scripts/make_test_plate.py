@@ -73,7 +73,7 @@ def main() -> None:
             lines.append(f"{well},Reference,1,24h,positive")
         else:
             lines.append(f"{well},Compound {1 + (c - 2) // 4},{10 ** ((c - 2) % 4 - 2)},24h,")
-    (args.folder / "layout.csv").write_text("\n".join(lines) + "\n")
+    (args.folder / "layout.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(
         f"Wrote {len(wells)} wells × {args.sites} sites to {root} in "
         f"{time.monotonic() - started:.0f} s"

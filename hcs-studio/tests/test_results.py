@@ -56,7 +56,7 @@ def run_folder(tmp_path_factory: pytest.TempPathFactory) -> Path:
     tmp = tmp_path_factory.mktemp("results")
     root = make_imagexpress(tmp / "raw" / "ix", WELLS, n_sites=2, image_fn=_image)
     layout = tmp / "layout.csv"
-    layout.write_text(LAYOUT)
+    layout.write_text(LAYOUT, encoding="utf-8")
     result = run_pipeline(
         open_plate(root),
         Pipeline.from_text(PIPELINE),
@@ -213,7 +213,7 @@ def test_report_works_offline_in_a_browser(run_folder: Path, tmp_path: Path) -> 
     unpacked = tmp_path / "unzipped"
     shutil.unpack_archive(zipped, unpacked)  # as a colleague would receive it
     script = tmp_path / "check.js"
-    script.write_text(BROWSER_SCRIPT)
+    script.write_text(BROWSER_SCRIPT, encoding="utf-8")
     result = subprocess.run(
         ["node", str(script), (unpacked / "index.html").as_uri()],
         capture_output=True,

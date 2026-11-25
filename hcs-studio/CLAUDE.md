@@ -1009,6 +1009,25 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
   `AssistantSettingsDialog`); CLI `cli_assistant.py`. Tests use dict responses from fake
   clients (`client.messages.create` / `client.beta.messages.create`).
 
+## Windows conventions (from the first Windows CI runs, 2026-11-25)
+
+- Every text read/write names its encoding (`encoding="utf-8"`); `tests/test_encoding.py` scans
+  src, tests and scripts. Windows defaults to cp1252 (µ, ′, ×, –, ⚠ break).
+- Platform branches use `sys.platform == "win32"` (mypy narrows on it, not on `os.name` or
+  try/except ImportError); `scripts/ci.sh` also runs `mypy --platform win32`. ctypes: set
+  `restype`/`argtypes` to `wintypes.HANDLE` etc. (the default C int truncates 64-bit handles).
+- Process trees: `taskkill /F /T` on Windows, `killpg` elsewhere; job processes watch a handle to
+  their parent on Windows (`jobs._exit_with_parent`). Test subprocesses inherit `os.environ`
+  (Windows needs `SYSTEMROOT`). Shebang-script fakes skip on Windows.
+- Paths: compare with `str(Path(...))` (native separators); a path for another OS is text
+  (`paths.resolve_text`); test data roots get a location for every platform.
+- GUI start: an OpenGL failure of the viewer writes `<settings>/software_opengl` and restarts with
+  Qt's software OpenGL (`gui/launch.py`; `HCS_SOFTWARE_OPENGL=1|0`); the windowed bundle shows a
+  modal dialog on unhandled errors, so CI smoke-tests the console executable (exit 5 = OpenGL
+  failed, then a second start must pass).
+- Windows CI: commit message `[build installer]` on a `claude/**` branch runs
+  `hcs-studio-windows` (tests + installer; the installer is uploaded before the smoke test).
+
 ## Commands
 
 Run from this folder (`hcs-studio/`).

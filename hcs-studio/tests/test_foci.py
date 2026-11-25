@@ -94,12 +94,12 @@ def test_foci_counts_per_nucleus_from_images(home: Path) -> None:
     assert vehicle.between(0.3, 0.7).all() and treated.between(5.5, 8.0).all()
     assert (summary.loc[["B01", "B02"], "dd_positive_pct"] > 75).all()
     assert (summary.loc[["A01", "A02"], "dd_pan_nuclear_pct"] == 0).all()
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     fitted = next(e for e in manifest["fitted_state"] if e["module"] == "detect_foci")
     assert fitted["calibrated_on"] == "vehicle wells" and fitted["threshold"] > fitted["median"]
     assert {p.name for p in (folder / "assays" / "foci").iterdir()} == {
         "calibration.json", "foci_wells.csv", "report.html"}  # fmt: skip
-    assert "assays/foci/report.html" in (folder / "index.html").read_text()
+    assert "assays/foci/report.html" in (folder / "index.html").read_text(encoding="utf-8")
 
 
 def test_3d_detection_counts_foci_a_max_projection_merges() -> None:
@@ -143,9 +143,9 @@ def test_foci_step_breaks_down_by_cell_cycle_and_warns_on_projections(tmp_path: 
         objects.loc[objects.index[:30], "gh2ax_mean"] = 900  # pan-nuclear
         objects.to_parquet(path, index=False)
     manifest_path = run / "run_manifest.json"
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["pipeline"]["steps"] = [{"module": "projection", "params": {"method": "max"}}]
-    manifest_path.write_text(json.dumps(manifest))
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     result = run_table_steps(run, [CellCycle(CellCycleParams(dna_channel="DAPI")),
                                    Foci(FociParams(foci_channel="gH2AX"))])  # fmt: skip
     values = result.per_well["A02"]

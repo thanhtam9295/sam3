@@ -234,7 +234,9 @@ def test_project_trained_on_probabilities(ilastik: dict[str, Any], tmp_path: Pat
     fractions = wells["class_ilastik_large_fraction"].to_dict()
     assert fractions == {"B01": 0.0, "B12": 1.0}
     summary = json.loads(
-        (result.folder / "wells" / "B12" / "ilastik" / "object_classes_ilastik.json").read_text()
+        (result.folder / "wells" / "B12" / "ilastik" / "object_classes_ilastik.json").read_text(
+            encoding="utf-8"
+        )
     )
     assert summary["by_class"] == {"large": 12}
 

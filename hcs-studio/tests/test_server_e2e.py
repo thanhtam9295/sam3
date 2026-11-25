@@ -43,7 +43,9 @@ def live_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[dic
     lab = tmp_path / "lab"
     (lab / "results").mkdir(parents=True)
     settings = load_settings()
-    settings.data_roots = [DataRootConfig(name="LAB", linux=str(lab))]
+    settings.data_roots = [
+        DataRootConfig(name="LAB", windows=str(lab), linux=str(lab), macos=str(lab))
+    ]
     settings.server.results_root = "LAB:results"
     save_settings(settings)
     accounts.create_account("anna", "analyst", "Anna Analyst", password="anna password")
@@ -139,7 +141,7 @@ def test_384_well_plate_while_the_client_is_away(live_server: dict[str, Any]) ->
 def test_deployment_files_are_consistent() -> None:
     import yaml
 
-    compose = yaml.safe_load((DEPLOY / "docker-compose.yml").read_text())
+    compose = yaml.safe_load((DEPLOY / "docker-compose.yml").read_text(encoding="utf-8"))
     services = compose["services"]
     assert set(services) == {"db", "api", "worker-gpu", "worker-cpu", "proxy"}
     assert services["db"]["image"] == "postgres:16"
@@ -151,18 +153,18 @@ def test_deployment_files_are_consistent() -> None:
     assert services["proxy"]["ports"] == ["${HTTPS_PORT:-443}:443"]  # the only published port
     for name in ("api", "worker-gpu", "worker-cpu"):
         assert "ports" not in services[name]
-    dockerfile = (DEPLOY / "Dockerfile").read_text()
+    dockerfile = (DEPLOY / "Dockerfile").read_text(encoding="utf-8")
     assert "[server,segmentation,assistant]" in dockerfile and "USER hcs" in dockerfile
-    nginx = (DEPLOY / "nginx.conf").read_text()
+    nginx = (DEPLOY / "nginx.conf").read_text(encoding="utf-8")
     assert "proxy_pass http://api:8000" in nginx and "Upgrade $http_upgrade" in nginx
-    env = (DEPLOY / ".env.example").read_text()
+    env = (DEPLOY / ".env.example").read_text(encoding="utf-8")
     assert "POSTGRES_PASSWORD" in env and os.sep not in "x"
     import json
 
     from hcs_studio.config import AppSettings
 
     AppSettings.model_validate(
-        json.loads((DEPLOY / "settings" / "settings.example.json").read_text())
+        json.loads((DEPLOY / "settings" / "settings.example.json").read_text(encoding="utf-8"))
     )
 
 
@@ -253,7 +255,7 @@ def test_portal_in_a_browser(live_server: dict[str, Any], tmp_path: Path) -> Non
         time.sleep(1)
     assert queue.status(job_id).status == "completed"
     script = tmp_path / "portal.js"
-    script.write_text(PORTAL_SCRIPT)
+    script.write_text(PORTAL_SCRIPT, encoding="utf-8")
     done = subprocess.run(
         ["node", str(script), live_server["url"], "1"], capture_output=True, text=True, timeout=120
     )

@@ -67,7 +67,7 @@ def test_report_data(screened: tuple[Path, Any]) -> None:
     }
     assert hit_names == set(result.hits["compound"])
     assert data["hits"][0]["rank"] == 1 and "override_reason" in data["hit_columns"]
-    assert "http" not in (out / "report.html").read_text().replace("http-equiv", "")
+    assert "http" not in (out / "report.html").read_text(encoding="utf-8").replace("http-equiv", "")
 
 
 BROWSER = r"""
@@ -109,7 +109,7 @@ def _node_playwright() -> bool:
 def test_report_works_offline_in_a_browser(screened: tuple[Path, Any], tmp_path: Path) -> None:
     out, result = screened
     script = tmp_path / "check.js"
-    script.write_text(BROWSER)
+    script.write_text(BROWSER, encoding="utf-8")
     done = subprocess.run(
         ["node", str(script), (out / "report.html").as_uri()],
         capture_output=True,
@@ -197,7 +197,7 @@ def test_hit_gallery_has_linked_contrast(home: Path) -> None:
     )
     result = run_screen(folders, config, home / "screen", gallery=10)
     assert list(result.hits["compound"]) == ["HIT"]
-    page = (home / "screen" / "gallery" / "index.html").read_text()
+    page = (home / "screen" / "gallery" / "index.html").read_text(encoding="utf-8")
     assert 'id="HIT"' in page and page.count('<div class="strip">') == 2  # both replicates
     for plate in ("IMG-R1", "IMG-R2"):
         hit = np.asarray(Image.open(home / "screen" / "gallery" / f"{plate}_C04.png")).mean()
@@ -206,7 +206,7 @@ def test_hit_gallery_has_linked_contrast(home: Path) -> None:
             for w in ("C01", "B01")
         ]  # the nearest vehicle wells
         assert hit < 0.5 * min(vehicles)  # same contrast: 8 nuclei look emptier than 36
-    report = (home / "screen" / "report.html").read_text()
+    report = (home / "screen" / "report.html").read_text(encoding="utf-8")
     assert 'href="gallery/index.html#HIT"' in report
 
 
@@ -215,7 +215,7 @@ def test_gallery_without_images_says_so(screened: tuple[Path, Any], tmp_path: Pa
 
     _, result = screened
     page = write_gallery(result, tmp_path, max_hits=2)
-    assert page is not None and "no image" in page.read_text()
+    assert page is not None and "no image" in page.read_text(encoding="utf-8")
 
 
 def test_screen_report_command(screened: tuple[Path, Any], home: Path) -> None:
@@ -253,4 +253,6 @@ def test_screen_tab_reviews_hits(screened: tuple[Path, Any], home: Path, qtbot: 
     panel.reason.setText("autofluorescent in the source plate")
     panel.review("exclude")
     qtbot.waitUntil(lambda: panel.hit_table.rowCount() == len(hits) - 1, timeout=30000)
-    assert json.loads((copy / "overrides.json").read_text())[0]["action"] == "exclude"
+    assert (
+        json.loads((copy / "overrides.json").read_text(encoding="utf-8"))[0]["action"] == "exclude"
+    )

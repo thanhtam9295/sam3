@@ -114,7 +114,7 @@ def test_manual_review_needs_a_reason(
     folders, truth = screen
     out = home / "screen"
     config = home / "screen.json"
-    config.write_text(_config("b").model_dump_json())
+    config.write_text(_config("b").model_dump_json(), encoding="utf-8")
     assert (
         main(["screen", "score", *map(str, folders), "--config", str(config), "--output", str(out)])
         == 0
@@ -158,7 +158,9 @@ def test_manual_review_needs_a_reason(
     assert rescued in set(hits["compound"])
     compounds = pd.read_csv(out / "compounds.csv").set_index("compound")
     assert compounds.loc[first, "override"] == "exclude"
-    assert json.loads((out / "overrides.json").read_text())[0]["reason"].startswith("precipitate")
+    assert json.loads((out / "overrides.json").read_text(encoding="utf-8"))[0]["reason"].startswith(
+        "precipitate"
+    )
     with pytest.raises(SystemExit):
         main(["screen", "review", str(out), "--compound", first, "--action", "include"])
 
@@ -247,12 +249,12 @@ def test_library_maps_and_assay_layouts(tmp_path: Path) -> None:
             lines.append(f"LIB{k},{well},C{k}-{well},10 mM,")
     lines.append("LIB0,C05,,10 mM,")  # an empty well
     path = tmp_path / "library.csv"
-    path.write_text("\n".join(lines))
+    path.write_text("\n".join(lines), encoding="utf-8")
     library = read_library_map(path)
     assert len(library) == 12 and library["concentration_m"].eq(0.01).all()
 
     header_units = tmp_path / "units.csv"
-    header_units.write_text("plate,well,compound,conc_uM\nL,A1,X,50\n")
+    header_units.write_text("plate,well,compound,conc_uM\nL,A1,X,50\n", encoding="utf-8")
     assert read_library_map(header_units)["concentration_m"].iloc[0] == pytest.approx(5e-5)
 
     template = _template()
@@ -292,7 +294,8 @@ def test_library_maps_and_assay_layouts(tmp_path: Path) -> None:
         "[EXCEPTIONS]\nRun ID,1\n\n[DETAILS]\n"
         "Source Plate Barcode,Source Well,Destination Plate Barcode,Destination Well,"
         "Transfer Volume\n"
-        "LIB0,B03,ASSAY-E,C05,40\nLIB0,B03,ASSAY-E,C05,40\nLIB1,H12,ASSAY-E,D07,20\n"
+        "LIB0,B03,ASSAY-E,C05,40\nLIB0,B03,ASSAY-E,C05,40\nLIB1,H12,ASSAY-E,D07,20\n",
+        encoding="utf-8",
     )
     transfers = read_transfers(echo)
     assert len(transfers) == 3 and transfers["volume_nl"].sum() == 100
@@ -311,7 +314,8 @@ def test_library_registry_and_registered_layouts(home: Path) -> None:
     path = home / "lib.csv"
     path.write_text(
         "barcode,well,compound,concentration,unit,smiles\n"
-        "LIBX,B02,Imatinib,10,mM,CC1=CC=CC=C1\nLIBX,B03,Dasatinib,10,mM,\n"
+        "LIBX,B02,Imatinib,10,mM,CC1=CC=CC=C1\nLIBX,B03,Dasatinib,10,mM,\n",
+        encoding="utf-8",
     )
     assert main(["screen", "library", str(path), "--name", "kinase set"]) == 0
     stored = library_map(["LIBX"])

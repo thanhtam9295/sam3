@@ -88,14 +88,14 @@ def test_volume_and_qc_flags_from_brightfield(home: Path) -> None:
                                                "spheroids.csv", "wells.csv", "radial_profiles.csv",
                                                "radial_profiles.png"}  # fmt: skip
     assert len(list((out / "crops").iterdir())) == 9  # every well with a spheroid
-    gallery = (out / "gallery.html").read_text()
+    gallery = (out / "gallery.html").read_text(encoding="utf-8")
     assert gallery.count('class="card"') == 10 and 'data-sp-volume-um3="' in gallery
     assert '<option value="sp-volume-um3">' in gallery
     per_spheroid = pd.read_csv(out / "spheroids.csv")
     assert per_spheroid["sp_main"].sum() == 9
-    calibration = json.loads((out / "calibration.json").read_text())
+    calibration = json.loads((out / "calibration.json").read_text(encoding="utf-8"))
     assert calibration["flag_counts"]["multiple"] == 1
-    assert "spheroids/gallery.html" in (folder / "index.html").read_text()
+    assert "spheroids/gallery.html" in (folder / "index.html").read_text(encoding="utf-8")
 
 
 def test_fluorescence_and_dark_methods() -> None:
@@ -157,7 +157,9 @@ def test_384_plate_batch_and_dose_response_on_volume(home: Path) -> None:
     assert (summary["sp_qc_ok"] == 1).all()
     vehicle = summary.loc[[f"{r}01" for r in "ABCDEFGHIJKLMNOP"], "sp_volume_vs_vehicle_pct"]
     assert vehicle.between(98, 102).all()
-    calibration = json.loads((folder / "spheroids" / "calibration.json").read_text())
+    calibration = json.loads(
+        (folder / "spheroids" / "calibration.json").read_text(encoding="utf-8")
+    )
     assert calibration["z_prime_volume"] > 0.9
     assert len(list((folder / "spheroids" / "crops").iterdir())) == 384
     options = PharmOptions(readouts=["sp_volume_um3"], normalization="percent_of_control",
@@ -315,7 +317,7 @@ def test_organoid_mode_counts_sizes_and_efficiency(home: Path) -> None:
     assert {"organoid_sizes.csv", "size_distribution.png"} <= {p.name for p in out.iterdir()}
     sizes = pd.read_csv(out / "organoid_sizes.csv")
     assert len(sizes) == 40 + 40 + 12 + 12
-    assert "organoids" in (out / "gallery.html").read_text()
+    assert "organoids" in (out / "gallery.html").read_text(encoding="utf-8")
 
 
 def test_invasion_core_and_shells_known_shapes() -> None:
@@ -449,7 +451,7 @@ def test_confocal_3d_volume_core_viability_and_coverage(home: Path) -> None:
         / truth["wells"]["A03"]["fields"]["1"]["confocal_spheroid"]["volume_um3"]
     )
     assert float(lost) < 0.8
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert "attenuation" in json.dumps(manifest["pipeline"])
 
 

@@ -145,10 +145,12 @@ def test_nc_ratio_per_cell_from_images(home: Path) -> None:
         # 1 of 49 resting cells per field responds in A, 42 of 49 in B
         assert values["A01"]["tl_responding_pct"] == pytest.approx(100 * 3 / 147, abs=1.5)
         assert values["B01"]["tl_responding_pct"] == pytest.approx(100 * 126 / 147, abs=1.5)
-    calibration = json.loads((folder / "assays" / "translocation" / "calibration.json").read_text())
+    calibration = json.loads(
+        (folder / "assays" / "translocation" / "calibration.json").read_text(encoding="utf-8")
+    )
     assert calibration["calibrated_on"] == "unstimulated wells (agonist mode)"
     assert calibration["z_prime_responding_pct"] > 0.5 and calibration["warnings"] == []
-    assert "assays/translocation/report.html" in (folder / "index.html").read_text()
+    assert "assays/translocation/report.html" in (folder / "index.html").read_text(encoding="utf-8")
 
 
 def test_agonist_ec50_through_pharmacology(tmp_path: Path, home: Path) -> None:
@@ -252,12 +254,12 @@ def test_warnings_about_background(tmp_path: Path) -> None:
     run = tmp_path / "run"
     write_translocation_run(run, {"A01": ("negative_control", 0.02, 300, None)})
     manifest_path = run / "run_manifest.json"
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["plate"]["metadata"]["channels"] = [{"name": "DAPI"}, {"name": "p65"}]
 
     def warnings(steps: list[dict[str, Any]]) -> list[str]:
         manifest["pipeline"]["steps"] = steps
-        manifest_path.write_text(json.dumps(manifest))
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         state: dict[str, Any] = _run(run).steps[0]["state"]
         return list(state["warnings"])
 

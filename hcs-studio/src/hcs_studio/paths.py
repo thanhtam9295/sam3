@@ -96,10 +96,20 @@ def resolve(
     platform: str | None = None,
 ) -> Path:
     """The path of ``rooted`` on this computer (raises when the root has no location here)."""
+    return Path(resolve_text(rooted, roots, platform))
+
+
+def resolve_text(
+    rooted: RootedPath | str,
+    roots: Sequence[DataRootConfig] | None = None,
+    platform: str | None = None,
+) -> str:
+    """The path of ``rooted`` as written on ``platform`` (default: this computer); unlike a
+    ``Path``, this also works for another operating system's paths."""
     if isinstance(rooted, str):
         rooted = RootedPath.parse(rooted)
     if rooted.is_absolute_fallback:
-        return Path(rooted.rel)
+        return rooted.rel
     platform = platform or sys.platform
     roots = load_settings().data_roots if roots is None else roots
     root = next((r for r in roots if r.name == rooted.root), None)
@@ -110,6 +120,7 @@ def resolve(
     location = _location(root, platform)
     if not location:
         raise KeyError(f"Data root {rooted.root!r} has no {platform_key(platform)} location")
+    parts = [p for p in rooted.rel.split("/") if p]
     if platform_key(platform) == "windows":
-        return Path(str(PureWindowsPath(location).joinpath(*rooted.rel.split("/"))))
-    return Path(location).joinpath(*[p for p in rooted.rel.split("/") if p])
+        return str(PureWindowsPath(location).joinpath(*parts))
+    return str(PurePosixPath(location).joinpath(*parts))

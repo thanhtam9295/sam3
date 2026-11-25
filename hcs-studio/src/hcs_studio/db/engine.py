@@ -108,7 +108,7 @@ def filesystem_type(path: Path, mounts: list[tuple[str, str]] | None = None) -> 
             mounts = _mac_mounts(output)
         else:
             try:
-                mounts = _linux_mounts(Path("/proc/mounts").read_text())
+                mounts = _linux_mounts(Path("/proc/mounts").read_text(encoding="utf-8"))
             except OSError:
                 return ""
     target = str(Path(path).absolute())

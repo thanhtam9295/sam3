@@ -60,7 +60,7 @@ def test_counts_against_manual_counts(run_folder: Path, tmp_path: Path) -> None:
         )
         == 1
     )
-    assert json.loads(out.read_text())["passed"] is False
+    assert json.loads(out.read_text(encoding="utf-8"))["passed"] is False
 
 
 COLOC2_LOG = """Coloc_2 version 3.0.6
@@ -87,20 +87,20 @@ def test_coloc_against_coloc2_log(tmp_path: Path) -> None:
     b = a + rng.normal(0, 1, a.shape)
     folder = tmp_path / "field1"
     result = export_for_fiji(folder, a, b, np.ones(a.shape, bool), randomizations=5)
-    assert "coloc2_log.txt" in (folder / "coloc2_compare.ijm").read_text()
+    assert "coloc2_log.txt" in (folder / "coloc2_compare.ijm").read_text(encoding="utf-8")
     ours = result.row()
     close = {k: ours[k] + 0.01 for k in ("pearson", "m1", "m2", "tm1", "tm2")}
     (folder / "coloc2_log.txt").write_text(
-        COLOC2_LOG.format(icq=ours["icq"], spearman=ours["spearman"], **close)
+        COLOC2_LOG.format(icq=ours["icq"], spearman=ours["spearman"], **close), encoding="utf-8"
     )
-    assert acceptance.parse_coloc2_log((folder / "coloc2_log.txt").read_text())["pearson"] == (
-        pytest.approx(ours["pearson"] + 0.01)
-    )
+    assert acceptance.parse_coloc2_log((folder / "coloc2_log.txt").read_text(encoding="utf-8"))[
+        "pearson"
+    ] == (pytest.approx(ours["pearson"] + 0.01))
     report = acceptance.check_coloc([folder])
     assert report.passed and len(report.items) == 5
     far = dict(close, tm1=ours["tm1"] + 0.05)
     (folder / "coloc2_log.txt").write_text(
-        COLOC2_LOG.format(icq=ours["icq"], spearman=ours["spearman"], **far)
+        COLOC2_LOG.format(icq=ours["icq"], spearman=ours["spearman"], **far), encoding="utf-8"
     )
     report = acceptance.check_coloc([folder])
     assert [i.name for i in report.items if not i.passed] == ["field1 tm1"]
@@ -115,9 +115,10 @@ def test_run_folder_check(run_folder: Path, tmp_path: Path) -> None:
     (broken / "wells" / "A02" / "previews" / "f001.png").unlink()
     html = broken / "index.html"
     html.write_text(
-        html.read_text().replace(
+        html.read_text(encoding="utf-8").replace(
             "</head>", '<script src="https://cdn.example/x.js"></script></head>'
-        )
+        ),
+        encoding="utf-8",
     )
     failed = {i.name for i in acceptance.check_run(broken).items if not i.passed}
     assert failed == {"report is self-contained", "report previews"}
@@ -127,7 +128,7 @@ def test_kill_and_resume(tmp_path: Path) -> None:
     plate = make_imagexpress(tmp_path / "raw" / "ix", WELLS, n_sites=2, image_fn=_image)
     slow = PIPELINE.replace("steps:\n", "steps:\n  - {module: denoise, params: {method: nlm}}\n")
     pipeline = tmp_path / "slow.yaml"
-    pipeline.write_text(slow)
+    pipeline.write_text(slow, encoding="utf-8")
     report = acceptance.check_kill_resume(
         pipeline, plate, tmp_path / "out", kill_after_wells=1, workers="2"
     )

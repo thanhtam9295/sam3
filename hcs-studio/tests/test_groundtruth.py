@@ -76,7 +76,10 @@ def test_splits_by_well_and_plate_never_leak(home: Path) -> None:
     ]
     assert gt.check_leakage(leaky, "well") == {"P1|B02": ["test", "train"]}
     assert (
-        json.loads((gt.set_folder("s", 3) / "set.json").read_text())["split_rule"]["by"] == "plate"
+        json.loads((gt.set_folder("s", 3) / "set.json").read_text(encoding="utf-8"))["split_rule"][
+            "by"
+        ]
+        == "plate"
     )
     with pytest.raises(ValueError, match="Unknown"):
         gt.assign_splits(base.items, test_groups=["nope"])
@@ -151,7 +154,7 @@ def test_gt_and_validate_commands(home: Path, tmp_path: Path) -> None:
         main(["validate-seg", "--set", "cli", "--pipeline", str(pipeline), "--output", str(out)])
         == 0
     )
-    metrics = json.loads((out / "metrics.json").read_text())
+    metrics = json.loads((out / "metrics.json").read_text(encoding="utf-8"))
     assert (
         metrics["set"] == "cli@2"
         and metrics["split"] == "test"

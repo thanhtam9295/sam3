@@ -73,7 +73,10 @@ def test_pipeline_yaml_round_trip(tmp_path: Path) -> None:
     for name in ("p.yaml", "p.json"):
         pipeline.save(tmp_path / name)
         assert Pipeline.load(tmp_path / name) == pipeline
-    assert json.loads((tmp_path / "p.json").read_text())["name"] == "correct-and-enhance"
+    assert (
+        json.loads((tmp_path / "p.json").read_text(encoding="utf-8"))["name"]
+        == "correct-and-enhance"
+    )
 
 
 @pytest.mark.parametrize(
@@ -153,11 +156,16 @@ def test_run_writes_a_self_describing_folder(plate_dir: Path, tmp_path: Path) ->
 
     assert sorted(p.name for p in (folder / "wells").iterdir()) == ["A01", "B02"]
     assert Pipeline.load(folder / "pipeline.yaml") == Pipeline.from_text(PIPELINE_YAML)
-    assert (folder / "plate_layout_source.csv").read_text() == layout.read_text()
+    assert (folder / "plate_layout_source.csv").read_text(encoding="utf-8") == layout.read_text(
+        encoding="utf-8"
+    )
     kept = load_plate_layout(folder / "plate_layout.json")
     assert kept.get((0, 0)).compound == "DMSO"
-    assert json.loads((folder / "run_manifest.json").read_text())["layout"]["wells"] == 1
-    assert "Run started" in (folder / "logs" / "run.log").read_text()
+    assert (
+        json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))["layout"]["wells"]
+        == 1
+    )
+    assert "Run started" in (folder / "logs" / "run.log").read_text(encoding="utf-8")
 
     well = folder / "wells" / "B02"
     with tifffile.TiffFile(well / "enhanced" / "f002_corrected.ome.tif") as tif:
@@ -169,11 +177,11 @@ def test_run_writes_a_self_describing_folder(plate_dir: Path, tmp_path: Path) ->
     enhanced = tifffile.imread(well / "enhanced" / "f002_enhanced.ome.tif")
     assert enhanced.max() <= 1.0  # CLAHE output: display only
     assert (well / "previews" / "f002.png").read_bytes()[:4] == b"\x89PNG"
-    summary = json.loads((well / "well_summary.json").read_text())
+    summary = json.loads((well / "well_summary.json").read_text(encoding="utf-8"))
     assert summary["fields"][1]["steps_enhanced"] == ["flatfield", "clahe"]
     assert "corrected files only" in summary["measurement_note"]
 
-    manifest = json.loads((folder / "run_manifest.json").read_text())
+    manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "completed" and manifest["wells"] == ["A01", "B02"]
     assert manifest["software"]["version"] and "git_commit" in manifest["software"]
     assert manifest["pipeline"]["steps"][0]["params"]["dark_offset"] == 100
@@ -195,7 +203,7 @@ def test_linear_only_pipeline_writes_no_enhanced_file(plate_dir: Path, tmp_path:
     )
     names = sorted(p.name for p in (result.folder / "wells" / "A01" / "enhanced").iterdir())
     assert names == ["f001_corrected.ome.tif", "f002_corrected.ome.tif", "f003_corrected.ome.tif"]
-    manifest = json.loads((result.folder / "run_manifest.json").read_text())
+    manifest = json.loads((result.folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert "sha256" not in manifest["inputs"][0] and "not computed" in manifest["input_checksums"]
 
 
@@ -218,11 +226,13 @@ def test_failed_well_is_recorded_and_the_run_continues(plate_dir: Path) -> None:
         plate, Pipeline.from_text("steps: [{module: denoise}]"), wells=[(0, 1), (1, 0)]
     )
     assert list(result.failed_wells) == ["A02"] and result.fields_written == 4
-    manifest = json.loads((result.folder / "run_manifest.json").read_text())
+    manifest = json.loads((result.folder / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "completed_with_failures" and "A02" in manifest["failed_wells"]
-    summary = json.loads((result.folder / "wells" / "A02" / "well_summary.json").read_text())
+    summary = json.loads(
+        (result.folder / "wells" / "A02" / "well_summary.json").read_text(encoding="utf-8")
+    )
     assert summary["error"] and len(summary["fields"]) == 1  # field 1 written before the failure
-    assert "Traceback" in (result.folder / "logs" / "run.log").read_text()
+    assert "Traceback" in (result.folder / "logs" / "run.log").read_text(encoding="utf-8")
 
 
 def test_cancel(plate_dir: Path) -> None:
@@ -239,7 +249,10 @@ def test_cancel(plate_dir: Path) -> None:
         cancel=cancel,
     )
     assert result.cancelled and result.fields_written == 2
-    assert json.loads((result.folder / "run_manifest.json").read_text())["status"] == "cancelled"
+    assert (
+        json.loads((result.folder / "run_manifest.json").read_text(encoding="utf-8"))["status"]
+        == "cancelled"
+    )
 
 
 def test_parse_wells(plate_dir: Path) -> None:

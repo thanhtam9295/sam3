@@ -290,9 +290,9 @@ def test_profile_command_writes_stages(tmp_path: Path) -> None:
     )
     for name in ("aggregated", "normalized", "feature_selected", "consensus"):
         assert len(pd.read_parquet(out / f"{name}.parquet")) == (3 if name == "consensus" else 24)
-    selection = json.loads((out / "feature_selection.json").read_text())
+    selection = json.loads((out / "feature_selection.json").read_text(encoding="utf-8"))
     assert selection["features_in"] == N_FEATURES == len(selection["kept"])
-    record = json.loads((out / "profiling.json").read_text())
+    record = json.loads((out / "profiling.json").read_text(encoding="utf-8"))
     assert record["options"]["normalize"] == "mad_robustize"
     assert record["log"]["single_cell_qc"]["kept"] == 960 and record["pycytominer"]
     assert (
