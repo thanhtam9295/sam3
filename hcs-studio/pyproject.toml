@@ -125,6 +125,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # µ and × are intended in scientific 
 extend-immutable-calls = ["fastapi.Body", "fastapi.Depends", "fastapi.Header", "fastapi.Query"]
 [tool.ruff.lint.per-file-ignores]
 # methods prose: sentences read better unbroken
+"scripts/done_when_audit.py" = ["E501"]  # a table of criteria and test ids
 "src/hcs_studio/output/methods.py" = ["E501"]
 "src/hcs_studio/monitoring/report.py" = ["E501"]  # HTML page template
 "src/hcs_studio/qc/report.py" = ["E501"]  # HTML page template
