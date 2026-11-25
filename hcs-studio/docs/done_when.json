@@ -10,7 +10,11 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_main_window.py::test_window_has_docks_and_gpu_status": "passed",
+   "tests/test_main_window.py::test_test_image_is_shown_in_napari_with_micrometre_scale": "passed",
+   "tests/test_hardening.py::test_selftest_passes": "passed"
+  }
  },
  {
   "phase": "1",
@@ -25,7 +29,13 @@
   "status": "met (synthetic)",
   "note": "Readers pass on synthetic vendor layouts (pixel values encode well/field/channel/z). No public .nd2 sample was reachable.",
   "needs": "One real plate export per instrument (Nikon .nd2, Operetta, ImageXpress).",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_readers.py::test_operetta_plate": "passed",
+   "tests/test_readers.py::test_imagexpress_plate": "passed",
+   "tests/test_readers.py::test_nikon_single_file_with_well_positions": "passed",
+   "tests/test_readers.py::test_ome_zarr_plate": "passed",
+   "tests/test_gui_browser.py::test_open_operetta_plate_and_view_a_field": "passed"
+  }
  },
  {
   "phase": "3",
@@ -37,7 +47,10 @@
   "status": "met (synthetic)",
   "note": "Synthetic bead stack; `hcs-studio benchmark` reports runtime.",
   "needs": "A real bead PSF stack (with the Nikon Z-stack).",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_deconvolution.py::test_bead_stack_fwhm_is_reduced_in_3d": "passed",
+   "tests/test_deconvolution.py::test_benchmark_command": "passed"
+  }
  },
  {
   "phase": "5",
@@ -51,7 +64,12 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_measurements.py::test_identical_and_anticorrelated_channels": "passed",
+   "tests/test_measurements.py::test_manders_known_overlap": "passed",
+   "tests/test_measurements.py::test_costes_threshold_matches_brute_force_and_separates_background": "passed",
+   "tests/test_measurements.py::test_randomization_separates_real_from_chance_correlation": "passed"
+  }
  },
  {
   "phase": "5",
@@ -62,7 +80,9 @@
   "status": "waiting for data",
   "note": "`hcs-studio acceptance coloc` compares with a Coloc 2 log.",
   "needs": "3 real fields with their Fiji Coloc 2 results.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_acceptance.py::test_coloc_against_coloc2_log": "passed"
+  }
  },
  {
   "phase": "10",
@@ -77,7 +97,13 @@
   "status": "met",
   "note": "384-well timing numbers are in docs/validation.md (scripts/pipelines/perf_384.yaml).",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_hardening.py::test_run_records_timing_and_performance": "passed",
+   "tests/test_hardening.py::test_memory_limit_caps_workers": "passed",
+   "tests/test_hardening.py::test_disk_full_stops_the_run_and_it_resumes": "passed",
+   "tests/test_hardening.py::test_gui_error_handler_logs_and_keeps_running": "passed",
+   "tests/test_hardening.py::test_user_guide_builds_as_html": "passed"
+  }
  },
  {
   "phase": "10",
@@ -88,7 +114,9 @@
   "status": "open",
   "note": "packaging/build_windows.ps1 + the hcs-studio-windows workflow build it on Windows; it cannot be built in this Linux container. The spec is checked by tests (worker scripts, data, migrations).",
   "needs": "Run the hcs-studio-windows workflow (or the script on a Windows PC) and try the installer.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_packaging.py": "passed"
+  }
  },
  {
   "phase": "\u00a710",
@@ -100,7 +128,10 @@
   "status": "met (synthetic)",
   "note": "",
   "needs": "A real 384-well plate.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_batch.py::test_forced_kill_then_cli_resume": "passed",
+   "tests/test_ilastik_done_when.py::test_384_well_projected_plate_unattended_with_kill_and_resume": "passed"
+  }
  },
  {
   "phase": "\u00a710",
@@ -111,7 +142,9 @@
   "status": "waiting for data",
   "note": "`hcs-studio acceptance counts` (tested on synthetic fields).",
   "needs": "10 annotated fields with manual counts.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_acceptance.py": "passed"
+  }
  },
  {
   "phase": "\u00a710",
@@ -122,7 +155,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_results.py::test_report_works_offline_in_a_browser": "passed"
+  }
  },
  {
   "phase": "11",
@@ -133,7 +168,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_gui_layout.py::test_combo_and_drc_layouts_are_quick_to_build": "passed"
+  }
  },
  {
   "phase": "11",
@@ -144,7 +181,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_annotation.py::test_round_trip_csv_xlsx_platemap_json": "passed"
+  }
  },
  {
   "phase": "11",
@@ -155,7 +194,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_annotation.py::test_validation_catches_each_seeded_error": "passed"
+  }
  },
  {
   "phase": "12",
@@ -167,7 +208,10 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_projection_background.py::test_projections_equal_known_values": "passed",
+   "tests/test_projection_background.py::test_background_keeps_spot_intensity_within_5_percent": "passed"
+  }
  },
  {
   "phase": "12",
@@ -178,7 +222,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_projection_batch.py::test_384_well_3_channel_20_plane_plate_projects_with_resume": "passed"
+  }
  },
  {
   "phase": "13",
@@ -189,7 +235,9 @@
   "status": "waiting for data",
   "note": "Skips while tests/data/pharmacology/prism/ is empty; known-answer synthetic fits pass (test_regression).",
   "needs": "5 curves with their Prism fits.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_pharmacology.py::test_matches_graphpad_prism": "skipped"
+  }
  },
  {
   "phase": "13",
@@ -202,7 +250,11 @@
   "status": "waiting for data",
   "note": "Known-answer matrices pass; the SynergyFinder comparison skips while tests/data/pharmacology/synergyfinder/ is empty.",
   "needs": "A reference 6\u00d76 matrix with SynergyFinder scores.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_pharmacology.py::test_matches_synergyfinder": "skipped",
+   "tests/test_pharmacology.py::test_bliss_additive_matrix_scores_zero": "passed",
+   "tests/test_pharmacology.py::test_sham_combination_scores_zero_with_loewe": "passed"
+  }
  },
  {
   "phase": "13",
@@ -213,7 +265,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_pharmacology.py::test_full_report_from_a_384_well_combo_plate_in_under_a_minute": "passed"
+  }
  },
  {
   "phase": "14",
@@ -226,7 +280,11 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_compare.py::test_2x6_linked_comparison_png_scale_bars": "passed",
+   "tests/test_compare.py::test_2x6_comparison_svg_scale_bars_and_text": "passed",
+   "tests/test_compare.py::test_sidecar_regenerates_a_pixel_identical_png": "passed"
+  }
  },
  {
   "phase": "15",
@@ -237,7 +295,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_regression.py": "passed"
+  }
  },
  {
   "phase": "16",
@@ -248,7 +308,9 @@
   "status": "met (synthetic)",
   "note": "Stand-in ilastik (real command line); 24 wells in CI, 384 with HCS_SLOW=1.",
   "needs": "Trained .ilp projects with matching images; a PC with ilastik.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_ilastik_done_when.py": "passed"
+  }
  },
  {
   "phase": "16",
@@ -261,7 +323,11 @@
   "status": "met (synthetic)",
   "note": "Stand-in Fiji runs the generated macros as ilastik4ij does; the real parity test skips without HCS_ILASTIK/HCS_FIJI/HCS_ILASTIK_PIXEL_PROJECT.",
   "needs": "Run `hcs-studio ilastik --test <project.ilp>` on a PC with ilastik and Fiji.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_ilastik_fiji.py::test_headless_and_fiji_agree": "passed",
+   "tests/test_ilastik_fiji.py::test_pipeline_with_the_fiji_runner_matches_headless": "passed",
+   "tests/test_ilastik_fiji.py::test_real_headless_vs_fiji_parity": "skipped"
+  }
  },
  {
   "phase": "16",
@@ -272,7 +338,9 @@
   "status": "met (synthetic)",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_ilastik_objects.py::test_classifies_existing_objects_per_well": "passed"
+  }
  },
  {
   "phase": "16",
@@ -283,7 +351,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_ilastik_steps.py::test_pipeline_runs_ilastik_once_per_well": "passed"
+  }
  },
  {
   "phase": "17",
@@ -294,7 +364,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_registry.py::test_scan_indexes_every_run_and_rescanning_adds_nothing": "passed"
+  }
  },
  {
   "phase": "17",
@@ -305,7 +377,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_registry.py::test_all_ic50s_of_a_compound_in_a_cell_line_across_runs": "passed"
+  }
  },
  {
   "phase": "17",
@@ -317,7 +391,10 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_normalization.py::test_b_score_removes_a_row_column_artifact_and_keeps_seeded_hits": "passed",
+   "tests/test_normalization.py::test_b_score_is_blocked_on_dose_response_and_combination_layouts": "passed"
+  }
  },
  {
   "phase": "17",
@@ -329,7 +406,10 @@
   "status": "met",
   "note": "MSR formula from Eastwood 2006; not yet checked against the NCATS AGM.",
   "needs": "Confirm the MSR formula you use.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_monitoring.py::test_control_chart_flags_a_seeded_drift_and_not_the_baseline": "passed",
+   "tests/test_monitoring.py::test_msr_matches_a_hand_calculation": "passed"
+  }
  },
  {
   "phase": "18",
@@ -340,7 +420,9 @@
   "status": "met (synthetic)",
   "note": "Thresholds are tuned on synthetic artifacts.",
   "needs": "20\u201350 bad and ~50 good real fields per instrument.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_qc.py::test_each_artifact_class_is_detected_with_few_false_positives": "passed"
+  }
  },
  {
   "phase": "18",
@@ -351,7 +433,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_qc_runs.py::test_qc_of_a_384_well_plate_runs_in_the_queue_before_segmentation": "passed"
+  }
  },
  {
   "phase": "18",
@@ -362,7 +446,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_qc_runs.py::test_wells_failing_image_qc_leave_ic50_fits_and_are_listed": "passed"
+  }
  },
  {
   "phase": "19",
@@ -373,7 +459,9 @@
   "status": "met (synthetic)",
   "note": "Synthetic ImageXpress exports, in-test SMTP server.",
   "needs": "Real exports per instrument, share paths, SMTP host and sender.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_automation_flow.py::test_dropped_export_runs_without_clicks": "passed"
+  }
  },
  {
   "phase": "19",
@@ -385,7 +473,10 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_automation.py::test_slow_copy_is_not_started_early": "passed",
+   "tests/test_automation.py::test_duplicates_and_reimaging": "passed"
+  }
  },
  {
   "phase": "19",
@@ -396,7 +487,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_automation.py::test_duplicates_and_reimaging": "passed"
+  }
  },
  {
   "phase": "20",
@@ -411,7 +504,13 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_cell_cycle.py::test_dean_jett_fox_fit_recovers_known_phase_fractions": "passed",
+   "tests/test_foci.py::test_foci_counts_per_nucleus_from_images": "passed",
+   "tests/test_translocation.py::test_nc_ratio_per_cell_from_images": "passed",
+   "tests/test_apoptosis.py::test_apoptosis_from_images": "passed",
+   "tests/test_proliferation.py::test_markers_micronuclei_and_multinucleation_from_images": "passed"
+  }
  },
  {
   "phase": "20",
@@ -422,7 +521,9 @@
   "status": "waiting for data",
   "note": "Calibration and Z\u2032 are tested on synthetic control plates.",
   "needs": "One real control plate per assay with your current results.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_apoptosis.py::test_categories_viable_counts_and_gr_match_truth": "passed"
+  }
  },
  {
   "phase": "21",
@@ -435,7 +536,11 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_spheroids.py::test_volume_and_qc_flags_from_brightfield": "passed",
+   "tests/test_spheroids.py::test_core_viability_and_invasion_from_images": "passed",
+   "tests/test_spheroids.py::test_confocal_3d_volume_core_viability_and_coverage": "passed"
+  }
  },
  {
   "phase": "21",
@@ -446,7 +551,9 @@
   "status": "met (synthetic)",
   "note": "",
   "needs": "A brightfield and a confocal spheroid plate with treatment.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_spheroids.py::test_384_plate_batch_and_dose_response_on_volume": "passed"
+  }
  },
  {
   "phase": "22",
@@ -458,7 +565,10 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_kinetics_analysis.py::test_growth_models_recover_doubling_time": "passed",
+   "tests/test_kinetics_analysis.py::test_doubling_time_from_images": "passed"
+  }
  },
  {
   "phase": "22",
@@ -471,7 +581,11 @@
   "status": "met (synthetic)",
   "note": "GR interval convention (Hafner et al.) not checked: the paper was not readable from here.",
   "needs": "A kinetic plate per instrument with the treatment time; confirm the GR convention.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_kinetics_analysis.py::test_ic50_and_gr_over_time_known_answers": "passed",
+   "tests/test_kinetics.py::test_imagexpress_time_points_from_image_timestamps": "passed",
+   "tests/test_kinetics.py::test_nd2_time_points_from_frame_events": "passed"
+  }
  },
  {
   "phase": "23",
@@ -482,7 +596,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_screening.py::test_seeded_hits_recovered_and_artifact_makes_no_false_hits": "passed"
+  }
  },
  {
   "phase": "23",
@@ -494,7 +610,10 @@
   "status": "waiting for data",
   "note": "Layouts are pre-registered (tested); the Echo columns are configurable but unverified.",
   "needs": "A sample Echo pick list, the library plate map, your hit rules.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_cherrypick.py::test_cherry_pick_command_registers_and_sends": "passed",
+   "tests/test_cherrypick.py::test_pick_list_formats": "passed"
+  }
  },
  {
   "phase": "24",
@@ -507,7 +626,11 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_cellpainting_profiles.py::test_reproduces_pycytominer_on_jump_data": "passed",
+   "tests/test_cellpainting_profiles.py::test_whole_chain_on_jump_data": "passed",
+   "tests/test_cellpainting.py::test_cellprofiler_sqlite_matches_pycytominer": "passed"
+  }
  },
  {
   "phase": "24",
@@ -519,7 +642,10 @@
   "status": "met (synthetic)",
   "note": "",
   "needs": "A Cell Painting plate with reference compounds and MoA.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_cellpainting_evaluation.py::test_seeded_phenotypes_active_vehicles_not": "passed",
+   "tests/test_cellpainting_evaluation.py::test_painted_plate_end_to_end": "passed"
+  }
  },
  {
   "phase": "25",
@@ -530,9 +656,13 @@
    "tests/test_model_registry.py::test_real_cellpose_fine_tune_registers"
   ],
   "status": "open",
-  "note": "Shown for tuned classical segmentation (AP gain > 0.15). Cellpose fine-tuning is wired end to end (opt-in test with the real weights), but its accuracy gain needs a GPU and ~100 epochs: not demonstrated here.",
+  "note": "Shown for tuned classical segmentation (AP gain > 0.15). Cellpose fine-tuning runs end to end with the real cpsam_v2 weights (opt-in test passed on CPU, 1 epoch, 2026-11-25), but its accuracy gain needs a GPU and ~100 epochs: not demonstrated here.",
   "needs": "20\u201340 annotated fields of the hardest cell line, and a GPU run.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_model_registry.py::test_tuning_improves_held_out_ap": "passed",
+   "tests/test_model_qa.py::test_comparison_report_is_saved": "passed",
+   "tests/test_model_registry.py::test_real_cellpose_fine_tune_registers": "skipped"
+  }
  },
  {
   "phase": "25",
@@ -543,7 +673,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_model_registry.py::test_pinned_model_reproduces_masks_and_manifest_records_it": "passed"
+  }
  },
  {
   "phase": "26",
@@ -554,7 +686,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_signoff.py::test_scripted_scenario_is_fully_audited": "passed"
+  }
  },
  {
   "phase": "26",
@@ -566,7 +700,10 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_security.py::test_chain_verifies_and_detects_tampering": "passed",
+   "tests/test_security.py::test_checkpoints_catch_a_rewritten_chain": "passed"
+  }
  },
  {
   "phase": "27",
@@ -579,7 +716,11 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_server_queue.py::test_two_clients_jobs_complete": "passed",
+   "tests/test_server_api.py::test_two_clients_at_once": "passed",
+   "tests/test_server_queue.py::test_killed_worker_is_restarted_and_job_resumes": "passed"
+  }
  },
  {
   "phase": "27",
@@ -591,7 +732,10 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_server_e2e.py::test_384_well_plate_while_the_client_is_away": "passed",
+   "tests/test_server_e2e.py::test_portal_in_a_browser": "passed"
+  }
  },
  {
   "phase": "28",
@@ -604,7 +748,11 @@
   "status": "waiting for data",
   "note": "Grading and 'show work' are tested with a mocked model; the live evaluation needs an API key.",
   "needs": "Run `hcs-studio assistant eval --workdir <new>` with your key.",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_assistant_eval.py::test_ground_truth_and_grading_with_an_oracle": "passed",
+   "tests/test_assistant.py::test_question_with_a_query_shows_its_work": "passed",
+   "tests/test_assistant_eval.py::test_live_evaluation": "skipped"
+  }
  },
  {
   "phase": "28",
@@ -616,6 +764,9 @@
   "status": "met",
   "note": "",
   "needs": "",
-  "outcomes": {}
+  "outcomes": {
+   "tests/test_assistant.py::test_payload_log_contains_only_curated_data": "passed",
+   "tests/test_assistant.py::test_snapshot_holds_only_curated_views": "passed"
+  }
  }
 ]
