@@ -224,11 +224,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ilastik_cmd.add_argument("--axes", help="--macro: axis order of the .h5 inputs (e.g. zyxc)")
     ilastik_cmd.add_argument(
+        "--run",
+        type=Path,
+        help="run this project's preset pipeline on --input (a plate); results in --runs",
+    )
+    ilastik_cmd.add_argument("--input", type=Path, help="--run: the plate")
+    ilastik_cmd.add_argument("--runs", type=Path, help="--run: folder that receives the run")
+    ilastik_cmd.add_argument(
+        "--training-set",
+        type=Path,
+        help="write representative fields of --input (a plate or a finished run) as HDF5 "
+        "for training in ilastik into the --output folder",
+    )
+    ilastik_cmd.add_argument(
+        "--stage",
+        default="raw",
+        help="--training-set: raw, step:<n> or ilastik (what the run's ilastik step sees)",
+    )
+    ilastik_cmd.add_argument(
         "--export-h5",
         type=Path,
         help="write a plate's raw fields as ilastik-ready HDF5 into the --output folder",
     )
-    ilastik_cmd.add_argument("--wells", default="all", help="--export-h5: wells (A01-B12)")
+    ilastik_cmd.add_argument(
+        "--wells", default="all", help="--export-h5/--run/--training-set: wells (A01-B12)"
+    )
+    ilastik_cmd.add_argument(
+        "--layout-file", type=Path, help="--training-set: plate layout (cell lines, controls)"
+    )
     ilastik_cmd.add_argument(
         "--time-stack", action="store_true", help="--export-h5: one file per field with all T"
     )
@@ -1946,8 +1969,10 @@ def _ilastik(args: argparse.Namespace) -> int:
 
     if args.info or args.preset:
         return _ilastik_project(args)
-    if args.macro or args.export_h5:
+    if args.macro or args.export_h5 or args.training_set:
         return _ilastik_files(args)
+    if args.run:
+        return _ilastik_run(args)
     settings = IlastikSettings.load()
     changes: dict[str, object] = {}
     if args.set_ilastik:
@@ -1983,6 +2008,8 @@ def _ilastik_files(args: argparse.Namespace) -> int:
     if not args.output:
         print("ERROR: give --output (macro file, or folder for --export-h5)")
         return 2
+    if args.training_set:
+        return _ilastik_training_set(args)
     if args.export_h5:
         from hcs_studio.io.base import open_plate
         from hcs_studio.pipeline.executor import parse_wells
@@ -2023,6 +2050,99 @@ def _ilastik_files(args: argparse.Namespace) -> int:
     args.output.write_text(text, encoding="utf-8")
     print(f"Fiji macro written to {args.output}")
     return 0
+
+
+def _ilastik_training_set(args: argparse.Namespace) -> int:
+    """``--training-set <plate or run>``: representative fields as HDF5 + training_set.json."""
+    import json
+
+    from hcs_studio.io.base import open_plate, reopen_plate
+    from hcs_studio.model.layout import load_plate_layout, run_layout_file
+    from hcs_studio.pipeline.executor import parse_wells
+    from hcs_studio.segmentation.ilastik_backend import training_set as ts
+
+    source = args.training_set
+    try:
+        layout = None
+        if (source / "run_manifest.json").exists():
+            manifest = json.loads((source / "run_manifest.json").read_text(encoding="utf-8"))
+            plate = reopen_plate(manifest["plate"].get("source") or manifest["plate"])
+            wells = parse_wells(",".join(manifest["wells"]), plate)
+            layout_file = run_layout_file(source)
+            layout = dict(load_plate_layout(layout_file).wells) if layout_file else None
+        else:
+            plate = open_plate(source)
+            wells = parse_wells(args.wells, plate)
+        if args.layout_file:
+            layout = dict(load_plate_layout(args.layout_file).wells)
+        fields = ts.representative_fields(wells, ts.fields_per_well(plate), layout)
+        target = ts.export_training_set(
+            source, fields, args.output, stage=args.stage, channels=args.channels
+        )
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"ERROR: {exc}")
+        return 2
+    for item in fields:
+        print(f"{item.well} field {item.field}: {item.reason}")
+    print(f"{len(fields)} field(s) written; description in {target}")
+    return 0
+
+
+def _ilastik_run(args: argparse.Namespace) -> int:
+    """``--run <ilp> --input <plate>``: the project's preset pipeline on a plate."""
+    import os
+
+    import yaml
+
+    from hcs_studio.io.base import ReaderError, open_plate
+    from hcs_studio.pipeline.executor import parse_wells
+    from hcs_studio.processing.base import ModuleError
+    from hcs_studio.segmentation.ilastik_backend.presets import multicut_preset, pixel_preset
+    from hcs_studio.segmentation.ilastik_backend.project import read_project
+    from hcs_studio.services.operations import run_pipeline
+
+    if not args.input or not args.runs:
+        print("ERROR: --run needs --input <plate> and --runs <folder>")
+        return 2
+    try:
+        info = read_project(args.run)
+        if info.workflow == "multicut" and args.boundary:
+            pipeline = multicut_preset(args.boundary, args.run)
+        else:
+            pipeline = pixel_preset(
+                args.run, info, object_class=args.object_class, channels=args.channels
+            )
+        plate = open_plate(args.input)
+        wells = parse_wells(args.wells, plate)
+    except (OSError, ValueError, ReaderError) as exc:
+        print(f"ERROR: {exc}")
+        return 2
+    print("Pipeline:\n" + yaml.safe_dump(pipeline.to_dict(), sort_keys=False))
+    previous = os.environ.get("HCS_ILASTIK_RUNNER")
+    if args.runner:
+        os.environ["HCS_ILASTIK_RUNNER"] = args.runner
+    try:
+        result = run_pipeline(
+            _ctx(args),
+            plate,
+            pipeline,
+            output_root=args.runs,
+            wells=wells,
+            workers=1,
+            progress=lambda done, total, message: print(f"[{done}/{total}] {message}"),
+        )
+    except (OSError, ValueError, ModuleError) as exc:
+        print(f"ERROR: {exc}")
+        return 2
+    finally:
+        if args.runner:
+            if previous is None:
+                os.environ.pop("HCS_ILASTIK_RUNNER", None)
+            else:
+                os.environ["HCS_ILASTIK_RUNNER"] = previous
+    failed = getattr(result, "failed_wells", {})
+    print(f"Run folder: {result.folder}" + (f" ({len(failed)} failed well(s))" if failed else ""))
+    return 1 if failed else 0
 
 
 def _ilastik_project(args: argparse.Namespace) -> int:

@@ -7,6 +7,8 @@ ilastik4ij plugin cannot do runs headless instead; the result's ``note`` and the
 
 from __future__ import annotations
 
+import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,11 @@ def runner_state() -> dict[str, Any]:
     from hcs_studio.segmentation.ilastik_backend.settings import IlastikSettings, detect
 
     settings = IlastikSettings.load()
+    override = os.environ.get("HCS_ILASTIK_RUNNER", "")
+    if override:  # one run with another runner (CLI ``--runner``), settings unchanged
+        if override not in ("headless", "fiji"):
+            raise IlastikError(f"HCS_ILASTIK_RUNNER must be headless or fiji, not {override!r}")
+        settings = replace(settings, runner=override)  # type: ignore[arg-type]
     found = detect(settings)
     if not found.ilastik_ok:
         raise IlastikError(
