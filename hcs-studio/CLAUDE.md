@@ -249,7 +249,7 @@ PlateLayout (model/annotation.py)
 
 Not added: lmfit (`scipy.optimize.least_squares` covers bounds, robust loss, covariance CIs), weasyprint (needs system Pango/Cairo; hard on Windows).
 
-## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a)–(e) built
+## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a)–(f) built
 
 Paused 2026-11-19 after step (a); resumed 2026-11-24 (user: "CONTINUE"): step (b) built against a
 fake ilastik (no `.ilp` samples yet; installing ilastik in the container was not permitted this
@@ -429,6 +429,27 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   --output_internal_path`, `FAKE_FIJI_LOG`); the fake ilastik accepts those flags and bare
   `<file>.h5` inputs. `tests/test_ilastik_fiji.py`: parity headless vs Fiji per workflow and for
   a whole pipeline; real parity with `HCS_ILASTIK` + `HCS_FIJI` + `HCS_ILASTIK_PIXEL_PROJECT`.
+
+### Conventions (step f, built: the spec's remaining §5/§6/§9 items)
+
+- Project library = the model registry (kind `ilastik`, `registry:NAME@V` refs work in every
+  ilastik step); `training_set.project_metadata` → `hyperparameters` (workflow, classes, axes,
+  channels, training set). Register through `services.training.register_model`.
+- `ilastik_backend/training_set.py`: `representative_fields` (layout groups: cell line × control
+  role / top dose per compound; else spread), `export_training_set` (plate → raw; run folder →
+  `raw` / `step:<n>` / `ilastik` = `ilastik_stage(run)`, recomputed via
+  `compare.sources._recompute` with the run's fitted states; `training_set.json`
+  `FORMAT`; refuses raw-data folders), `ilastik_gui_command` (`--project=` or `--new_project=
+  --workflow=` from `GUI_WORKFLOWS`; GUI workflow names unconfirmed).
+- `runners.runner_state` honours `HCS_ILASTIK_RUNNER` (one run with another runner; CLI
+  `--run … --runner`). CLI `--training-set`, `--stage`, `--layout-file`, `--run`, `--input`,
+  `--runs`.
+- GUI `gui/ilastik_panel.py` (`IlastikPanel`, dock "ilastik" tabified with Segmentation;
+  injectable `choose_project/choose_folder/choose_save/confirm/launch`; ilastik's window is
+  watched with a QTimer (`_check_ilastik`) → `ilastik_closed` offers registration;
+  `preset_ready` → `PipelinePanel.set_pipeline`; `check_fit` on every field change).
+- Done-when test `tests/test_ilastik_done_when.py` (subprocess run killed with SIGKILL on its
+  process group, CLI resume; `HCS_SLOW=1` for 384 wells).
 
 ### Testing plan
 
@@ -974,7 +995,7 @@ Run from this folder (`hcs-studio/`).
 - Layouts: `hcs-studio layout <file> --validate [--export out.xlsx [--plate-map]]`; re-annotate a run: `hcs-studio annotate <run> --layout <file>`
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
-- ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--runner headless|fiji] [--save] | --info <ilp> | --preset <ilp> [--class C --channels 1] --output p.yaml | --macro <ilp> [--export E --second S --axes A] --output m.ijm | --export-h5 <plate> --wells W --output <folder>`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`; real parity: `+ HCS_FIJI=<Fiji> HCS_ILASTIK_PIXEL_PROJECT=<ilp> pytest tests/test_ilastik_fiji.py -k real`
+- ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--runner headless|fiji] [--save] | --info <ilp> | --preset <ilp> [--class C --channels 1] --output p.yaml | --macro <ilp> [--export E --second S --axes A] --output m.ijm | --export-h5 <plate> --wells W --output <folder> | --training-set <plate|run> [--stage ilastik] --output <folder> | --run <ilp> --input <plate> --runs <folder> [--runner fiji]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`; real parity: `+ HCS_FIJI=<Fiji> HCS_ILASTIK_PIXEL_PROJECT=<ilp> pytest tests/test_ilastik_fiji.py -k real`
 - Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; assays: `hcs-studio assay list | preset cell_cycle --map dna=DAPI [--map edu=EdU] --channels … --output p.yaml | run <run> cell_cycle --map dna=DAPI`; kinetics: `hcs-studio kinetics table <run> [<run>… --output c.csv] [--treated-at ISO]` | `analyse <run> [<run>…] [--readout R --interval-h H --output dir]`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
 - Automatic runs: `hcs-studio auto serve | status | events [--status rejected] | check | retry <key> --reason R | test-notify | send <event.json>` (docs/automation.md)
 - Lab assistant: `hcs-studio assistant ask "…" [--strong --ids-only] | preview | status | configure --enable | set-key | eval --workdir <new>` (live eval costs tokens; also `HCS_ASSISTANT_EVAL=1 pytest tests/test_assistant_eval.py`)

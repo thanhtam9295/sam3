@@ -30,6 +30,7 @@ from hcs_studio.gui.browser import BrowserPanel
 from hcs_studio.gui.classify_panel import ClassifyPanel
 from hcs_studio.gui.compare_panel import ComparePanel
 from hcs_studio.gui.experiments_panel import ExperimentsPanel
+from hcs_studio.gui.ilastik_panel import IlastikPanel
 from hcs_studio.gui.ilastik_settings import IlastikSettingsDialog
 from hcs_studio.gui.jobs_panel import JobsPanel
 from hcs_studio.gui.layout_editor import LayoutEditor
@@ -161,6 +162,20 @@ class MainWindow(QMainWindow):
             self.segmentation_panel,
             Qt.DockWidgetArea.RightDockWidgetArea,
         )
+        self.ilastik_panel = IlastikPanel(
+            self.viewer_panel,
+            self.current_image,
+            self.log,
+            plate=lambda: self.plate,
+            selected_wells=lambda: self.plate_panel.plate_map.selected_wells(),
+            layout=lambda: dict(self.layout_document.wells) if self.layout_document else None,
+        )
+        self.ilastik_panel.preset_ready.connect(self.pipeline_panel.set_pipeline)
+        self.ilastik_dock = self._add_dock(
+            "ilastik", "ilastikDock", self.ilastik_panel, Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        self.tabifyDockWidget(self.segmentation_dock, self.ilastik_dock)
+        self.segmentation_dock.raise_()
         self.measurements_panel = MeasurementsPanel(self.viewer_panel, self.log)
         self.measurements_dock = self._add_dock(
             "Measurements",
@@ -416,6 +431,7 @@ class MainWindow(QMainWindow):
         self.current_field = (row, col, position)
         self._preview, self._raw_field = None, None
         self.segmentation_panel.refresh_layers()
+        self.ilastik_panel.check_fit()
         self.measurements_panel.set_data(self.current_image(), (), {})
         self.tabs.setCurrentWidget(self.viewer_panel.widget)
         self.log(f"Showing {self.plate.name} · {well_name(row, col)} · field {field.index}")

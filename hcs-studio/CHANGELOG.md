@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Phase 16f — ilastik dock, "Train in ilastik", one-line runs
+- ilastik dock: choose a project (file or the project library = model registry), compatibility
+  badge for the current field, preview of the class probabilities, preset into the pipeline,
+  Fiji macro export, add to the library.
+- "Train in ilastik": representative fields (every cell line, control and top dose) as
+  ilastik-ready HDF5 + `training_set.json`, ilastik's own window on a new or existing project,
+  and registration of the saved project with its classes and training set.
+- `hcs-studio ilastik --training-set <plate or run> [--stage ilastik]` (training images at the
+  stage the pipeline feeds ilastik) and `hcs-studio ilastik --run <project> --input <plate>`
+  (`--runner` for one run).
+- Done-when test: a projected 384-well plate through ilastik, killed and resumed.
+
 ### Phase 16e — Fiji runner and Fiji macros
 - Fiji runner: the ilastik steps can run through Fiji's ilastik4ij plugin (Tools → ilastik
   settings → Default runner: fiji), with the same results as the headless runner; steps the

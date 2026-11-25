@@ -206,6 +206,47 @@ hcs-studio ilastik --preset tracking.ilp --output tracking.yaml
   `track_id1`, `parent_track_id`, `lineage_id` and common variants); if a real export names them
   differently the step says which column it misses.
 
+## The ilastik dock and "Train in ilastik"
+
+The **ilastik** dock (next to *Segmentation*) works on the field shown in the viewer:
+
+- **Project**: a `.ilp` file, or a project from the **library** (the model registry, kind
+  `ilastik`; see the Models tab). The dock shows the workflow, classes, the ilastik version that
+  saved it and the training data's layout, and a badge: ✓ when the project fits this field
+  (dimensionality and channel count), ✗ with the reason otherwise. *Channels* are the image
+  channels sent to ilastik, in the order the project was trained.
+- **Preview on this field** runs a Pixel Classification or Autocontext project on the field and
+  shows one layer per class (`ilastik_<class>`).
+- **Use in pipeline** loads the project's preset (ilastik → objects → measurements) into the
+  pipeline builder. **Export Fiji macro…** and **Add to library…** as below.
+- **Train in ilastik…** writes representative fields of the selected wells (all wells when none
+  are selected) as ilastik-ready HDF5 with a `training_set.json`, then opens ilastik's own window
+  on the project — a new project of the chosen workflow when the project field is empty. Add the
+  files as raw data in ilastik, train, save and close ilastik: HCS Studio then offers to add the
+  saved project to the library, with its classes, training layout and the training set it came
+  from.
+
+Representative fields cover every cell line with each control role and the top dose of every
+compound (from the plate layout); without a layout they are spread over the plate.
+
+**Train on what the pipeline will send.** A project trained on raw images gives poor results on
+background-subtracted or projected images. From a finished run, export the training set at the
+stage its ilastik step sees (recomputed with the run's own plate-level estimates):
+
+```bash
+hcs-studio ilastik --training-set <run folder> --stage ilastik --output <folder>
+```
+
+(`--stage raw` or `step:<n>` for another stage; from a raw plate only `raw`;
+`--layout-file` adds cell lines and controls for raw plates.)
+
+**Run a project on a plate in one line** (its preset pipeline; `--runner fiji` for one run
+through Fiji without changing the settings):
+
+```bash
+hcs-studio ilastik --run nuclei.ilp --input <plate> --wells A01-P24 --channels 1 --runs <folder>
+```
+
 ## The Fiji runner (ilastik4ij)
 
 For labs that already run ilastik from Fiji macros, the same pipeline steps can run through
@@ -273,7 +314,10 @@ ilastik4ij plugin does (its flags, its temporary files, its axis orders, as read
 plugin's source). They cover one call per well, resume after a failed well, the read-only
 check, and the parity test: the same jobs (pixel probabilities and segmentation, object
 classification, multicut; 2D and 3D fields) through both runners give identical arrays, and a
-whole pipeline gives identical per-well tables.
+whole pipeline gives identical per-well tables. The done-when test runs a projected 384-well
+plate (24 wells in CI, all 384 with `HCS_SLOW=1`) through projection → ilastik → objects →
+measurements, kills the run part-way, resumes it (finished wells are not sent to ilastik again)
+and checks the counts against the synthetic truth and the run-folder structure.
 
 **Not yet run with a real trained project, real ilastik or real Fiji**: please send one or two
 `.ilp` files (Pixel Classification, Autocontext) with a few matching images. Then

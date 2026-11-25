@@ -269,6 +269,12 @@ come from the plugin's source; the published example macros differ in places (`i
 `inputimage=`). Unconfirmed: whether *Configure ilastik executable location* (an options
 command) runs in headless Fiji — it can be turned off in the settings.
 
+Done-when (Phase 16f), with the stand-in: a projected 384-well plate (24 wells in CI, 384 with
+`HCS_SLOW=1`) runs projection → ilastik → objects → measurements unattended, is killed part-way
+and resumed without re-sending finished wells to ilastik; counts equal the truth in every well.
+Training sets exported from a run equal the run's recomputed stage pixel for pixel. Unconfirmed:
+the `--workflow` names ilastik's window accepts for new projects.
+
 **Not checked:** a real trained project with the real ilastik, and real Fiji (no `.ilp` samples
 yet; the container could not install ilastik this time). The real parity test is ready
 (`tests/test_ilastik_fiji.py -k real`). Unconfirmed: where trained projects store the
