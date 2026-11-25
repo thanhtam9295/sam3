@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Windows
+- Fixed: on Windows a job kept running after its worker or the app was killed (it went on
+  writing to a run folder that was being resumed elsewhere); it now stops with its parent, as on
+  Linux and macOS.
+- The `hcs-studio-windows` workflow also runs from work branches when the commit message contains
+  `[build installer]`, and tests with every extra installed.
+
 ### Done-when audit fixes
 - Windows bundle: the SAM 3 and ilastik Python-API worker scripts (run by file path in their
   own Python environments) are now copied into the bundle; before, SAM 3 and the Python-API
