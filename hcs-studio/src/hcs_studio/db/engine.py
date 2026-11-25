@@ -130,7 +130,7 @@ def is_network_path(path: Path, mounts: list[tuple[str, str]] | None = None) -> 
             import ctypes
 
             DRIVE_REMOTE = 4
-            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined,unused-ignore]
             return bool(kernel32.GetDriveTypeW(drive + "\\") == DRIVE_REMOTE)
         return False
     if text.startswith("//"):

@@ -315,7 +315,7 @@ def check_kill_resume(
     output.mkdir(parents=True, exist_ok=True)
     before = set(output.iterdir())
     options: dict[str, Any] = (
-        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}  # type: ignore[attr-defined]
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}  # type: ignore[attr-defined,unused-ignore]
         if os.name == "nt"
         else {"start_new_session": True}
     )
@@ -336,7 +336,7 @@ def check_kill_resume(
             "the run finished (or failed) before it could be killed; use a larger plate or a "
             "smaller --kill-after"
         )
-    if os.name == "nt":
+    if sys.platform == "win32":
         subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
     else:
         os.killpg(process.pid, signal.SIGKILL)

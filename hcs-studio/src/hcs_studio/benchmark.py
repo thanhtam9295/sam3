@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import platform
+import sys
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -42,10 +43,10 @@ class BenchmarkResult:
 
 
 def _peak_memory_gb() -> float | None:
-    try:
-        import resource
-    except ImportError:  # Windows
+    if sys.platform == "win32":
         return None
+    import resource
+
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     # Linux reports KiB, macOS bytes.
     return float(peak) / (1024**3 if platform.system() == "Darwin" else 1024**2)

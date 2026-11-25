@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import platform
 import shutil
+import sys
 from pathlib import Path
 
 
 def peak_rss_bytes() -> int | None:
     """Peak resident memory of this process (None if it cannot be read)."""
-    try:
-        import resource
-    except ImportError:  # Windows
+    if sys.platform == "win32":
         return _windows_peak_working_set()
+    import resource
+
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return int(peak) if platform.system() == "Darwin" else int(peak) * 1024  # Linux: KiB
 
@@ -38,7 +39,7 @@ def _windows_peak_working_set() -> int | None:
 
         counters = Counters()
         counters.cb = ctypes.sizeof(Counters)
-        windll = ctypes.windll  # type: ignore[attr-defined]
+        windll = ctypes.windll  # type: ignore[attr-defined,unused-ignore]
         handle = windll.kernel32.GetCurrentProcess()
         if windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
             return int(counters.PeakWorkingSetSize)

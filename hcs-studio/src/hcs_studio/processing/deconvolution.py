@@ -236,7 +236,7 @@ def _available_ram() -> float | None:
 
         status = _Status()
         status.length = ctypes.sizeof(_Status)
-        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):  # type: ignore[attr-defined]
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):  # type: ignore[attr-defined,unused-ignore]
             return float(status.avail_phys)
         return None
     try:

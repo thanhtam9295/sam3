@@ -75,7 +75,8 @@ def test_384_well_projected_plate_unattended_with_kill_and_resume(
             folder = found[0].parents[2]
             break
         time.sleep(0.1)
-    os.killpg(process.pid, signal.SIGKILL)  # the whole process group, workers and ilastik
+    if sys.platform != "win32":  # skipped on Windows (see the marker)
+        os.killpg(process.pid, signal.SIGKILL)  # the whole process group, workers and ilastik
     process.wait(timeout=30)
     assert folder is not None, "no wells finished before the deadline"
     done_before = {p.parent.name for p in folder.glob("wells/*/well_summary.json")}

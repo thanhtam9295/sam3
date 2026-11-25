@@ -179,7 +179,7 @@ def test_forced_kill_then_cli_resume(plate_dir: Path, tmp_path: Path) -> None:
         "--no-checksums",
     ]
     options: dict[str, Any] = (
-        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}  # type: ignore[attr-defined]
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}  # type: ignore[attr-defined,unused-ignore]
         if os.name == "nt"
         else {"start_new_session": True}
     )
@@ -194,7 +194,7 @@ def test_forced_kill_then_cli_resume(plate_dir: Path, tmp_path: Path) -> None:
             folder = found[0].parents[2]
             break
         time.sleep(0.1)
-    if os.name == "nt":  # the whole process tree, workers included
+    if sys.platform == "win32":  # the whole process tree, workers included
         subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
     else:
         os.killpg(process.pid, signal.SIGKILL)  # the whole process group, workers included
