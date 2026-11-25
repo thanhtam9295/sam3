@@ -282,9 +282,16 @@ ground truth reaches AP50 > 0.7.
 
 **Not checked:** a real trained project with the real ilastik, and real Fiji (no `.ilp` samples
 yet; the container could not install ilastik this time). The real parity test is ready
-(`tests/test_ilastik_fiji.py -k real`). Unconfirmed: where trained projects store the
-training data's axes and channel count (the compatibility check uses them only when found), and
-how ilastik names the export of an HDF5 input (`{nickname}`; outputs are matched by prefix).
+(`tests/test_ilastik_fiji.py -k real`). The training data's axes and channel count are read
+where ilastik's own project parser reads them (`ilastik.experimental.parser`, main branch Nov
+2026: first role, last lane of `Input Data/infos`); this replaced a guess. Unconfirmed: how
+ilastik names the export of an HDF5 input (`{nickname}`; outputs are matched by prefix).
+
+Python API runner (Phase 16h), with a stand-in `ilastik.experimental.api` (calls as in ilastik's
+source: `PixelClassificationPipeline.from_ilp_file`, `get_probabilities(xarray.DataArray)`,
+`AutocontextPipeline.get_probabilities_stage_2`): same probabilities as the headless runner, the
+project loaded once per well, fallback to headless when the API is missing. Not yet run against a
+real ilastik environment (`hcs-studio ilastik --test <project>` checks it).
 
 ## Automatic runs (Phase 19)
 

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -70,11 +72,12 @@ class IlastikSettingsDialog(QDialog):
             "ilastik is already multithreaded and memory-hungry: 1 is usually fastest"
         )
         self.runner = QComboBox()
-        self.runner.addItems(["headless", "fiji"])
+        self.runner.addItems(["headless", "fiji", "python_api"])
         self.runner.setCurrentText(settings.runner)
         self.runner.setToolTip(
-            "fiji: through Fiji's ilastik4ij plugin (one ilastik start per image; steps the "
-            "plugin cannot do run headless and say so in the log)"
+            "fiji: through Fiji's ilastik4ij plugin (one ilastik start per image); "
+            "python_api: ilastik's Python API in its own environment (pixel/autocontext "
+            "probabilities). Steps a runner cannot do run headless and say so in the log."
         )
         self.fiji_configure = QCheckBox("Set ilastik's path, threads and RAM in the plugin")
         self.fiji_configure.setChecked(settings.fiji_configure)
@@ -102,6 +105,20 @@ class IlastikSettingsDialog(QDialog):
 
         self.detect_button = QPushButton("Detect / check installation")
         self.detect_button.clicked.connect(self.run_detection)
+        self.test_button = QPushButton("Test installation…")
+        self.test_button.setToolTip(
+            "Run a trained Pixel Classification project on a small synthetic image through "
+            "every available runner and compare the results"
+        )
+        self.test_button.clicked.connect(self.test_installation)
+        #: injectable for tests
+        self.choose_project: Callable[[], str] = lambda: QFileDialog.getOpenFileName(
+            self, "Trained ilastik project", "", "ilastik projects (*.ilp)"
+        )[0]
+        self.test_task = BackgroundTask(self)
+        self.test_task.finished.connect(self._show_test)
+        self.test_task.failed.connect(self._test_failed)
+        self.test_result: Any = None
         self.task = BackgroundTask(self)
         self.task.finished.connect(self._show_detection)
         self.task.failed.connect(
@@ -116,6 +133,7 @@ class IlastikSettingsDialog(QDialog):
         layout.addWidget(intro)
         layout.addLayout(form)
         layout.addWidget(self.detect_button)
+        layout.addWidget(self.test_button)
         layout.addWidget(self.status)
         layout.addWidget(buttons)
 
@@ -194,6 +212,29 @@ class IlastikSettingsDialog(QDialog):
         self.status.setText(
             "Runners available: " + ", ".join(runners) if runners else "No runner available yet"
         )
+
+    def test_installation(self) -> None:
+        from hcs_studio.segmentation.ilastik_backend.selftest import check_installation
+
+        try:
+            settings = self.settings()
+        except ValueError as exc:
+            self.status.setText(str(exc))
+            return
+        project = self.choose_project()
+        self.test_button.setEnabled(False)
+        self.status.setText("Testing… (each runner starts ilastik; this can take minutes)")
+        self.test_task.request(lambda: check_installation(project or None, settings=settings))
+
+    def _show_test(self, result: Any) -> None:
+        self.test_result = result
+        self.test_button.setEnabled(True)
+        verdict = "Installation test passed" if result.ok else "Installation test"
+        self.status.setText(f"{verdict}:\n{result.text()}")
+
+    def _test_failed(self, message: str) -> None:
+        self.test_button.setEnabled(True)
+        self.status.setText(f"Test failed: {message}")
 
     def save(self) -> None:
         try:

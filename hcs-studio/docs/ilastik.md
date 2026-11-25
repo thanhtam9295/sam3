@@ -54,13 +54,20 @@ tick **ilastik**, apply and restart Fiji. HCS Studio finds the `ilastik4ij*.jar`
 | Threads | threads per ilastik process; *no limit* lets ilastik decide (passed as `LAZYFLOW_THREADS`) |
 | RAM limit | memory per ilastik process; *no limit* or at least 500 MB (ilastik refuses less; passed as `LAZYFLOW_TOTAL_RAM_MB`) |
 | ilastik processes at once | default 1: ilastik is already multithreaded and memory-hungry |
-| Default runner | headless (ilastik directly; recommended) or fiji (through ilastik4ij; see below) |
+| Default runner | headless (ilastik directly; recommended), fiji (through ilastik4ij) or python_api (ilastik's Python API); see below |
 | Set ilastik's path, threads and RAM in the plugin | Fiji runner: run the plugin's *Configure ilastik executable location* first (default on) |
 | Fiji | the Fiji folder (optional) |
 
 **Detect / check installation** starts ilastik once to read its version (this takes a few
 seconds) and shows which runners are available. Settings are saved in
 `~/.hcs_studio/ilastik.json`.
+
+**Test installation…** asks for a trained Pixel Classification (or Autocontext) project, runs it
+on a small synthetic image with the project's dimensionality and channels through every runner
+available on this PC, and reports PASS/FAIL per runner with the largest difference from the
+headless result (they must agree within 10⁻⁴). HCS Studio cannot ship a trained project (only
+ilastik can make one), so the check uses yours. The same from the command line:
+`hcs-studio ilastik --test <project.ilp>` (without a project it only checks that ilastik starts).
 
 The same from the command line:
 
@@ -270,6 +277,20 @@ through Fiji without changing the settings):
 hcs-studio ilastik --run nuclei.ilp --input <plate> --wells A01-P24 --channels 1 --runs <folder>
 ```
 
+## The Python API runner
+
+When the ilastik program in the settings is the **Python of an ilastik conda environment**
+(e.g. `~/envs/ilastik/bin/python`), the `python_api` runner applies Pixel Classification and
+Autocontext projects through ilastik's own Python API (`ilastik.experimental.api`). It still runs
+in ilastik's environment, as a separate process — ilastik is never imported into HCS Studio. Per
+well, the project is loaded once and every field is predicted; the probabilities are the same as
+the headless runner's.
+
+- Probabilities only: Simple Segmentation exports, prediction masks and the other workflows run
+  headless, with a note in the log.
+- If the installed ilastik has no `ilastik.experimental.api` (older releases), runs use the
+  headless runner and say so in the log.
+
 ## The Fiji runner (ilastik4ij)
 
 For labs that already run ilastik from Fiji macros, the same pipeline steps can run through
@@ -354,5 +375,10 @@ HCS_ILASTIK=<ilastik program> HCS_FIJI=<Fiji folder> HCS_ILASTIK_PIXEL_PROJECT=<
 ```
 
 check the real programs (the second is the headless-vs-Fiji parity test on a real project;
-`HCS_ILASTIK_PIXEL_IMAGE=<file.h5/data>` uses your own image), and the project reader's guesses
-(where the training axes and channels are stored) can be confirmed.
+`HCS_ILASTIK_PIXEL_IMAGE=<file.h5/data>` uses your own image). `hcs-studio ilastik --test
+<project.ilp>` does the same comparison for every runner on your PC.
+
+The project reader takes the training data's axes and channel count where ilastik's own
+project parser (`ilastik.experimental.parser`) reads them: the first role of the **last** lane
+in `Input Data/infos`. Files that do not follow that layout fall back to a search, marked "not
+confirmed" in the dock.

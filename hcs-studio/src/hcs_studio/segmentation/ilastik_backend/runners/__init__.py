@@ -15,8 +15,22 @@ from typing import Any
 from hcs_studio.segmentation.ilastik_backend.job import IlastikError, IlastikJob, IlastikResult
 from hcs_studio.segmentation.ilastik_backend.runners.fiji import FijiRunner
 from hcs_studio.segmentation.ilastik_backend.runners.headless import HeadlessRunner
+from hcs_studio.segmentation.ilastik_backend.runners.python_api import (
+    PythonApiRunner,
+    api_available,
+    is_python,
+)
 
-__all__ = ["FijiRunner", "HeadlessRunner", "make_runner", "run_job", "runner_state"]
+__all__ = [
+    "FijiRunner",
+    "HeadlessRunner",
+    "PythonApiRunner",
+    "api_available",
+    "is_python",
+    "make_runner",
+    "run_job",
+    "runner_state",
+]
 
 
 def runner_state() -> dict[str, Any]:
@@ -27,8 +41,10 @@ def runner_state() -> dict[str, Any]:
     settings = IlastikSettings.load()
     override = os.environ.get("HCS_ILASTIK_RUNNER", "")
     if override:  # one run with another runner (CLI ``--runner``), settings unchanged
-        if override not in ("headless", "fiji"):
-            raise IlastikError(f"HCS_ILASTIK_RUNNER must be headless or fiji, not {override!r}")
+        if override not in ("headless", "fiji", "python_api"):
+            raise IlastikError(
+                f"HCS_ILASTIK_RUNNER must be headless, fiji or python_api, not {override!r}"
+            )
         settings = replace(settings, runner=override)  # type: ignore[arg-type]
     found = detect(settings)
     if not found.ilastik_ok:
@@ -47,6 +63,14 @@ def runner_state() -> dict[str, Any]:
         "threads": settings.threads,
         "ram_mb": settings.ram_mb,
     }
+    if settings.runner == "python_api":
+        # the API exists only in some ilastik versions: fall back to headless (spec §3.2)
+        if not is_python(found.ilastik):
+            state.update(runner="headless", runner_note="python_api needs the Python of an "
+                         "ilastik environment as the ilastik program; ran headless")  # fmt: skip
+        elif not api_available(found.ilastik):
+            state.update(runner="headless", runner_note="this ilastik has no "
+                         "ilastik.experimental.api; ran headless")  # fmt: skip
     if settings.runner == "fiji":
         if not found.fiji_ok:
             raise IlastikError(
@@ -80,7 +104,14 @@ def make_runner(state: dict[str, Any], job: IlastikJob) -> tuple[Any, str]:
         if reason is None:
             return fiji, ""
         return HeadlessRunner(state["ilastik"]), f"Fiji runner not used: {reason}; ran headless"
-    return HeadlessRunner(state["ilastik"]), ""
+    if state.get("runner") == "python_api":
+        api = PythonApiRunner(state["ilastik"])
+        reason = api.unsupported(job)
+        if reason is None:
+            return api, ""
+        return HeadlessRunner(state["ilastik"]), f"Python API not used: {reason}; ran headless"
+    note = str(state.get("runner_note", ""))
+    return HeadlessRunner(state["ilastik"]), note
 
 
 def run_job(state: dict[str, Any], job: IlastikJob, log_path: Path | None = None) -> IlastikResult:

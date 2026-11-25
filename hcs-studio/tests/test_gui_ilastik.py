@@ -160,3 +160,27 @@ def test_ilastik_panel_preview_preset_macro_and_training_round_trip(
 
     stored = {m.name: m for m in list_models(kind="ilastik")}
     assert stored["project"].hyperparameters["training_set"]["fields"] == 2
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="shebang scripts")
+def test_test_installation_button(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hcs_studio.segmentation.ilastik_backend.runners import python_api
+    from tests.test_ilastik_api import fake_environment
+    from tests.test_ilastik_steps import make_project
+
+    monkeypatch.setenv("HCS_STUDIO_HOME", str(tmp_path / "settings"))
+    monkeypatch.delenv("HCS_FIJI", raising=False)
+    monkeypatch.setattr(python_api, "_AVAILABLE", {})
+    python = fake_environment(tmp_path / "env")
+    monkeypatch.setenv("HCS_ILASTIK", str(python))
+    project = make_project(tmp_path / "p.ilp")
+    dialog = IlastikSettingsDialog()
+    qtbot.addWidget(dialog)
+    dialog.choose_project = lambda: str(project)
+    with qtbot.waitSignal(dialog.test_task.finished, timeout=120000):
+        dialog.test_installation()
+    text = dialog.status.text()
+    assert "Installation test passed" in text and "PASS python_api" in text, text
+    assert dialog.test_button.isEnabled() and dialog.test_result.ok

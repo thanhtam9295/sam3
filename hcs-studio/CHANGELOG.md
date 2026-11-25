@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Phase 16h — Python API runner and installation test
+- `python_api` runner: Pixel Classification / Autocontext probabilities through ilastik's Python
+  API in its own environment (project loaded once per well); headless fallback when the API is
+  missing or a step needs something else.
+- Tools → ilastik settings → **Test installation…** and `hcs-studio ilastik --test <project>`:
+  a trained project on a synthetic image through every available runner, PASS/FAIL and the
+  difference from headless.
+- The project reader finds the training axes and channel count where ilastik's own parser does.
+
 ### Phase 16g — ilastik in spheroids, confluence and validation
 - `detect_spheroids` method `probability` and `confluence` method `probability`: an ilastik
   pixel classifier's class replaces the built-in detection (spheroids, organoids, confluence

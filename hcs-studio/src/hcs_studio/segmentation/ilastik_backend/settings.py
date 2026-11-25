@@ -27,7 +27,7 @@ TESTED = "1.4.2"
 MIN_RAM_MB = 500  # ilastik refuses LAZYFLOW_TOTAL_RAM_MB below this
 VERSION_TIMEOUT_S = 180  # ilastik imports a lot before printing its version
 
-Runner = Literal["headless", "fiji"]
+Runner = Literal["headless", "fiji", "python_api"]
 Level = Literal["ok", "warning", "error"]
 
 _VERSION = re.compile(r"(\d+)\.(\d+)(?:\.(\d+))?(?:\.?(a|b|rc|post|dev)(\d*))?", re.IGNORECASE)
@@ -141,8 +141,8 @@ class IlastikSettings:
             raise ValueError(f"RAM limit must be 0 (no limit) or at least {MIN_RAM_MB} MB")
         if not isinstance(self.max_processes, int) or self.max_processes < 1:
             raise ValueError("At least one ilastik process must be allowed")
-        if self.runner not in ("headless", "fiji"):
-            raise ValueError(f"Unknown runner {self.runner!r} (headless or fiji)")
+        if self.runner not in ("headless", "fiji", "python_api"):
+            raise ValueError(f"Unknown runner {self.runner!r} (headless, fiji or python_api)")
 
     def environment(self) -> dict[str, str]:
         """Environment variables for a headless ilastik process (empty = ilastik's default)."""

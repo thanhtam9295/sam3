@@ -43,6 +43,7 @@ def make_project(
         f["workflowName"] = workflow.encode()
         f["ilastikVersion"] = b"1.4.2"
         f.create_dataset("PixelClassification/LabelNames", data=[n.encode() for n in names])
+        f["Input Data/Role Names"] = [b"Raw Data", b"Prediction Mask"]
         lane = f.create_group("Input Data/infos/lane0000/Raw Data")
         lane["axistags"] = axistags_json(axes).encode()
         lane["shape"] = np.array([64] * (len(axes) - 1) + [channels])
@@ -97,6 +98,27 @@ def test_read_project(tmp_path: Path) -> None:
     (tmp_path / "bad.ilp").write_text("not hdf5")
     with pytest.raises(ValueError):
         read_project(tmp_path / "bad.ilp")
+
+
+def test_training_layout_as_ilastik_reads_it(tmp_path: Path) -> None:
+    """ilastik's parser: first role name, last lane (here 3D, 2 channels after a 2D lane)."""
+    import h5py
+
+    from hcs_studio.segmentation.ilastik_backend.h5io import axistags_json
+
+    path = make_project(tmp_path / "lanes.ilp", axes="yxc", channels=1)
+    assert read_project(path).confirmed
+    with h5py.File(path, "a") as f:
+        lane = f.create_group("Input Data/infos/lane0001/Raw Data")
+        lane["axistags"] = axistags_json("zyxc").encode()
+        lane["shape"] = np.array([5, 64, 64, 2])
+        f.create_group("Input Data/infos/lane0001/Prediction Mask")  # empty role: ignored
+    info = read_project(path)
+    assert (info.axes, info.channels, info.confirmed) == ("zyxc", 2, True)
+    with h5py.File(path, "a") as f:
+        del f["Input Data/Role Names"]  # an older/unusual file: search, unconfirmed
+    info = read_project(path)
+    assert info.axes in ("yxc", "zyxc") and not info.confirmed
 
 
 # --- runner

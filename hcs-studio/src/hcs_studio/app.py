@@ -216,7 +216,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--channels", type=int, nargs="+", help="channels sent to ilastik (from 1)"
     )
     ilastik_cmd.add_argument(
-        "--runner", choices=["headless", "fiji"], help="default runner (save with --save)"
+        "--runner",
+        choices=["headless", "fiji", "python_api"],
+        help="default runner (save with --save)",
     )
     ilastik_cmd.add_argument(
         "--macro",
@@ -230,6 +232,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--second", help="--macro: second input of objects/multicut/tracking projects"
     )
     ilastik_cmd.add_argument("--axes", help="--macro: axis order of the .h5 inputs (e.g. zyxc)")
+    ilastik_cmd.add_argument(
+        "--test",
+        nargs="?",
+        const="",
+        metavar="PROJECT",
+        help="test the installation: run a trained pixel project through every runner",
+    )
     ilastik_cmd.add_argument(
         "--run",
         type=Path,
@@ -1980,6 +1989,12 @@ def _ilastik(args: argparse.Namespace) -> int:
         return _ilastik_files(args)
     if args.run:
         return _ilastik_run(args)
+    if args.test is not None:
+        from hcs_studio.segmentation.ilastik_backend.selftest import check_installation
+
+        result = check_installation(args.test or None)
+        print(result.text())
+        return 0 if result.ok or (not args.test and result.ilastik) else 1
     settings = IlastikSettings.load()
     changes: dict[str, object] = {}
     if args.set_ilastik:

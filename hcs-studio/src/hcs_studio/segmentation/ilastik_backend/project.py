@@ -7,9 +7,11 @@ trained projects from the lab** — sample ``.ilp`` files are still awaited):
   writer.
 - class names (``PixelClassification/LabelNames``): confirmed for Pixel Classification;
   Autocontext stores one ``LabelNames`` per stage, found by searching the file.
-- the training data's axis order and channel count: searched in ``Input Data`` (``axistags``
-  datasets/attributes, ``shape``); returned with ``confirmed=False`` until checked on real
-  projects.
+- the training data's axis order and channel count: read as ilastik's own project parser does
+  (``ilastik.experimental.parser``, main branch Nov 2026): ``Input Data/Role Names`` → the first
+  role (normally "Raw Data"); the **last** lane of ``Input Data/infos``; its ``axistags`` (vigra
+  JSON) and ``shape``. Then ``confirmed=True``. Older or unusual files fall back to searching
+  ``Input Data`` (``confirmed=False``).
 
 The classifier itself is a pickle: it is never read. The file's SHA-256 is recorded in run
 manifests so results trace back to the exact trained classifier.
@@ -125,7 +127,11 @@ def read_project(path: str | Path) -> ProjectInfo:
 
         f.visititems(visit)
         info.label_names = names
-        if axes_found:
+        layout = _training_layout(f)
+        if layout is not None:
+            info.axes, info.channels = layout
+            info.confirmed = True
+        elif axes_found:
             info.axes = axes_found[0]
             if shapes and "c" in info.axes and len(shapes[0]) == len(info.axes):
                 info.channels = shapes[0][info.axes.index("c")]
@@ -134,6 +140,26 @@ def read_project(path: str | Path) -> ProjectInfo:
         else:
             info.notes.append("training-data axes not found (unconfirmed project layout)")
     return info
+
+
+def _training_layout(f: Any) -> tuple[str, int] | None:
+    """(axes, channels) of the training data as ilastik's parser reads them, or None."""
+    from hcs_studio.segmentation.ilastik_backend.h5io import parse_axistags
+
+    try:
+        roles = [_text(v) for v in f["Input Data/Role Names"][()]]
+        lanes = f["Input Data/infos"]
+        last = lanes[sorted(lanes.keys())[-1]]
+        info = last[roles[0]]
+        if len(info) == 0:  # an empty role group: no data in this lane
+            return None
+        axes = parse_axistags(_text(info["axistags"][()]))
+        shape = tuple(int(v) for v in info["shape"][()])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    if len(shape) != len(axes):
+        return None
+    return axes, shape[axes.index("c")] if "c" in axes else 1
 
 
 def check_compatible(info: ProjectInfo, axes: str, channels: int) -> list[str]:

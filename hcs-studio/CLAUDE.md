@@ -253,7 +253,7 @@ PlateLayout (model/annotation.py)
 
 Not added: lmfit (`scipy.optimize.least_squares` covers bounds, robust loss, covariance CIs), weasyprint (needs system Pango/Cairo; hard on Windows).
 
-## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a)–(g) built
+## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a)–(h) built
 
 Paused 2026-11-19 after step (a); resumed 2026-11-24 (user: "CONTINUE"): step (b) built against a
 fake ilastik (no `.ilp` samples yet; installing ilastik in the container was not permitted this
@@ -276,7 +276,7 @@ segmentation/ilastik_backend/
  ├─ h5io.py        ilastik-ready HDF5 (/data, gzip, chunked, axistags JSON) read/write
  ├─ project.py     .ilp reader (h5py, read-only): workflow, dims, channels, classes, version, sha256
  ├─ job.py         IlastikJob / IlastikResult (pydantic, picklable)
- ├─ runners/       HeadlessRunner (default), FijiRunner (ilastik4ij macro), [PythonApiRunner: deferred]
+ ├─ runners/       HeadlessRunner (default), FijiRunner (ilastik4ij macro), PythonApiRunner
  └─ steps.py       pipeline modules: ilastik_pixel, ilastik_autocontext, ilastik_objects,
                    ilastik_multicut, ilastik_tracking, probabilities_to_objects, export_ilastik_h5
 ```
@@ -315,7 +315,8 @@ segmentation/ilastik_backend/
 - `.ilp` (HDF5): root datasets `workflowName`, `ilastikVersion`, `time`; groups `Input Data`,
   `FeatureSelections`, `PixelClassification` (`LabelNames`, `LabelColors`, `PmapColors`), export
   settings. The classifier is a **pickle**: never unpickle .ilp content in HCS Studio; read only
-  plain datasets/attributes. Where trained-data axistags/channels live: confirm on a trained project.
+  plain datasets/attributes. Training axes/channels: `Input Data/Role Names`[0] of the last lane in
+  `Input Data/infos` (`axistags` JSON + `shape`), as `ilastik.experimental.parser` reads them.
 - Avoid `--cutout_subregion` (source and docs disagree on its axis order); tile in HCS Studio.
 - ilastik4ij macro keys (examples/): pixel `projectfilename= inputimage= pixelclassificationtype=
   saveonly=false`; objects `inputproborsegimage= secondinputtype=`; multicut
@@ -466,6 +467,21 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   must be in the linear image). Presets `presets.spheroid_preset` (from
   `assays.spheroids.preset` with the detection swapped) and `confluence_preset`; CLI `--for`
   (`_ilastik_preset` in app.py, shared by `--preset` and `--run`).
+
+### Conventions (step h, built)
+
+- `api_worker.py` runs in ilastik's Python (stdlib, numpy, h5py, xarray, ilastik only; exit 3 =
+  no API): job JSON (project, workflow, [input spec, output]) → project loaded once,
+  `get_probabilities` / `get_probabilities_stage_2`, outputs as `exported_data` + axistags.
+  `runners/python_api.py` (`PythonApiRunner`, `is_python`, cached `api_available`); settings
+  runner `python_api`; `runner_state` falls back to headless with `runner_note` (not a Python, or
+  no API); `make_runner` falls back per job (only probabilities, no roles).
+- `selftest.check_installation(project, runners, settings)` → `InstallationCheck` (per runner
+  PASS/FAIL, seconds, max difference vs headless ≤ 1e-4); GUI "Test installation…" (separate
+  `test_task`, injectable `choose_project`), CLI `--test [project]`.
+- `project._training_layout`: as ilastik's parser; `confirmed=True` when found that way.
+- Tests: `tests/test_ilastik_api.py` generates a fake ilastik environment (`bin/python3` wrapper,
+  `ilastik/experimental/api`, `python -m ilastik` = fake headless, minimal `xarray`).
 
 ### Testing plan
 
@@ -1011,7 +1027,7 @@ Run from this folder (`hcs-studio/`).
 - Layouts: `hcs-studio layout <file> --validate [--export out.xlsx [--plate-map]]`; re-annotate a run: `hcs-studio annotate <run> --layout <file>`
 - Pharmacology: `hcs-studio pharm <run> --readout nuclei_count --normalize percent_inhibition --models bliss,hsa,loewe,zip`
 - Experiment report of a run: Tools menu, the `experiment_report` run step, or `hcs-studio analyze <run> --pipeline steps.yaml --only`
-- ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--runner headless|fiji] [--save] | --info <ilp> | --preset <ilp> [--class C --channels 1] --output p.yaml | --macro <ilp> [--export E --second S --axes A] --output m.ijm | --export-h5 <plate> --wells W --output <folder> | --training-set <plate|run> [--stage ilastik] --output <folder> | --run <ilp> --input <plate> --runs <folder> [--runner fiji]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`; real parity: `+ HCS_FIJI=<Fiji> HCS_ILASTIK_PIXEL_PROJECT=<ilp> pytest tests/test_ilastik_fiji.py -k real`
+- ilastik: `hcs-studio ilastik --detect [--set-ilastik <program>] [--runner headless|fiji|python_api] [--save] | --test [<ilp>] | --info <ilp> | --preset <ilp> [--class C --channels 1] --output p.yaml | --macro <ilp> [--export E --second S --axes A] --output m.ijm | --export-h5 <plate> --wells W --output <folder> | --training-set <plate|run> [--stage ilastik] --output <folder> | --run <ilp> --input <plate> --runs <folder> [--runner fiji]`; real-ilastik tests: `HCS_ILASTIK=<ilastik program or its env's python> pytest tests/test_ilastik.py`; real parity: `+ HCS_FIJI=<Fiji> HCS_ILASTIK_PIXEL_PROJECT=<ilp> pytest tests/test_ilastik_fiji.py -k real`
 - Registry: `hcs-studio db info | scan <folders> [--raw] | search | potency | ic50s | plate <barcode>`; normalization: `hcs-studio db normalize <run> --readout R --method robust_z|b_score|… | uniformity <run> --name N | maps | batch | concordance <a> <b>`; assays: `hcs-studio assay list | preset cell_cycle --map dna=DAPI [--map edu=EdU] --channels … --output p.yaml | run <run> cell_cycle --map dna=DAPI`; kinetics: `hcs-studio kinetics table <run> [<run>… --output c.csv] [--treated-at ISO]` | `analyse <run> [<run>…] [--readout R --interval-h H --output dir]`; image QC: `hcs-studio qc <plate> --output <folder> [--rules r.yaml] | --write-rules r.yaml`, `hcs-studio qc-review <run> --well W [--field N] --action confirm|include|exclude --reason R`, `hcs-studio qc-train <runs…> --output m.joblib`; monitoring: `hcs-studio db chart --metric z_prime|vehicle_cv_pct|log_ec50|… --readout R [--assay A --instrument I --compound C --cell-line L --rules 1_3s,2of3_2s,7x] | msr --compound C --cell-line L | bridge --instrument-a A --instrument-b B --readout R --output <folder> | event --kind reagent_lot --on YYYY-MM-DD`
 - Automatic runs: `hcs-studio auto serve | status | events [--status rejected] | check | retry <key> --reason R | test-notify | send <event.json>` (docs/automation.md)
 - Lab assistant: `hcs-studio assistant ask "…" [--strong --ids-only] | preview | status | configure --enable | set-key | eval --workdir <new>` (live eval costs tokens; also `HCS_ASSISTANT_EVAL=1 pytest tests/test_assistant_eval.py`)
