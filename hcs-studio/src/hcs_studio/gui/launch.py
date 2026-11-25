@@ -17,6 +17,7 @@ from hcs_studio.gui.main_window import MainWindow
 from hcs_studio.io.sidecar import config_dir
 
 log = logging.getLogger("hcs_studio")
+SMOKE_TIMEOUT_S = 120.0  # `gui --smoke-test` exits with code 4 when it has not finished by then
 
 
 def app_log_path() -> Path:
@@ -83,7 +84,18 @@ def run_gui(smoke_test: bool = False) -> int:
     window.show()
     window.show_test_image(switch_tab=False)
     if smoke_test:
+        import os
+        import threading
+
         from PySide6.QtCore import QTimer
+
+        def stuck() -> None:  # e.g. a modal error dialog: fail instead of waiting forever
+            print(f"Smoke test: no result after {SMOKE_TIMEOUT_S} s", flush=True)
+            os._exit(4)
+
+        watchdog = threading.Timer(SMOKE_TIMEOUT_S, stuck)
+        watchdog.daemon = True
+        watchdog.start()
 
         def finish() -> None:
             layers = window.viewer_panel.layer_names()

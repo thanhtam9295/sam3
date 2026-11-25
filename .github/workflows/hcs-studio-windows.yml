@@ -70,14 +70,22 @@ jobs:
           Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/CURRENTUSER", "/DIR=$env:RUNNER_TEMP\hcs" -Wait
           & "$env:RUNNER_TEMP\hcs\hcs-studio.exe" selftest
           if ($LASTEXITCODE -ne 0) { throw "self-test of the installed copy failed" }
-      - name: GUI smoke test (needs OpenGL; informative only)
-        continue-on-error: true
-        run: |
-          $p = Start-Process "$env:RUNNER_TEMP\hcs\HCS Studio.exe" -ArgumentList "gui", "--smoke-test" -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "GUI smoke test exit code $($p.ExitCode)" }
       - uses: actions/upload-artifact@v4
         with:
           name: hcs-studio-windows-installer
           path: |
             hcs-studio/dist/HCS-Studio-*-setup*
           if-no-files-found: error
+      - name: GUI smoke test (needs OpenGL; informative only)
+        # The console executable: errors go to the output, not to a dialog that waits for a click.
+        # The app's own watchdog ends a stuck smoke test after 2 minutes (exit code 4).
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          HCS_STUDIO_HOME: ${{ runner.temp }}\hcs-home
+        run: |
+          & "$env:RUNNER_TEMP\hcs\hcs-studio.exe" gui --smoke-test
+          $code = $LASTEXITCODE
+          $log = Join-Path $env:HCS_STUDIO_HOME "logs\hcs-studio.log"
+          if (Test-Path $log) { Get-Content $log -Tail 60 }
+          if ($code -ne 0) { throw "GUI smoke test exit code $code" }
