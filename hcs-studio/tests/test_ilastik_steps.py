@@ -53,6 +53,8 @@ def make_project(
 
 
 def fake_program(folder: Path) -> Path:
+    if sys.platform.startswith("win"):
+        pytest.skip("the fake is a shebang script")
     program = folder / "run_ilastik.sh"
     program.parent.mkdir(parents=True, exist_ok=True)
     program.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE}" "$@"\n')

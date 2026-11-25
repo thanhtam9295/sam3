@@ -178,8 +178,13 @@ def test_forced_kill_then_cli_resume(plate_dir: Path, tmp_path: Path) -> None:
         "2",
         "--no-checksums",
     ]
+    options: dict[str, Any] = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}  # type: ignore[attr-defined]
+        if os.name == "nt"
+        else {"start_new_session": True}
+    )
     process = subprocess.Popen(
-        command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True
+        command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **options
     )
     deadline = time.monotonic() + 120
     folder = None
@@ -189,7 +194,10 @@ def test_forced_kill_then_cli_resume(plate_dir: Path, tmp_path: Path) -> None:
             folder = found[0].parents[2]
             break
         time.sleep(0.1)
-    os.killpg(process.pid, signal.SIGKILL)  # the whole process group, workers included
+    if os.name == "nt":  # the whole process tree, workers included
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
+    else:
+        os.killpg(process.pid, signal.SIGKILL)  # the whole process group, workers included
     process.wait(timeout=30)
     assert folder is not None, "no well finished before the deadline"
     done_before = _summary_times(folder)

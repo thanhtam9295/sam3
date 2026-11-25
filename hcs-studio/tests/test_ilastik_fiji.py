@@ -35,6 +35,8 @@ FAKE_FIJI = Path(__file__).parent / "fake_fiji.py"
 
 def fake_fiji_app(root: Path, plugin: bool = True) -> Path:
     """A Fiji folder whose launcher runs the fake; with the ilastik4ij jar when ``plugin``."""
+    if sys.platform.startswith("win"):
+        pytest.skip("the fake is a shebang script")
     launcher = root / "Fiji.app" / "ImageJ-linux64"
     launcher.parent.mkdir(parents=True, exist_ok=True)
     launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE_FIJI}" "$@"\n')

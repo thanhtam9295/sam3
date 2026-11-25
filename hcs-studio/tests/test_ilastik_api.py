@@ -70,6 +70,8 @@ class DataArray:
 
 def fake_environment(root: Path, api: bool = True) -> Path:
     """``<root>/bin/python3``: runs this interpreter with the fake ilastik package on its path."""
+    if sys.platform.startswith("win"):
+        pytest.skip("the fake is a shebang script")
     package = root / "site"
     (package / "ilastik").mkdir(parents=True)
     (package / "ilastik" / "__init__.py").write_text("")

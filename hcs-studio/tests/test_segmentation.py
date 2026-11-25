@@ -410,6 +410,8 @@ def test_sam_worker_protocol_with_the_stand_in_model(fake_sam: Any) -> None:
 def test_sam_worker_failure_is_reported(tmp_path: Path) -> None:
     with pytest.raises(ModuleError, match="Could not start the SAM 3 worker"):
         sam3_backend.Sam3Client(str(tmp_path / "no-python"))
+    if sys.platform.startswith("win"):
+        return  # the broken worker below is a shebang script
     broken = tmp_path / "python"
     broken.write_text("#!/bin/sh\necho 'boom' >&2\nexit 3\n")
     broken.chmod(0o755)

@@ -42,8 +42,27 @@ def _exit_with_parent(parent: int) -> None:
     """Stop this job process when the process that started it dies (a killed worker or app):
     an orphan would keep writing to the run folder while the job is resumed elsewhere."""
     import os
+    import sys
     import threading
     import time
+
+    if sys.platform == "win32":
+        # Windows never re-parents orphans (getppid() keeps the dead parent's id): wait on a
+        # handle to the parent, opened now so that a reused process id cannot fool the watch.
+        import ctypes
+
+        synchronize, infinite = 0x00100000, 0xFFFFFFFF
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(synchronize, False, parent)
+        if not handle:  # the parent is already gone
+            os._exit(3)
+
+        def wait() -> None:
+            kernel32.WaitForSingleObject(handle, infinite)
+            os._exit(3)
+
+        threading.Thread(target=wait, name="parent-watch", daemon=True).start()
+        return
 
     def watch() -> None:
         while True:

@@ -239,7 +239,8 @@ def test_killed_worker_is_restarted_and_job_resumes(home: Path, tmp_path: Path) 
         state = q.status(job_id)
         assert 6 <= state.done < state.total, state
         worker = next(w for w in q.workers() if w["job_id"] == job_id)
-        os.kill(worker["pid"], signal.SIGKILL)  # the worker dies; its job process becomes an orphan
+        # the worker dies; its job process becomes an orphan (Windows: TerminateProcess)
+        os.kill(worker["pid"], getattr(signal, "SIGKILL", signal.SIGTERM))
         deadline = time.time() + 240
         while time.time() < deadline and q.status(job_id).status != "completed":
             time.sleep(0.5)
