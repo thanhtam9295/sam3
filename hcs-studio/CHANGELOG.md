@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Phase 16e — Fiji runner and Fiji macros
+- Fiji runner: the ilastik steps can run through Fiji's ilastik4ij plugin (Tools → ilastik
+  settings → Default runner: fiji), with the same results as the headless runner; steps the
+  plugin cannot do (objects from label images, tracking) run headless with a note in the log.
+  `ilastik/projects_used.json` records the runner that ran each project.
+- `hcs-studio ilastik --macro <project.ilp> --output m.ijm`: a Fiji macro that runs a project
+  on a folder of HDF5 files, for collaborators who work in Fiji.
+- `hcs-studio ilastik --export-h5 <plate> --output <folder>`: raw fields as ilastik-ready HDF5
+  (for training in ilastik or for the macro).
+- `hcs-studio ilastik --runner headless|fiji --save`.
+- Fixed: `projects_used.json` listed only the first ilastik project of a pipeline.
+
 ### Phase 16d — ilastik Multicut and Tracking
 - `ilastik_multicut`: boundary probabilities from an ilastik pixel step → Multicut
   segmentation as a label set (dense tissue, touching cells); preset with `--boundary`.

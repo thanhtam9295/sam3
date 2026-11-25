@@ -77,19 +77,13 @@ class _IlastikWellStep(Module):
                 raise ModuleError(f"Channel {channel} does not exist")
 
     def fit(self, context: FitContext) -> dict[str, Any]:
-        from hcs_studio.segmentation.ilastik_backend.settings import IlastikSettings, detect
+        from hcs_studio.segmentation.ilastik_backend.job import IlastikError
+        from hcs_studio.segmentation.ilastik_backend.runners import runner_state
 
-        settings = IlastikSettings.load()
-        found = detect(settings)
-        if not found.ilastik_ok:
-            raise ModuleError(
-                "ilastik is not available: "
-                + (
-                    found.version_check.message
-                    if found.ilastik
-                    else "set its path in Tools → ilastik settings"
-                )
-            )
+        try:
+            installation = runner_state()
+        except IlastikError as exc:
+            raise ModuleError(str(exc)) from None
         info = self.project_info()
         return {
             "project": info.path,
@@ -97,11 +91,7 @@ class _IlastikWellStep(Module):
             "workflow": info.workflow_name or info.workflow,
             "saved_with": info.ilastik_version,
             "classes": list(info.label_names),
-            "ilastik": found.ilastik,
-            "ilastik_version": found.ilastik_version,
-            "runner": "headless",
-            "threads": settings.threads,
-            "ram_mb": settings.ram_mb,
+            **installation,
         }
 
     def describe_state(self, state: Any) -> dict[str, Any]:
@@ -140,9 +130,9 @@ class _IlastikWellStep(Module):
         temporary = Path(tempfile.mkdtemp(prefix="hcs-ilastik-"))
         return state, temporary, temporary / "well", "preview", temporary
 
-    def _run(self, state: dict[str, Any], log: Path, **job: Any) -> list[str]:
+    def _run(self, state: dict[str, Any], log: Path, used: list[str], **job: Any) -> list[str]:
         from hcs_studio.segmentation.ilastik_backend.job import IlastikError, IlastikJob
-        from hcs_studio.segmentation.ilastik_backend.runners import HeadlessRunner
+        from hcs_studio.segmentation.ilastik_backend.runners import run_job
 
         spec = IlastikJob(
             project=state["project"],
@@ -153,9 +143,11 @@ class _IlastikWellStep(Module):
             **job,
         )
         try:
-            return HeadlessRunner(state["ilastik"]).run(spec, log_path=log).outputs
+            result = run_job(state, spec, log)
         except IlastikError as exc:
             raise ModuleError(str(exc)) from None
+        used.append(result.runner)
+        return result.outputs
 
 
 # --------------------------------------------------------------------------- multicut
@@ -239,9 +231,11 @@ class IlastikMulticut(_IlastikWellStep):
                         )
                     )
                 )
+            used: list[str] = []
             produced = self._run(
                 state,
                 run_folder / "logs" / f"{well}.log",
+                used,
                 raw_data=raw_specs,
                 roles={"probabilities": prob_specs},
                 export_source="Multicut Segmentation",
@@ -262,7 +256,7 @@ class IlastikMulticut(_IlastikWellStep):
                     )
                 )
             if temporary is None:
-                _projects_used(run_folder, state, "headless")
+                _projects_used(run_folder, state, used)
             return out
         finally:
             if temporary is not None:
@@ -378,9 +372,11 @@ class IlastikTracking(_IlastikWellStep):
                 "roles": {params.input: second_specs},
                 "output_folder": str(outputs),
             }
+            used: list[str] = []
             identities = self._run(
                 state,
                 log,
+                used,
                 export_source="Object-Identities",
                 output_suffix="Object-Identities",
                 **common,
@@ -388,6 +384,7 @@ class IlastikTracking(_IlastikWellStep):
             tables = self._run(
                 state,
                 log,
+                used,
                 export_source="Plugin",
                 export_plugin="CSV-Table",
                 output_suffix="CSV-Table",
@@ -422,7 +419,7 @@ class IlastikTracking(_IlastikWellStep):
                 pd.concat(links, ignore_index=True).to_csv(
                     outputs / f"tracks_{params.name}.csv", index=False
                 )
-                _projects_used(run_folder, state, "headless")
+                _projects_used(run_folder, state, used)
             self.last_links = pd.concat(links, ignore_index=True)
             return [image for image in out if image is not None]
         finally:

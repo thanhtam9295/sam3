@@ -134,19 +134,13 @@ class IlastikPixel(Module):
     # --- plate-level: which ilastik, which project ------------------------------------------
 
     def fit(self, context: FitContext) -> dict[str, Any]:
-        from hcs_studio.segmentation.ilastik_backend.settings import IlastikSettings, detect
+        from hcs_studio.segmentation.ilastik_backend.job import IlastikError
+        from hcs_studio.segmentation.ilastik_backend.runners import runner_state
 
-        settings = IlastikSettings.load()
-        found = detect(settings)
-        if not found.ilastik_ok:
-            raise ModuleError(
-                "ilastik is not available: "
-                + (
-                    found.version_check.message
-                    if found.ilastik
-                    else "set its path in Tools → ilastik settings"
-                )
-            )
+        try:
+            installation = runner_state()
+        except IlastikError as exc:
+            raise ModuleError(str(exc)) from None
         info = self.project_info()
         return {
             "project": info.path,
@@ -154,11 +148,7 @@ class IlastikPixel(Module):
             "workflow": info.workflow_name or info.workflow,
             "saved_with": info.ilastik_version,
             "classes": self.class_names(),
-            "ilastik": found.ilastik,
-            "ilastik_version": found.ilastik_version,
-            "runner": "headless",
-            "threads": settings.threads,
-            "ram_mb": settings.ram_mb,
+            **installation,
         }
 
     def describe_state(self, state: Any) -> dict[str, Any]:
@@ -180,7 +170,7 @@ class IlastikPixel(Module):
         from hcs_studio.segmentation.ilastik_backend.h5io import input_spec, read_h5, write_h5
         from hcs_studio.segmentation.ilastik_backend.job import IlastikError, IlastikJob
         from hcs_studio.segmentation.ilastik_backend.project import check_compatible
-        from hcs_studio.segmentation.ilastik_backend.runners import HeadlessRunner
+        from hcs_studio.segmentation.ilastik_backend.runners import run_job
 
         params: PixelParams = self.params
         if not images:
@@ -229,9 +219,8 @@ class IlastikPixel(Module):
                 ram_mb=int(state.get("ram_mb", 0)),
                 timeout_s=params.timeout_min * 60,
             )
-            runner = HeadlessRunner(state["ilastik"])
             try:
-                result = runner.run(job, log_path=run_folder / "logs" / f"{well}.log")
+                result = run_job(state, job, log_path=run_folder / "logs" / f"{well}.log")
             except IlastikError as exc:
                 raise ModuleError(str(exc)) from None
             classes = state["classes"]
@@ -279,7 +268,7 @@ class IlastikPixel(Module):
                     ),
                     encoding="utf-8",
                 )
-                _projects_used(run_folder, state, result.runner)
+                _projects_used(run_folder, state, [result.runner])
             return out_images
         finally:
             if temporary is not None:
@@ -339,25 +328,25 @@ def _class_planes(
     return planes
 
 
-def _projects_used(folder: Path, state: dict[str, Any], runner: str) -> None:
+def _projects_used(folder: Path, state: dict[str, Any], runners: list[str]) -> None:
+    """``<run>/ilastik/projects_used.json``: one entry per project (by SHA-256) with the runners
+    that actually ran it (a job the Fiji runner cannot do runs headless)."""
     path = folder / "projects_used.json"
-    if path.exists():
-        return
     folder.mkdir(parents=True, exist_ok=True)
-    record = {
-        k: state.get(k)
-        for k in (
-            "project",
-            "sha256",
-            "workflow",
-            "saved_with",
-            "ilastik",
-            "ilastik_version",
-            "classes",
-        )
-    }
-    record["runner"] = runner
-    path.write_text(json.dumps([record], indent=2), encoding="utf-8")
+    try:
+        records: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        records = []
+    record = next((r for r in records if r.get("sha256") == state.get("sha256")), None)
+    if record is None:
+        keys = ["project", "sha256", "workflow", "saved_with", "ilastik", "ilastik_version"]
+        keys += ["classes"] + [k for k in ("fiji", "ilastik4ij") if k in state]
+        record = {k: state.get(k) for k in keys}
+        record["runner"] = ""
+        records.append(record)
+    known = {r for r in str(record.get("runner") or "").split(", ") if r}
+    record["runner"] = ", ".join(sorted(known | set(runners)))
+    path.write_text(json.dumps(records, indent=2), encoding="utf-8")
 
 
 # --------------------------------------------------------------- probabilities → objects

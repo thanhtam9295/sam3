@@ -131,19 +131,13 @@ class IlastikObjects(Module):
         self.class_names()
 
     def fit(self, context: FitContext) -> dict[str, Any]:
-        from hcs_studio.segmentation.ilastik_backend.settings import IlastikSettings, detect
+        from hcs_studio.segmentation.ilastik_backend.job import IlastikError
+        from hcs_studio.segmentation.ilastik_backend.runners import runner_state
 
-        settings = IlastikSettings.load()
-        found = detect(settings)
-        if not found.ilastik_ok:
-            raise ModuleError(
-                "ilastik is not available: "
-                + (
-                    found.version_check.message
-                    if found.ilastik
-                    else "set its path in Tools → ilastik settings"
-                )
-            )
+        try:
+            installation = runner_state()
+        except IlastikError as exc:
+            raise ModuleError(str(exc)) from None
         info = self.project_info()
         return {
             "project": info.path,
@@ -152,11 +146,7 @@ class IlastikObjects(Module):
             "saved_with": info.ilastik_version,
             "classes": self.class_names(),
             "input": self.params.input,
-            "ilastik": found.ilastik,
-            "ilastik_version": found.ilastik_version,
-            "runner": "headless",
-            "threads": settings.threads,
-            "ram_mb": settings.ram_mb,
+            **installation,
         }
 
     def describe_state(self, state: Any) -> dict[str, Any]:
@@ -201,7 +191,7 @@ class IlastikObjects(Module):
         from hcs_studio.segmentation.ilastik_backend.h5io import input_spec, read_h5, write_h5
         from hcs_studio.segmentation.ilastik_backend.job import IlastikError, IlastikJob
         from hcs_studio.segmentation.ilastik_backend.project import check_compatible
-        from hcs_studio.segmentation.ilastik_backend.runners import HeadlessRunner
+        from hcs_studio.segmentation.ilastik_backend.runners import run_job
         from hcs_studio.segmentation.ilastik_backend.steps import _projects_used
 
         params: ObjectsParams = self.params
@@ -249,8 +239,8 @@ class IlastikObjects(Module):
                     )
                 )
                 names.append(name)
-            runner = HeadlessRunner(state["ilastik"])
             log_path = run_folder / "logs" / f"{well}.log"
+            used: list[str] = []
 
             def call(source: str, suffix: str) -> list[str]:
                 job = IlastikJob(
@@ -266,9 +256,11 @@ class IlastikObjects(Module):
                     timeout_s=params.timeout_min * 60,
                 )
                 try:
-                    return runner.run(job, log_path=log_path).outputs
+                    result = run_job(state, job, log_path)
                 except IlastikError as exc:
                     raise ModuleError(str(exc)) from None
+                used.append(result.runner)
+                return result.outputs
 
             predictions = call("Object Predictions", "Object_Predictions")
             identities = (
@@ -333,7 +325,7 @@ class IlastikObjects(Module):
                     ),
                     encoding="utf-8",
                 )
-                _projects_used(run_folder, state, "headless")
+                _projects_used(run_folder, state, used)
             self.last_rows = rows  # previews and tests
             return out_images
         finally:

@@ -49,7 +49,14 @@ def main() -> int:
     parser.add_argument("--segmentation_image", nargs="+", default=[])
     parser.add_argument("--probabilities", nargs="+", default=[])
     parser.add_argument("--export_plugin")
+    # flags the ilastik4ij plugin passes (real ilastik flags)
+    parser.add_argument("--readonly")
+    parser.add_argument("--input_axes")
+    parser.add_argument("--output_axis_order")
+    parser.add_argument("--output_internal_path", default="exported_data")
     args = parser.parse_args()
+    global ARGS
+    ARGS = args
     if args.version:
         print("1.4.2")
         return 0
@@ -99,11 +106,7 @@ def main() -> int:
         return 1
     print(f"Starting ilastik 1.4.2 headless ({len(args.raw_data)} inputs)")
     for spec in args.raw_data:
-        file, _, dataset = spec.rpartition(".h5/")
-        file += ".h5"
-        with h5py.File(file, "r") as f:
-            data = f[dataset][()]
-            axes = [a["key"] for a in json.loads(f[dataset].attrs["axistags"])["axes"]]
+        data, axes = read(spec)
         c = axes.index("c")
         first = np.take(data, 0, axis=c).astype(np.float64)
         fg = np.clip((first - lo) / (hi - lo), 0, 1)
@@ -113,19 +116,30 @@ def main() -> int:
         else:
             out = np.where(fg >= 0.5, 2, 1).astype(np.uint8)[..., np.newaxis]
         out_axes = "".join(a for a in axes if a != "c") + "c"
-        target = args.output_filename_format.replace("{nickname}", Path(file).stem)
-        Path(target).parent.mkdir(parents=True, exist_ok=True)
-        with h5py.File(target, "w") as f:
-            ds = f.create_dataset("exported_data", data=out)
-            ds.attrs["axistags"] = axistags(out_axes)
+        write(target_for(args, spec), out, out_axes)
     print("Finished")
     return 0
 
 
-def read(spec: str) -> tuple[np.ndarray, list[str]]:
+ARGS: argparse.Namespace | None = None
+
+
+def split(spec: str) -> tuple[str, str | None]:
+    """``<file>.h5/<dataset>``, or a bare ``<file>.h5`` (its only dataset), as ilastik takes."""
+    if spec.endswith(".h5"):
+        return spec, None
     file, _, dataset = spec.rpartition(".h5/")
-    with h5py.File(file + ".h5", "r") as f:
-        return f[dataset][()], [a["key"] for a in json.loads(f[dataset].attrs["axistags"])["axes"]]
+    return file + ".h5", dataset
+
+
+def read(spec: str) -> tuple[np.ndarray, list[str]]:
+    file, dataset = split(spec)
+    with h5py.File(file, "r") as f:
+        name = dataset or next(iter(f.keys()))
+        data = f[name][()]
+        if ARGS is not None and ARGS.input_axes:
+            return data, list(ARGS.input_axes)
+        return data, [a["key"] for a in json.loads(f[name].attrs["axistags"])["axes"]]
 
 
 def objects(args: argparse.Namespace, min_area: int) -> int:
@@ -157,24 +171,28 @@ def objects(args: argparse.Namespace, min_area: int) -> int:
             classes[0] = 0
             out = classes[ids]
         out_axes = "".join(a for a in axes if a != "c") + "c"
-        file = raw_spec.rpartition(".h5/")[0] + ".h5"
-        target = args.output_filename_format.replace("{nickname}", Path(file).stem)
-        Path(target).parent.mkdir(parents=True, exist_ok=True)
-        with h5py.File(target, "w") as f:
-            ds = f.create_dataset("exported_data", data=out[..., np.newaxis])
-            ds.attrs["axistags"] = axistags(out_axes)
+        write(target_for(args, raw_spec), out[..., np.newaxis], out_axes)
     return 0
 
 
 def write(target: str, out: np.ndarray, axes: str) -> None:
+    """Write an export; ``--output_axis_order`` reorders it (missing axes get length 1)."""
+    order = ARGS.output_axis_order if ARGS is not None else None
+    if order:
+        for a in order:
+            if a not in axes:
+                out, axes = out[..., np.newaxis], axes + a
+        out = np.transpose(out, [axes.index(a) for a in order])
+        axes = order
     Path(target).parent.mkdir(parents=True, exist_ok=True)
+    name = ARGS.output_internal_path if ARGS is not None else "exported_data"
     with h5py.File(target, "w") as f:
-        ds = f.create_dataset("exported_data", data=out)
+        ds = f.create_dataset(name, data=out)
         ds.attrs["axistags"] = axistags(axes)
 
 
 def target_for(args: argparse.Namespace, raw_spec: str) -> str:
-    file = raw_spec.rpartition(".h5/")[0] + ".h5"
+    file, _ = split(raw_spec)
     return str(args.output_filename_format).replace("{nickname}", Path(file).stem)
 
 

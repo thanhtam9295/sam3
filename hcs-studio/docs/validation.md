@@ -260,8 +260,18 @@ Multicut and Tracking (Phase 16d), with the stand-in: a known 3 × 3 grid of bou
 as the built-in track table, with speed within 30 % of the truth and its divisions counted.
 The column names of ilastik's tracking CSV are assumptions until a real export is seen.
 
-**Not checked:** a real trained project with the real ilastik (no `.ilp` samples yet; the
-container could not install ilastik this time). Unconfirmed: where trained projects store the
+Fiji runner (Phase 16e), with a stand-in Fiji that runs the generated macros as the ilastik4ij
+plugin does (flags, temporary `tzcyx` inputs, `tzyxc` exports, read from the plugin's source,
+main branch Feb 2026): the same jobs through the headless and the Fiji runner give identical
+arrays (pixel probabilities and segmentation, object classification from probabilities and
+masks, multicut; 2D and 3D), and a pipeline gives identical per-well tables. The macro keys
+come from the plugin's source; the published example macros differ in places (`input=` vs
+`inputimage=`). Unconfirmed: whether *Configure ilastik executable location* (an options
+command) runs in headless Fiji — it can be turned off in the settings.
+
+**Not checked:** a real trained project with the real ilastik, and real Fiji (no `.ilp` samples
+yet; the container could not install ilastik this time). The real parity test is ready
+(`tests/test_ilastik_fiji.py -k real`). Unconfirmed: where trained projects store the
 training data's axes and channel count (the compatibility check uses them only when found), and
 how ilastik names the export of an HDF5 input (`{nickname}`; outputs are matched by prefix).
 

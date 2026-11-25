@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -71,6 +72,16 @@ class IlastikSettingsDialog(QDialog):
         self.runner = QComboBox()
         self.runner.addItems(["headless", "fiji"])
         self.runner.setCurrentText(settings.runner)
+        self.runner.setToolTip(
+            "fiji: through Fiji's ilastik4ij plugin (one ilastik start per image; steps the "
+            "plugin cannot do run headless and say so in the log)"
+        )
+        self.fiji_configure = QCheckBox("Set ilastik's path, threads and RAM in the plugin")
+        self.fiji_configure.setChecked(settings.fiji_configure)
+        self.fiji_configure.setToolTip(
+            "Runs the plugin's 'Configure ilastik executable location' first. Turn off if that "
+            "fails without a window and configure the plugin once in Fiji instead."
+        )
         self.version = QLabel("")
         self.version.setWordWrap(True)
         self.fiji_status = QLabel("")
@@ -87,6 +98,7 @@ class IlastikSettingsDialog(QDialog):
         form.addRow("Default runner", self.runner)
         form.addRow("Fiji (optional)", self._row(self.fiji, "Fiji folder", folder=True))
         form.addRow("", self.fiji_status)
+        form.addRow("", self.fiji_configure)
 
         self.detect_button = QPushButton("Detect / check installation")
         self.detect_button.clicked.connect(self.run_detection)
@@ -138,6 +150,7 @@ class IlastikSettingsDialog(QDialog):
             ram_mb=self.ram.value(),
             max_processes=self.processes.value(),
             runner=self.runner.currentText(),  # type: ignore[arg-type]
+            fiji_configure=self.fiji_configure.isChecked(),
         )
         settings.validate()
         return settings

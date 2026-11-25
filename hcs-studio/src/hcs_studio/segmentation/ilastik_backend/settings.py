@@ -103,6 +103,9 @@ class IlastikSettings:
     ram_mb: int = 0
     max_processes: int = 1
     runner: Runner = "headless"
+    #: Fiji runner: set ilastik's path/threads/RAM in the plugin first (its "Configure ilastik
+    #: executable location"); turn off if that command fails headless and configure in Fiji
+    fiji_configure: bool = True
 
     @classmethod
     def path(cls) -> Path:

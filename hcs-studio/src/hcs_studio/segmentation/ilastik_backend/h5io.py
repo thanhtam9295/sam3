@@ -179,3 +179,38 @@ def is_ilastik_ready(path: Path, dataset: str | None = None) -> bool:
         return read_axes(Path(path), dataset) is not None
     except (OSError, ValueError, KeyError):
         return False
+
+
+def export_plate(
+    plate: Any,
+    wells: list[tuple[int, int]],
+    folder: Path,
+    *,
+    channels: list[int] | None = None,
+    time_stack: bool = False,
+) -> list[Path]:
+    """Raw fields → ilastik-ready HDF5 (``<well>_f<field>_t<t>.h5``, or ``<well>_f<field>.h5``
+    with every time point when ``time_stack``), for training in ilastik or a Fiji macro.
+    ``channels`` from 1. Never writes into the raw data's folder."""
+    from hcs_studio.segmentation.ilastik_backend.axes import ilastik_axes, to_ilastik
+
+    folder = Path(folder).absolute()
+    raw = Path(plate.path).absolute()
+    if folder == raw or raw in folder.parents:
+        raise ValueError("Write the HDF5 files outside the raw data")
+    folder.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for key in wells:
+        well = plate.wells[key]
+        for item in well.fields:
+            data = np.asarray(item.load())  # (T, C, Z, Y, X), one field at a time
+            if channels:
+                data = data[:, [c - 1 for c in channels]]
+            stacks = (
+                [(None, data)] if time_stack else [(t, data[t : t + 1]) for t in range(len(data))]
+            )
+            for t, stack in stacks:
+                axes = ilastik_axes(stack.shape, time=True if time_stack else None)
+                name = f"{well.name}_f{item.index:03d}" + ("" if t is None else f"_t{t}")
+                written.append(write_h5(folder / f"{name}.h5", to_ilastik(stack, axes), axes))
+    return written

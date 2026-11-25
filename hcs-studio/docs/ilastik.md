@@ -5,9 +5,9 @@ copes well with difficult stains, organoids and textured phenotypes. You train a
 (`.ilp`) in the ilastik program; HCS Studio then applies it to whole plates in batch, with the
 same job queue, resume, provenance and analysis as Cellpose or SAM 3.
 
-**Status:** step (a) of Phase 16 is built: settings, detection, and the HDF5 and axis-order
-conventions ilastik needs. Running projects (pixel classification, autocontext, object
-classification, multicut, tracking) and the Fiji bridge follow in the next steps.
+**Status:** Phase 16 is built: settings and detection, Pixel Classification, Autocontext,
+Object Classification (including Cellpose objects), Multicut, Tracking, the Fiji runner and
+Fiji macros. Tested with stand-in programs; see *Validation status* at the end.
 
 ## Installing ilastik
 
@@ -54,7 +54,8 @@ tick **ilastik**, apply and restart Fiji. HCS Studio finds the `ilastik4ij*.jar`
 | Threads | threads per ilastik process; *no limit* lets ilastik decide (passed as `LAZYFLOW_THREADS`) |
 | RAM limit | memory per ilastik process; *no limit* or at least 500 MB (ilastik refuses less; passed as `LAZYFLOW_TOTAL_RAM_MB`) |
 | ilastik processes at once | default 1: ilastik is already multithreaded and memory-hungry |
-| Default runner | headless (ilastik directly; recommended) or fiji (through ilastik4ij) |
+| Default runner | headless (ilastik directly; recommended) or fiji (through ilastik4ij; see below) |
+| Set ilastik's path, threads and RAM in the plugin | Fiji runner: run the plugin's *Configure ilastik executable location* first (default on) |
 | Fiji | the Fiji folder (optional) |
 
 **Detect / check installation** starts ilastik once to read its version (this takes a few
@@ -205,10 +206,86 @@ hcs-studio ilastik --preset tracking.ilp --output tracking.yaml
   `track_id1`, `parent_track_id`, `lineage_id` and common variants); if a real export names them
   differently the step says which column it misses.
 
-**Validation status:** tested with a stand-in program that accepts ilastik's command line and
-writes known answers (`tests/test_ilastik_steps.py`), including one call per well, resume after a
-failed well, and the read-only check. **Not yet run with a real trained project**: please send
-one or two `.ilp` files (Pixel Classification, Autocontext) with a few matching images; then
-`HCS_ILASTIK=<ilastik> pytest tests/test_ilastik.py tests/test_ilastik_steps.py` checks the real
-program, and the project reader's guesses (where the training axes and channels are stored) can
-be confirmed. The Fiji runner and the parity test follow (step e).
+## The Fiji runner (ilastik4ij)
+
+For labs that already run ilastik from Fiji macros, the same pipeline steps can run through
+Fiji's ilastik4ij plugin: choose **fiji** as the default runner in Tools → ilastik settings
+(or `hcs-studio ilastik --runner fiji --save`). Results are the same as with the headless
+runner; the run folder records which runner ran each project
+(`ilastik/projects_used.json`, `runner`), and `ilastik/logs/<well>.log` holds the exact macro.
+
+How it runs: HCS Studio writes a macro (`wells/<W>/ilastik/fiji_<export>.ijm`) and starts
+`<Fiji> --headless --console -macro <file>`. The macro sets ilastik's location, threads and
+RAM in the plugin, then for each field imports the HDF5 input, runs the prediction command and
+exports the result as HDF5. Things to know:
+
+- The plugin starts ilastik once **per image** (the headless runner once per well), so the
+  Fiji runner is slower. Use it for parity with existing Fiji workflows, not for speed.
+- The plugin needs the ilastik program (`ilastik.exe`, `run_ilastik.sh`), not the Python of a
+  conda environment.
+- Without a RAM limit in the settings, the plugin's own default (4096 MB) is used: the plugin
+  has no "unlimited".
+- Running *Configure ilastik executable location* changes the plugin's saved options in that
+  Fiji. If that command does not work without a window, untick the setting and configure the
+  plugin once in Fiji (Plugins → ilastik → Configure ilastik executable location).
+- What the plugin cannot do runs headless instead, with a note in the log: Object
+  Classification on existing objects (Cellpose/SAM label images: the plugin offers only
+  probabilities or a binary mask), and the Tracking step (HCS Studio needs ilastik's object
+  identities and tracking table; the plugin returns the lineage image only).
+- Fiji's exit code does not report macro errors; HCS Studio checks that the macro reached its
+  end and that every output exists, and shows the end of Fiji's output otherwise.
+
+## Fiji macros for collaborators
+
+```bash
+hcs-studio ilastik --macro nuclei.ilp --output nuclei.ijm
+```
+
+```bash
+hcs-studio ilastik --macro objects.ilp --second segmentation --export identities --axes zyxc --output objects.ijm
+```
+
+The macro runs a project on every `.h5` file of a folder with the ilastik4ij plugin and saves
+`<name>_<export>.h5` in an output folder. Opened in Fiji's script editor it asks for the
+project and the folders; for batch use remove the `#@` lines and set the variables. Options:
+`--export` (pixel/autocontext: `probabilities`, `segmentation`; objects: `predictions`,
+`probabilities`, `identities`), `--second` (objects/tracking: `probabilities` or
+`segmentation`; the second input of `<name>.h5` is `<name>_<second>.h5`), `--axes` (axis order
+of the files; default: the project's training axes). When the ilastik settings name the
+ilastik program, the macro also configures the plugin.
+
+Inputs for the macro (or for training in ilastik) from a plate's raw fields:
+
+```bash
+hcs-studio ilastik --export-h5 <plate> --wells A01-B12 --channels 1 2 --output <folder>
+```
+
+writes `<well>_f<field>_t<t>.h5` (`--time-stack`: one file per field with every time point),
+ilastik-ready and never inside the raw data. Processed inputs (after background subtraction,
+projection, …) are the files an ilastik step keeps with `keep_inputs: true`
+(`ilastik/inputs/<well>/`).
+
+## Validation status
+
+Tested with stand-in programs: `tests/fake_ilastik_headless.py` accepts ilastik's command line
+and writes known answers, and `tests/fake_fiji.py` runs HCS Studio's Fiji macros the way the
+ilastik4ij plugin does (its flags, its temporary files, its axis orders, as read in the
+plugin's source). They cover one call per well, resume after a failed well, the read-only
+check, and the parity test: the same jobs (pixel probabilities and segmentation, object
+classification, multicut; 2D and 3D fields) through both runners give identical arrays, and a
+whole pipeline gives identical per-well tables.
+
+**Not yet run with a real trained project, real ilastik or real Fiji**: please send one or two
+`.ilp` files (Pixel Classification, Autocontext) with a few matching images. Then
+
+```bash
+HCS_ILASTIK=<ilastik program> pytest tests/test_ilastik.py tests/test_ilastik_steps.py
+```
+
+```bash
+HCS_ILASTIK=<ilastik program> HCS_FIJI=<Fiji folder> HCS_ILASTIK_PIXEL_PROJECT=<project.ilp> pytest tests/test_ilastik_fiji.py -k real
+```
+
+check the real programs (the second is the headless-vs-Fiji parity test on a real project;
+`HCS_ILASTIK_PIXEL_IMAGE=<file.h5/data>` uses your own image), and the project reader's guesses
+(where the training axes and channels are stored) can be confirmed.

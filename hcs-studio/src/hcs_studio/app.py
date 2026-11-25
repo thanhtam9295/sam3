@@ -208,6 +208,30 @@ def build_parser() -> argparse.ArgumentParser:
     ilastik_cmd.add_argument(
         "--channels", type=int, nargs="+", help="channels sent to ilastik (from 1)"
     )
+    ilastik_cmd.add_argument(
+        "--runner", choices=["headless", "fiji"], help="default runner (save with --save)"
+    )
+    ilastik_cmd.add_argument(
+        "--macro",
+        type=Path,
+        help="write a Fiji (ilastik4ij) macro for this project (.ilp) to --output",
+    )
+    ilastik_cmd.add_argument(
+        "--export", help="--macro: what to export (e.g. probabilities, segmentation, predictions)"
+    )
+    ilastik_cmd.add_argument(
+        "--second", help="--macro: second input of objects/multicut/tracking projects"
+    )
+    ilastik_cmd.add_argument("--axes", help="--macro: axis order of the .h5 inputs (e.g. zyxc)")
+    ilastik_cmd.add_argument(
+        "--export-h5",
+        type=Path,
+        help="write a plate's raw fields as ilastik-ready HDF5 into the --output folder",
+    )
+    ilastik_cmd.add_argument("--wells", default="all", help="--export-h5: wells (A01-B12)")
+    ilastik_cmd.add_argument(
+        "--time-stack", action="store_true", help="--export-h5: one file per field with all T"
+    )
     qc_cmd = sub.add_parser(
         "qc", help="image QC of a plate from raw data (focus, saturation, artifacts …)"
     )
@@ -1922,13 +1946,15 @@ def _ilastik(args: argparse.Namespace) -> int:
 
     if args.info or args.preset:
         return _ilastik_project(args)
+    if args.macro or args.export_h5:
+        return _ilastik_files(args)
     settings = IlastikSettings.load()
     changes: dict[str, object] = {}
     if args.set_ilastik:
         changes["ilastik"] = str(args.set_ilastik.expanduser().absolute())
     if args.set_fiji:
         changes["fiji"] = str(args.set_fiji.expanduser().absolute())
-    for name in ("threads", "ram_mb", "max_processes"):
+    for name in ("threads", "ram_mb", "max_processes", "runner"):
         if getattr(args, name) is not None:
             changes[name] = getattr(args, name)
     try:
@@ -1950,6 +1976,53 @@ def _ilastik(args: argparse.Namespace) -> int:
     if not found.ilastik:
         return 2
     return 0 if found.ilastik_ok else 1
+
+
+def _ilastik_files(args: argparse.Namespace) -> int:
+    """``--macro``: a Fiji macro for a project; ``--export-h5``: raw fields as HDF5."""
+    if not args.output:
+        print("ERROR: give --output (macro file, or folder for --export-h5)")
+        return 2
+    if args.export_h5:
+        from hcs_studio.io.base import open_plate
+        from hcs_studio.pipeline.executor import parse_wells
+        from hcs_studio.segmentation.ilastik_backend.h5io import export_plate
+
+        try:
+            plate = open_plate(args.export_h5)
+            files = export_plate(
+                plate,
+                parse_wells(args.wells, plate),
+                args.output,
+                channels=args.channels,
+                time_stack=args.time_stack,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(f"{len(files)} HDF5 file(s) written to {args.output}")
+        return 0
+    from hcs_studio.segmentation.ilastik_backend.job import IlastikError
+    from hcs_studio.segmentation.ilastik_backend.runners.fiji import project_macro
+    from hcs_studio.segmentation.ilastik_backend.settings import IlastikSettings
+
+    settings = IlastikSettings.load()
+    try:
+        text = project_macro(
+            args.macro,
+            export=args.export,
+            second=args.second,
+            axis_order=args.axes,
+            ilastik=settings.ilastik or None,
+            threads=settings.threads,
+            ram_mb=settings.ram_mb,
+        )
+    except (IlastikError, FileNotFoundError, ValueError) as exc:
+        print(f"ERROR: {exc}")
+        return 2
+    args.output.write_text(text, encoding="utf-8")
+    print(f"Fiji macro written to {args.output}")
+    return 0
 
 
 def _ilastik_project(args: argparse.Namespace) -> int:

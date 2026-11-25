@@ -66,3 +66,7 @@ class IlastikResult(BaseModel):
     log_tail: str = ""
     project_sha256_before: str = ""
     project_sha256_after: str = ""
+    #: the Fiji runner's macro (exactly what ran)
+    macro: str = ""
+    #: e.g. why the Fiji runner was not used for this job
+    note: str = ""
