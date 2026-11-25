@@ -174,8 +174,6 @@ class MainWindow(QMainWindow):
         self.ilastik_dock = self._add_dock(
             "ilastik", "ilastikDock", self.ilastik_panel, Qt.DockWidgetArea.RightDockWidgetArea
         )
-        self.tabifyDockWidget(self.segmentation_dock, self.ilastik_dock)
-        self.segmentation_dock.raise_()
         self.measurements_panel = MeasurementsPanel(self.viewer_panel, self.log)
         self.measurements_dock = self._add_dock(
             "Measurements",
@@ -203,6 +201,7 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.pipeline_dock, self.segmentation_dock)
         self.tabifyDockWidget(self.segmentation_dock, self.measurements_dock)
         self.tabifyDockWidget(self.measurements_dock, self.classify_dock)
+        self.tabifyDockWidget(self.classify_dock, self.ilastik_dock)
         self.metadata_dock.raise_()
         self.resizeDocks(
             [self.browser_dock, self.metadata_dock], [300, 380], Qt.Orientation.Horizontal
