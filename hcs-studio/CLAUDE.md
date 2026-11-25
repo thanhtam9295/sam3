@@ -1019,6 +1019,8 @@ the polynomial surfaces already in `processing/background.py`), `psycopg` (27).
 - Process trees: `taskkill /F /T` on Windows, `killpg` elsewhere; job processes watch a handle to
   their parent on Windows (`jobs._exit_with_parent`). Test subprocesses inherit `os.environ`
   (Windows needs `SYSTEMROOT`). Shebang-script fakes skip on Windows.
+- Relative paths written to JSON, HTML or digests use `.as_posix()` (never `str(rel)`); CLI
+  output is UTF-8 (`app.utf8_output`, redirected Windows output is cp1252 otherwise).
 - Paths: compare with `str(Path(...))` (native separators); a path for another OS is text
   (`paths.resolve_text`); test data roots get a location for every platform.
 - GUI start: an OpenGL failure of the viewer writes `<settings>/software_opengl` and restarts with

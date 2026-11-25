@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -776,10 +777,21 @@ def _ctx(args: argparse.Namespace) -> Any:
     return context(getattr(args, "reason", "") or "")
 
 
+def utf8_output() -> None:
+    """Write UTF-8 when output goes to a file or pipe. Windows Python otherwise encodes it with
+    the ANSI code page (cp1252), where Z′, µm, × and – fail with UnicodeEncodeError. Interactive
+    consoles already take Unicode; the windowed app has no streams (None)."""
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if stream is not None and encoding != "utf8" and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     import multiprocessing
 
     multiprocessing.freeze_support()  # no-op except in frozen (installer) builds
+    utf8_output()
     args = build_parser().parse_args(argv)
     if args.command == "info":
         print(f"hcs-studio {__version__}")

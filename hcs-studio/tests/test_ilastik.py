@@ -255,7 +255,8 @@ def test_cli_detect_and_save(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     out = subprocess.run(
         [*cli, "--set-ilastik", str(program), "--threads", "2", "--save"],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
         timeout=120,
     )
@@ -263,7 +264,9 @@ def test_cli_detect_and_save(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert "OK: ilastik 1.4.2" in out.stdout and "Saved" in out.stdout
     monkeypatch.setenv("HCS_STUDIO_HOME", str(tmp_path / "settings"))
     assert IlastikSettings.load().threads == 2
-    bad = subprocess.run([*cli, "--ram-mb", "100"], capture_output=True, text=True, env=env)
+    bad = subprocess.run(
+        [*cli, "--ram-mb", "100"], capture_output=True, encoding="utf-8", errors="replace", env=env
+    )
     assert bad.returncode == 2 and "at least 500" in bad.stdout
 
 
@@ -286,7 +289,8 @@ def test_real_ilastik_reads_our_h5_files(shape: tuple[int, int, int], tmp_path: 
     made = subprocess.run(
         [*command, "--headless", f"--new_project={project}", "--workflow=Data Conversion"],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=600,
         cwd=tmp_path,
     )
@@ -306,7 +310,8 @@ def test_real_ilastik_reads_our_h5_files(shape: tuple[int, int, int], tmp_path: 
             h5io.input_spec(source),
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=600,
         cwd=tmp_path,
     )

@@ -8,6 +8,10 @@
   with `paths.resolve_text`. The rest were test problems (tests read the app's UTF-8 reports with
   the Windows code page, POSIX-only paths, a subprocess without SYSTEMROOT, data roots without a
   Windows location); a test now requires an explicit encoding for every text file.
+- Second Windows run (596 passed, 2 failed). Fixed: CLI output redirected to a file or pipe
+  crashed on Z′/µm (Windows encodes it with cp1252; the CLI now writes UTF-8); file lists and
+  tree fingerprints in reports, manifests and figure sidecars used `\` on Windows (now `/`
+  everywhere, so runs and sidecars move between Windows and Linux).
 - When the graphics driver cannot give the image viewer OpenGL (remote desktop, virtual
   machines), the app switches to software rendering and starts again instead of crashing
   (docs/troubleshooting.md).

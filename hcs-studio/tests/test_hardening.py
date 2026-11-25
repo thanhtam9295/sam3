@@ -183,7 +183,8 @@ def test_ctrl_c_stops_cleanly_and_resumes(plate_dir: Path, tmp_path: Path) -> No
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline and not list(out.glob("*/wells/*/well_summary.json")):

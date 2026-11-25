@@ -385,7 +385,7 @@ def create_app() -> Any:
             import pandas as pd
 
             wells = list(json.loads(pd.read_csv(table).to_json(orient="records")))
-        files = sorted(str(p.relative_to(folder)) for p in folder.glob("*") if p.is_file())
+        files = sorted(p.relative_to(folder).as_posix() for p in folder.glob("*") if p.is_file())
         return {
             "id": row.id,
             "name": row.name,

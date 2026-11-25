@@ -457,7 +457,7 @@ def write_outputs(result: PharmResult, folder: Path) -> None:
         pdf = folder / "pharmacology_report.pdf"
         report_pdf(result, figures, figure_stems, info, fits, scores, pdf)
         files.append(str(pdf))
-    info["files"] = sorted(str(Path(f).relative_to(folder)) for f in files)
+    info["files"] = sorted(Path(f).relative_to(folder).as_posix() for f in files)
     (folder / "pharmacology.json").write_text(
         json.dumps(info, indent=2, default=str), encoding="utf-8"
     )

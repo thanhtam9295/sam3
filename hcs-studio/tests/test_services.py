@@ -121,10 +121,17 @@ def test_cli_records_reason_and_refuses_exclusions_without_one(
     env.pop("HCS_DATABASE_URL", None)
     cli = [sys.executable, "-m", "hcs_studio", "pharm", str(run), "--readout", "nuclei_count"]
     cli += ["--normalize", "percent_of_control", "--no-pdf", "--no-figures", "--exclude", "P:B03"]
-    refused = subprocess.run(cli, capture_output=True, text=True, env=env, timeout=300)
+    refused = subprocess.run(
+        cli, capture_output=True, encoding="utf-8", errors="replace", env=env, timeout=300
+    )
     assert refused.returncode == 2 and "give a reason" in refused.stdout
     done = subprocess.run(
-        [*cli, "--reason", "bubble in B03"], capture_output=True, text=True, env=env, timeout=300
+        [*cli, "--reason", "bubble in B03"],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        timeout=300,
     )
     assert done.returncode == 0, done.stdout + done.stderr
     event = recent_events(5, "pharmacology.write")

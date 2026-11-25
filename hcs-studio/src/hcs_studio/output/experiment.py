@@ -313,7 +313,7 @@ def write_experiment_report(
     info = {
         "created": datetime.now(UTC).isoformat(timespec="seconds"),
         "version": __version__,
-        "files": [str(p.relative_to(folder)) for p in written],
+        "files": [p.relative_to(folder).as_posix() for p in written],
         "notes": notes,
         "methods": methods,
     }

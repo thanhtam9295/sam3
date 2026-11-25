@@ -54,3 +54,20 @@ def test_the_check_finds_a_missing_encoding(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert [hit.rsplit(" ", 1)[1] for hit in unspecified_encodings(sample)] == ["read_text", "open"]
+
+
+def test_cli_output_survives_a_non_utf8_pipe() -> None:
+    """Windows encodes redirected output with cp1252: `hcs-studio pharm … > log.txt` crashed on
+    "Z′". Simulated here with PYTHONIOENCODING=cp1252 (found by the second Windows test run)."""
+    import os
+    import subprocess
+    import sys
+
+    code = "from hcs_studio.app import utf8_output; utf8_output(); print('Z\\u2032 0.71, 10 µm')"
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}
+    without = subprocess.run([sys.executable, "-c", code.split("; ", 2)[2]], env=env,
+                             capture_output=True)  # fmt: skip
+    assert without.returncode != 0 and b"UnicodeEncodeError" in without.stderr  # the bug
+    done = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.decode("utf-8").strip() == "Z′ 0.71, 10 µm"

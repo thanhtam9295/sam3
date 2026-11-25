@@ -42,7 +42,8 @@ def fingerprint(path: Path) -> str:
     digest = hashlib.sha256()
     for item in sorted(p for p in path.rglob("*") if p.is_file()):
         stat = item.stat()
-        digest.update(f"{item.relative_to(path)}|{stat.st_size}|{stat.st_mtime_ns}\n".encode())
+        rel = item.relative_to(path).as_posix()  # the same digest on every OS
+        digest.update(f"{rel}|{stat.st_size}|{stat.st_mtime_ns}\n".encode())
     return "tree:" + digest.hexdigest()
 
 

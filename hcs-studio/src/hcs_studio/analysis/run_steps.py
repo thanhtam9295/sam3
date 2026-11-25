@@ -67,7 +67,7 @@ def _relative(folder: Path, paths: list[Path]) -> list[str]:
     out = []
     for p in paths:
         try:
-            out.append(str(Path(p).relative_to(folder)))
+            out.append(Path(p).relative_to(folder).as_posix())
         except ValueError:
             out.append(str(p))
     return out
