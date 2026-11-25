@@ -1,0 +1,14 @@
+# Inference runtime = pyproject core dependencies + the packages the code
+# imports but pyproject does not declare (KI-002). Compile with
+# tools/deps/lock.sh; never edit the lock files by hand.
+-e file:.
+torch==2.10.0
+torchvision==0.25.0
+setuptools<81          # sam3/model_builder.py imports pkg_resources (KI-001)
+psutil                 # imported by sam3/model/sam3_video_predictor.py
+pycocotools            # imported by sam3.train/sam3.eval/sam3.agent helpers
+scipy                  # imported by sam3.perflib.associate_det_trk, sam3.train.matcher
+scikit-image           # CPU connected components fallback
+opencv-python          # CPU dilation / video IO
+pillow
+einops

@@ -1,0 +1,5 @@
+# Optional REST service (deploy/service) for Microsoft 365 Copilot API plugins.
+fastapi
+uvicorn
+python-multipart
+httpx                  # FastAPI TestClient in tests

@@ -129,7 +129,26 @@ module = [
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = "test_*.py"
+# "test" holds the original upstream tests, "tests" the tiered suite added for
+# multi-agent development (see tests/README.md).
+testpaths = ["test", "tests", "sam3/perflib/tests"]
+# importlib mode avoids a module-name clash between the tests/ package and
+# sam3/perflib/tests/tests.py; pythonpath makes `tests.*` helpers importable.
+addopts = "--import-mode=importlib"
+pythonpath = ["."]
+python_files = ["test_*.py", "tests.py"]
 python_classes = "Test*"
 python_functions = "test_*"
+markers = [
+    "unit: fast pure-function tests (CPU, no network, no checkpoints)",
+    "integration: multi-module pipelines on synthetic or in-repo public data",
+    "scientific: numerical regression and reference-implementation agreement",
+    "gpu: requires CUDA; auto-skipped when unavailable",
+    "slow: takes more than ~10 seconds on a laptop CPU",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::FutureWarning",
+    "ignore:pkg_resources is deprecated:UserWarning",
+    "ignore:CUDA is not available:UserWarning",
+]

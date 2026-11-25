@@ -1,0 +1,42 @@
+{
+ "_meta": {
+  "approved_by": "initial-capture",
+  "cases_version": 1,
+  "env": {
+   "numpy": "1.26.4",
+   "platform": "Linux-6.18.44-fc-v880-x86_64-with-glibc2.39",
+   "python": "3.12.3",
+   "torch": "2.10.0+cu128"
+  },
+  "generated": "2026-11-25",
+  "report": null
+ },
+ "outputs": {
+  "num_components": [
+   14,
+   17
+  ],
+  "sorted_sizes": [
+   [
+    1,
+    2,
+    6,
+    8,
+    11,
+    22,
+    167
+   ],
+   [
+    1,
+    2,
+    3,
+    4,
+    6,
+    17,
+    31,
+    33,
+    122
+   ]
+  ]
+ }
+}

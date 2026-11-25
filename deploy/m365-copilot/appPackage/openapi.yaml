@@ -1,0 +1,65 @@
+openapi: 3.0.3
+info:
+  title: SAM 3 Segmentation Service
+  version: 0.1.0
+  description: >
+    Internal service (deploy/service/app.py). Must be reachable only through the
+    enterprise API gateway that validates Microsoft Entra ID tokens.
+servers:
+  - url: ${{SAM3_SERVICE_URL}}
+paths:
+  /v1/segment:
+    post:
+      operationId: segmentImage
+      summary: Segment all instances of a concept in an image
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image, prompt]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: PNG, JPEG or TIFF image (max 20 MB)
+                prompt:
+                  type: string
+                  maxLength: 200
+                  description: Short noun phrase, e.g. "cell nucleus"
+                threshold:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  default: 0.5
+      responses:
+        "200":
+          description: Segmentation summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prompt: { type: string }
+                  threshold: { type: number }
+                  count: { type: integer }
+                  image:
+                    type: object
+                    properties:
+                      width: { type: integer }
+                      height: { type: integer }
+                  instances:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        instance: { type: integer }
+                        score: { type: number }
+                        box_xyxy: { type: array, items: { type: number } }
+                        area_px: { type: integer }
+                  caveat: { type: string }
+        "401": { description: Missing bearer token }
+        "413": { description: Image too large }
+        "415": { description: Unsupported image format }
+        "422": { description: Invalid prompt or threshold }

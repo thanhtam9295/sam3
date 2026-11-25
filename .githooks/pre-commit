@@ -1,0 +1,17 @@
+#!/bin/sh
+# Shared pre-commit hook for humans and AI agents. Enable once per clone
+# (applies to every worktree):   git config core.hooksPath .githooks
+# Works in Git for Windows (Git Bash) too. Needs Python 3.10+ on PATH.
+set -e
+PY=${PYTHON:-python3}
+command -v "$PY" >/dev/null 2>&1 || PY=python
+
+# 1. No credentials, API keys, experimental data or weights.
+"$PY" tools/security/scan_sensitive.py --staged
+
+# 2. No edits to files another agent has claimed.
+"$PY" tools/agents/claims.py check --staged
+
+# 3. Quantitative-algorithm changes need an approved validation report.
+#    Locally this only warns; CI enforces it.
+"$PY" tools/validation/check_protected_changes.py --staged --warn-only || true

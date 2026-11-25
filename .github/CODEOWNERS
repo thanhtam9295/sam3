@@ -1,0 +1,28 @@
+# Changes to protected quantitative-analysis code, scientific baselines and
+# governance require review by the scientific owner. Combine with a branch
+# protection rule "Require review from Code Owners" on main.
+# On enterprise migration, replace the handle with an approved team, e.g.
+# @your-org/sam3-scientific-reviewers (docs/ENTERPRISE_MIGRATION.md).
+
+/sam3/eval/                                   @thanhtam9295
+/sam3/perflib/                                @thanhtam9295
+/sam3/model/box_ops.py                        @thanhtam9295
+/sam3/model/edt.py                            @thanhtam9295
+/sam3/model/sam3_multiplex_detector_utils.py  @thanhtam9295
+/sam3/model/sam3_tracker_utils.py             @thanhtam9295
+/sam3/model/sam3_video_base.py                @thanhtam9295
+/sam3/model/sam3_video_inference.py           @thanhtam9295
+/sam3/model/sam3_multiplex_tracking.py        @thanhtam9295
+/sam3/train/matcher.py                        @thanhtam9295
+/sam3/train/masks_ops.py                      @thanhtam9295
+/sam3/train/nms_helper.py                     @thanhtam9295
+/sam3/train/loss/                             @thanhtam9295
+/sam3/agent/helpers/                          @thanhtam9295
+/scripts/eval/                                @thanhtam9295
+/tests/scientific/                            @thanhtam9295
+/assets/veval/                                @thanhtam9295
+/tools/                                       @thanhtam9295
+/.github/                                     @thanhtam9295
+/AGENTS.md                                    @thanhtam9295
+/.agents/skills/                              @thanhtam9295
+/requirements/                                @thanhtam9295

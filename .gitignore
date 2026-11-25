@@ -30,6 +30,7 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!packaging/windows/sam3_portable.spec
 
 # Installer logs
 pip-log.txt
@@ -151,3 +152,60 @@ Thumbs.db
 # BPE vocabulary files
 *.bpe
 *.vocab
+
+# ---------------------------------------------------------------------------
+# Multi-agent development safety net (see docs/SECURITY_AND_DATA.md).
+# Tracked files are unaffected; this stops *new* sensitive files being added.
+# ---------------------------------------------------------------------------
+# Credentials and local config
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+*service-account*.json
+.netrc
+.npmrc
+.pypirc
+CLAUDE.local.md
+.claude/settings.local.json
+deploy/m365-copilot/env/
+# Experimental / instrument data — keep it outside the repo ($SAM3_DATA_DIR)
+/data/
+/datasets/
+/raw_data/
+/experiments/
+/results/
+/sam3_results/
+*.nd2
+*.czi
+*.lif
+*.lsm
+*.oib
+*.oif
+*.ims
+*.vsi
+*.svs
+*.ndpi
+*.mrxs
+*.dcm
+*.nii
+*.nii.gz
+*.fcs
+*.mat
+*.parquet
+*.xlsx
+*.xls
+*.zarr/
+*.ome.tif
+*.ome.tiff
+# Model weights
+*.safetensors
+*.onnx
+# Agent worktrees if someone creates them inside the repo by mistake
+.worktrees/
+*-worktrees/
+# Build outputs
+.venv-build/

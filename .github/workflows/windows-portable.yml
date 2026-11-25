@@ -1,0 +1,39 @@
+name: SAM3/windows-portable
+# MANUAL ONLY. Builds the portable Windows CLI bundle and keeps it as a
+# short-lived, private workflow artifact. It does not create a release or
+# publish anything. No checkpoints or credentials are bundled.
+on:
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: "Days to keep the artifact"
+        default: "7"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        shell: pwsh
+        run: ./packaging/windows/build.ps1 -SkipGpuCheck
+      - name: Smoke test (CLI loads, no model)
+        shell: pwsh
+        run: ./dist/sam3-portable/sam3-cli.exe --help
+      - name: Ensure no weights or credentials were bundled
+        shell: pwsh
+        run: |
+          $bad = Get-ChildItem -Recurse -File dist -Include *.pt,*.pth,*.ckpt,*.safetensors,*.env,*.pem,*.key
+          if ($bad) { $bad | ForEach-Object FullName; throw "weights/credentials found in bundle" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sam3-portable-windows-x64
+          path: dist/sam3-portable/
+          retention-days: ${{ fromJSON(github.event.inputs.retention_days) }}

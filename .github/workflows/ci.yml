@@ -1,0 +1,82 @@
+name: SAM3/ci
+# Tests + governance guards for multi-agent development. Read-only: this
+# workflow never pushes, comments, labels, releases or uploads data.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: tests (py3.12, CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements/lock/*.txt
+      - name: Install locked environment
+        run: |
+          uv venv -p 3.12 .venv
+          uv pip sync --require-hashes requirements/lock/py312-dev.txt
+          uv pip install -e . --no-deps
+      - name: Unit + integration + scientific (CPU)
+        run: .venv/bin/python -m pytest -q -m "not gpu" --junitxml=pytest.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pytest-results
+          path: pytest.xml
+          retention-days: 14
+
+  guards:
+    name: governance guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history for the secret scan and the base diff
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Secrets / data / weights in the tree
+        run: python tools/security/scan_sensitive.py --all
+      - name: Secrets / data / weights anywhere in history
+        run: python tools/security/scan_sensitive.py --history
+      - name: Agent Skills valid and mirrored
+        run: python tools/agents/sync_skills.py --check
+      - name: Scientific validation required for protected algorithm changes
+        if: github.event_name == 'pull_request'
+        run: python tools/validation/check_protected_changes.py --base origin/${{ github.base_ref }}
+
+  pr-overlap:
+    name: cross-agent file overlap
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fail on overlap with other open PRs on protected paths
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          python tools/agents/pr_overlap_check.py
+          --pr ${{ github.event.pull_request.number }}
+          --warn-only-unprotected

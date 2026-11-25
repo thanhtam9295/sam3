@@ -1,0 +1,24 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "0.1.0",
+  "id": "${{TEAMS_APP_ID}}",
+  "developer": {
+    "name": "${{DEVELOPER_NAME}}",
+    "websiteUrl": "${{DEVELOPER_WEBSITE_URL}}",
+    "privacyUrl": "${{PRIVACY_URL}}",
+    "termsOfUseUrl": "${{TERMS_URL}}"
+  },
+  "icons": { "color": "color.png", "outline": "outline.png" },
+  "name": { "short": "SAM 3 Segmentation", "full": "SAM 3 open-vocabulary image segmentation" },
+  "description": {
+    "short": "Count and measure objects in images with SAM 3.",
+    "full": "Segments every instance of a described concept (e.g. 'cell nucleus') in an image using the organisation's internally hosted SAM 3 service, and reports counts, boxes, areas and caveats."
+  },
+  "accentColor": "#2F5D8A",
+  "copilotAgents": {
+    "declarativeAgents": [ { "id": "sam3Agent", "file": "declarativeAgent.json" } ]
+  },
+  "permissions": [ "identity" ],
+  "validDomains": [ "${{SAM3_SERVICE_DOMAIN}}" ]
+}

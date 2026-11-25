@@ -1,0 +1,32 @@
+# Quantitative analysis code. Any change to a matching path requires an
+# APPROVED scientific validation report in docs/validation/reports/ that names
+# the changed file (enforced by tools/validation/check_protected_changes.py and
+# the "scientific-guard" CI job). Glob syntax: fnmatch, "*" also matches "/".
+#
+# Evaluation metrics (cgF1, IL_MCC, HOTA, TETA, phrase AP, mAP, F-measure)
+sam3/eval/*
+scripts/eval/*
+# Fast-path kernels: IoU / IoM, NMS, mask->box, connected components, association
+sam3/perflib/*
+sam3/model/edt.py
+# Geometry, matching, mask ops and post-processing used to produce measurements
+sam3/model/box_ops.py
+sam3/model/sam3_multiplex_detector_utils.py
+sam3/model/sam3_tracker_utils.py
+sam3/model/sam3_video_base.py
+sam3/model/sam3_video_inference.py
+sam3/model/sam3_multiplex_tracking.py
+sam3/train/matcher.py
+sam3/train/masks_ops.py
+sam3/train/nms_helper.py
+sam3/train/loss/*
+sam3/agent/helpers/mask_overlap_removal.py
+sam3/agent/helpers/rle.py
+sam3/agent/helpers/masks.py
+sam3/agent/helpers/boxes.py
+# The scientific reference itself
+tests/scientific/baselines/*
+tests/scientific/cases.py
+tests/scientific/compare.py
+tests/scientific/cgf1_fixture.py
+assets/veval/*

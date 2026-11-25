@@ -1,0 +1,13 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.4/schema.json",
+  "version": "v1.4",
+  "name": "SAM 3 Segmentation",
+  "description": "Segments, counts and measures objects in images with the internal SAM 3 service and explains the results with scientific caveats.",
+  "instructions": "$[file('instructions.txt')]",
+  "conversation_starters": [
+    { "title": "Count objects", "text": "How many cell nuclei are in this image, at threshold 0.5?" },
+    { "title": "Explain metrics", "text": "What does cgF1 measure and how is it computed?" },
+    { "title": "Choose a threshold", "text": "How should I choose the confidence threshold for counting?" }
+  ],
+  "actions": [ { "id": "sam3Service", "file": "ai-plugin.json" } ]
+}

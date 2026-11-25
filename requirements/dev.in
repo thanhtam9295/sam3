@@ -1,0 +1,6 @@
+# Development + CI test environment (CPU-capable). Superset of runtime.in.
+-r runtime.in
+-r service.in
+-e file:.[dev,train]
+pytest
+pytest-cov

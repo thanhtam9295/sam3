@@ -1,0 +1,23 @@
+{
+ "_meta": {
+  "approved_by": "initial-capture",
+  "cases_version": 1,
+  "env": {
+   "numpy": "1.26.4",
+   "platform": "Linux-6.18.44-fc-v880-x86_64-with-glibc2.39",
+   "python": "3.12.3",
+   "torch": "2.10.0+cu128"
+  },
+  "generated": "2026-11-25",
+  "report": null
+ },
+ "outputs": {
+  "rles": [
+   "f72k02O0O101O000000000000000000O2O000On=",
+   "5=`02O0O2O0O2O00000000000001N10001N2N2N2N3Lab0",
+   "df03k00O2O00001N100000000000000000000N",
+   "W51l02O1O0O1000001O00000000000000000000O10001O000O2Nj9",
+   "X73j02N2N2O000000000001N2N3LQc0"
+  ]
+ }
+}

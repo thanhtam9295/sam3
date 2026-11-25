@@ -1,0 +1,27 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.2/schema.json",
+  "schema_version": "v2.2",
+  "name_for_human": "SAM 3 Segmentation",
+  "description_for_human": "Open-vocabulary instance segmentation of images on the organisation's SAM 3 service.",
+  "namespace": "sam3",
+  "functions": [
+    {
+      "name": "segmentImage",
+      "description": "Segment every instance of a short noun phrase in an image. Returns count, per-instance score, XYXY pixel box and pixel area.",
+      "capabilities": {
+        "response_semantics": {
+          "data_path": "$.instances",
+          "properties": { "title": "$.instance", "subtitle": "$.score" }
+        }
+      }
+    }
+  ],
+  "runtimes": [
+    {
+      "type": "OpenApi",
+      "auth": { "type": "OAuthPluginVault", "reference_id": "${{SAM3_OAUTH_REFERENCE_ID}}" },
+      "spec": { "url": "openapi.yaml" },
+      "run_for_functions": [ "segmentImage" ]
+    }
+  ]
+}

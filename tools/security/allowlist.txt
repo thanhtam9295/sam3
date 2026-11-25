@@ -1,0 +1,5 @@
+# Paths exempt from the type/size rules of scan_sensitive.py (secret patterns
+# are still checked). Every entry needs a justification and a reviewer.
+#
+# path-glob                                  # why / who approved
+assets/dog.gif                               # public upstream README demo animation (Meta SAM 3 release), 7.1 MB
