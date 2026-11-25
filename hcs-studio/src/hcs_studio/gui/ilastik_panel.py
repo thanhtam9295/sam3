@@ -299,7 +299,7 @@ class IlastikPanel(QWidget):
 
     def _show_preview(self, result: ImageData) -> None:
         self.last_preview = result
-        self.viewer.show_field(result.data, result.metadata)
+        self.viewer.show_field(result.data[None], result.metadata)  # (T=1, C, Z, Y, X)
         names = [c.name for c in result.metadata.channels if c.name.startswith("ilastik_")]
         self.set_status("Preview: " + ", ".join(names))
 

@@ -59,6 +59,7 @@ class _Viewer:
         self.shown: list[tuple[Any, Any]] = []
 
     def show_field(self, data: Any, metadata: Any) -> None:
+        assert data.ndim == 5, "ViewerPanel.show_field takes (T, C, Z, Y, X)"
         self.shown.append((data, metadata))
 
 
@@ -112,6 +113,7 @@ def test_ilastik_panel_preview_preset_macro_and_training_round_trip(
     names = [c.name for c in viewer.shown[-1][1].channels]
     assert names[-2:] == ["ilastik_background", "ilastik_nuclei"]
     assert panel.last_preview is not None and panel.last_preview.data.shape[0] == 4
+    assert viewer.shown[-1][0].shape[:2] == (1, 4)
 
     # preset into the pipeline builder
     with qtbot.waitSignal(panel.preset_ready) as signal:

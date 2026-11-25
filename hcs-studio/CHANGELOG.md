@@ -8,6 +8,9 @@
   over time).
 - `hcs-studio ilastik --preset/--run <project> --for spheroids|organoids|confluence`.
 - Segmentation validation (Models tab, `validate-seg`) accepts pipelines with ilastik steps.
+- Fixed: the ilastik dock's preview failed to display (wrong array shape for the viewer).
+- Web portal: the image viewer opens with the whole field fitted and centred (was 1:1 in a
+  corner).
 
 ### Phase 16f — ilastik dock, "Train in ilastik", one-line runs
 - ilastik dock: choose a project (file or the project library = model registry), compatibility
