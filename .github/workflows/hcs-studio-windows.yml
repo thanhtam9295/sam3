@@ -11,6 +11,9 @@ on:
         options: [cpu, cuda]
   push:
     tags: ["hcs-studio-v*"]
+    # Work branches: builds only when the commit message contains "[build installer]"
+    # (the manual "Run workflow" button needs this file on the default branch).
+    branches: ["claude/**"]
 
 defaults:
   run:
@@ -19,6 +22,9 @@ defaults:
 
 jobs:
   tests:
+    if: >-
+      github.event_name != 'push' || startsWith(github.ref, 'refs/tags/') ||
+      contains(github.event.head_commit.message, '[build installer]')
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -42,6 +48,8 @@ jobs:
         run: .venv\Scripts\hcs-studio.exe selftest
 
   installer:
+    # Built even when Windows tests fail (their results stay visible), but not when skipped.
+    if: ${{ !cancelled() && needs.tests.result != 'skipped' }}
     runs-on: windows-latest
     needs: tests
     timeout-minutes: 120
