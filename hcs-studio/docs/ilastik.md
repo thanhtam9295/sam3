@@ -206,6 +206,29 @@ hcs-studio ilastik --preset tracking.ilp --output tracking.yaml
   `track_id1`, `parent_track_id`, `lineage_id` and common variants); if a real export names them
   differently the step says which column it misses.
 
+## Spheroids, confluence and model validation with ilastik
+
+A Pixel Classification or Autocontext project can replace the built-in detection in other
+assays (`--for` picks the use; `--class` the class, default the last one):
+
+```bash
+hcs-studio ilastik --preset spheroids.ilp --for spheroids --output spheroids.yaml
+```
+
+- **Spheroids / organoids** (`--for spheroids` or `organoids`): ilastik → `detect_spheroids`
+  with method `probability` (pixels with a spheroid-class probability ≥ 0.5, holes filled so a
+  necrotic core counts, objects below the minimum area dropped) → the usual spheroid
+  measurements, QC flags, gallery and volume dose–response (docs/assays.md). Useful where the
+  texture method struggles: debris-rich wells, uneven brightfield, organoids in matrigel.
+- **Confluence** (`--for confluence`): ilastik → `confluence` with method `probability` (% of
+  the field where the cell class probability is ≥ 0.5) per field and time point; add the
+  `kinetics` step for growth curves. The class channel must reach the confluence step in the
+  linear image: put ilastik before any CLAHE/gamma step, or make objects with
+  `probabilities_to_objects` and use method `labels`.
+- **Validation against ground truth** (Models tab / `hcs-studio validate-seg`): pipelines with
+  ilastik steps are validated like any other segmentation; ilastik is found once for the set
+  and runs field by field.
+
 ## The ilastik dock and "Train in ilastik"
 
 The **ilastik** dock (next to *Segmentation*) works on the field shown in the viewer:

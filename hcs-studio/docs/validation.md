@@ -275,6 +275,11 @@ and resumed without re-sending finished wells to ilastik; counts equal the truth
 Training sets exported from a run equal the run's recomputed stage pixel for pixel. Unconfirmed:
 the `--workflow` names ilastik's window accepts for new projects.
 
+ilastik in other assays (Phase 16g), with the stand-in: spheroids of known radius detected from
+the class probability give volumes within 2 % of the truth; confluence equals the class mask's
+area fraction computed independently; a pixel project + objects validated against synthetic
+ground truth reaches AP50 > 0.7.
+
 **Not checked:** a real trained project with the real ilastik, and real Fiji (no `.ilp` samples
 yet; the container could not install ilastik this time). The real parity test is ready
 (`tests/test_ilastik_fiji.py -k real`). Unconfirmed: where trained projects store the

@@ -28,6 +28,7 @@ put a projection first (e.g. `max` for brightfield, or the best-focus plane).
 | `brightfield` (default) | Spheroids are **textured** (cells), the background is not. The local standard deviation of a difference of Gaussians at the `texture_um` scale (6 µm) marks textured regions (Otsu on log SD, never below 4 × the background noise); smooth dark regions — the **well edge and meniscus shadow** — cancel out in the difference of Gaussians and are not detected, and objects that are not textured inside are dropped. The outline is then placed at **half height** between the spheroid's interior and its local background: the edge of a blurred step lies at half height, so blur does not change the measured size. |
 | `dark` | Darker than the background (Otsu), outline at half height. |
 | `bright` | Fluorescence (e.g. calcein, Hoechst): Otsu's threshold. |
+| `probability` | The spheroid class of an earlier **ilastik** pixel classification step (`probability_channel`, default the first non-background class): probability ≥ `probability_threshold` (0.5), holes filled (a necrotic core counts). Preset: `hcs-studio ilastik --preset <project> --for spheroids` (docs/ilastik.md). |
 
 Objects smaller than `min_area_um2` (300 µm²) are dropped. Every remaining object is kept
 (largest first), so debris and second spheroids can be flagged. SAM 3 with a "spheroid" text

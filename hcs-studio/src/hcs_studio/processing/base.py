@@ -204,6 +204,10 @@ class Module(ABC):
     #: (:meth:`apply_batch`), e.g. an external program with a slow start (ilastik).
     batch_scope: ClassVar[str] = "field"
 
+    #: ``fit(None)`` works: the state does not depend on plate data (e.g. finding ilastik and
+    #: reading its project), so single images can be processed without a plate (validation).
+    fit_without_plate: ClassVar[bool] = False
+
     def apply_batch(
         self,
         images: list[ImageData],

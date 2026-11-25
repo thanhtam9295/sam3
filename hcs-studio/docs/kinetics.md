@@ -66,6 +66,9 @@ with stitching (the crop changes the field size).
   noise so that empty wells read ≈ 0 %.
 - **threshold**: a fluorescent cytoplasmic stain (or a nuclear stain at low magnification).
 - **labels**: the area of a label set (e.g. Cellpose cells).
+- **probability**: the area where an earlier **ilastik** pixel classification step's cell class
+  (`class_channel`) is ≥ 0.5 (`threshold` to change it); no plate calibration. Preset:
+  `hcs-studio ilastik --preset <project> --for confluence` (docs/ilastik.md).
 
 Limit: gaps between cells narrower than about 3 × `texture_um` are counted as covered, so
 near-confluent fields read a few percentage points high (see Validation).

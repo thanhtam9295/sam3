@@ -45,7 +45,8 @@ DESCRIPTIONS = {
     "capped at 10×)",
     "detect_spheroids": "spheroid detection (brightfield: local standard deviation of a "
     "difference of Gaussians, which ignores smooth well-edge and meniscus shading, then the outline "
-    "at half height between the spheroid interior and its local background; fluorescence: Otsu)",
+    "at half height between the spheroid interior and its local background; fluorescence: Otsu; "
+    "or the spheroid class probability of an ilastik pixel classifier ≥ 0.5, holes filled)",
     "measure_spheroids": "spheroid size, shape and volume (sphere from the equivalent diameter, "
     "π/6·d³; ellipsoid π/6·L·W²), brightfield darkness, outline blur and position; radial "
     "intensity profiles in concentric shells; necrotic core outlined at half height between the "
@@ -76,7 +77,8 @@ DESCRIPTIONS = {
     "ilastik_tracks": "per-track and per-well tracking measures (speed, straightness, divisions, cell-cycle time) from the ilastik tracks",
     "confluence": "confluence (% of the field covered by cells: local texture of the image minus "
     "its median filter, thresholded at Otsu's level of fields pooled across the plate and time "
-    "points, edges corrected for the window; or an intensity threshold, or a label set)",
+    "points, edges corrected for the window; or an intensity threshold, a label set, or the area "
+    "where an ilastik pixel classifier's cell class probability is ≥ 0.5)",
     "tracking": "cell tracking (nuclei linked between time points by optimal assignment on the "
     "distance to their predicted positions, with track ends and starts allowed at the cost of a "
     "speed gate, Jaqaman et al. 2008; divisions from daughters smaller than the mother next to it; "

@@ -96,10 +96,16 @@ def cover(mask: NDArray[np.bool_], min_px: float) -> NDArray[np.bool_]:
 
 class ConfluenceParams(ModuleParams):
     channel: int = Field(default=1, ge=1, description="Brightfield/phase or stain channel.")
-    method: Literal["texture", "threshold", "labels"] = Field(
+    method: Literal["texture", "threshold", "labels", "probability"] = Field(
         default="texture",
         description="texture: brightfield/phase; threshold: a fluorescent stain; labels: area "
-        "of a label set.",
+        "of a label set; probability: a class channel of an earlier ilastik step (pixels whose "
+        "class probability is ≥ threshold, default 0.5).",
+    )
+    class_channel: str = Field(
+        default="",
+        description="probability: the ilastik class channel, e.g. ilastik_cells (default: the "
+        "first ilastik_ channel that is not background).",
     )
     labels: str = Field(default="cells", description="labels: the label set.")
     texture_um: float = Field(default=1.0, gt=0, description="texture: σ of the window.")
@@ -118,14 +124,36 @@ class Confluence(MeasurementModule):
 
     @property
     def needs_fit(self) -> bool:  # type: ignore[override]
-        return self.params.method != "labels" and self.params.threshold is None
+        return self.params.method not in ("labels", "probability") and self.params.threshold is None
 
     def validate(self, metadata: ImageMetadata) -> None:
         params: ConfluenceParams = self.params
+        if params.method == "probability":
+            self._class_index([c.name for c in metadata.channels])
+            return
         if params.method != "labels" and params.channel > len(metadata.channels):
             raise ModuleError(f"Channel {params.channel} does not exist")
         if params.method == "texture":
             um_to_px(params.texture_um, metadata, "The texture window")
+
+    def _class_index(self, names: list[str]) -> int:
+        wanted = self.params.class_channel
+        if wanted:
+            if wanted not in names:
+                raise ModuleError(
+                    f"No channel {wanted!r} in the linear image: put the ilastik step before "
+                    "confluence and before any non-linear step (CLAHE, gamma), or make objects "
+                    "with probabilities_to_objects and use method 'labels'"
+                )
+            return names.index(wanted)
+        classes = [n for n in names if n.startswith("ilastik_")]
+        chosen = [n for n in classes if n != "ilastik_background"] or classes
+        if not chosen:
+            raise ModuleError(
+                "Method 'probability' needs ilastik class channels: put an ilastik pixel "
+                "classification step first"
+            )
+        return names.index(chosen[0])
 
     def _plane(self, image: Any) -> NDArray[Any]:
         data: NDArray[Any] = image.data[self.params.channel - 1].max(axis=0)
@@ -168,6 +196,13 @@ class Confluence(MeasurementModule):
             if labels is None:
                 raise ModuleError(f"No label set '{params.labels}' for confluence")
             mask = labels.data.max(axis=0) > 0
+        elif params.method == "probability":
+            index = self._class_index([c.name for c in metadata.channels])
+            level = params.threshold if params.threshold is not None else 0.5
+            mask = cover(
+                context.corrected.data[index].max(axis=0) >= level,
+                params.min_area_um2 / pixel_area,
+            )
         else:
             texture_px = self._texture_px(metadata)
             state = context.state or {}

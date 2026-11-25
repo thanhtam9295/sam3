@@ -195,7 +195,8 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | Parameter | Default | Meaning |
 |---|---|---|
 | `channel` | 1 | Brightfield/phase or stain channel. |
-| `method` | 'texture' | texture: brightfield/phase; threshold: a fluorescent stain; labels: area of a label set. |
+| `method` | 'texture' | texture: brightfield/phase; threshold: a fluorescent stain; labels: area of a label set; probability: a class channel of an earlier ilastik step (pixels whose class probability is ≥ threshold, default 0.5). |
+| `class_channel` | '' | probability: the ilastik class channel, e.g. ilastik_cells (default: the first ilastik_ channel that is not background). |
 | `labels` | 'cells' | labels: the label set. |
 | `texture_um` | 1.0 | texture: σ of the window. |
 | `threshold` | None | Fixed level (no calibration). |
@@ -287,7 +288,9 @@ Spheroids (Phase 21), Z stacks with method bright: 3D detection (Otsu, surface a
 | Parameter | Default | Meaning |
 |---|---|---|
 | `channel` | required | Brightfield (or fluorescence) channel. |
-| `method` | 'brightfield' | brightfield: texture, then half-height outline; dark: darker than the background; bright: fluorescence (Otsu). |
+| `method` | 'brightfield' | brightfield: texture, then half-height outline; dark: darker than the background; bright: fluorescence (Otsu); probability: a class channel of an earlier ilastik step (e.g. ilastik_spheroid). |
+| `probability_channel` | '' | probability: the ilastik class channel (default: the first ilastik_ channel that is not background). |
+| `probability_threshold` | 0.5 | probability: the class probability that counts. |
 | `texture_um` | 6.0 | Texture window (Gaussian σ). |
 | `min_area_um2` | 300.0 | Smaller objects are dropped. |
 | `protrusion_reach_um` | 0.0 | Invasion assays: follow dark protrusions this far from the spheroid body. |

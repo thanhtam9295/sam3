@@ -239,12 +239,39 @@ def detect_3d(
     return relabel_sequential(out)
 
 
+def probability_spheroids(
+    probability: NDArray[Any], threshold: float, min_area_px: float
+) -> NDArray[np.int32]:
+    """Spheroids from a class-probability plane: ≥ threshold, holes filled (a necrotic core can
+    read as another class), objects smaller than ``min_area_px`` dropped, numbered by size."""
+    from scipy import ndimage
+
+    mask = ndimage.binary_fill_holes(np.asarray(probability) >= threshold)
+    parts, n = ndimage.label(mask)
+    sizes = np.bincount(parts.ravel(), minlength=n + 1)
+    sizes[0] = 0
+    order = [int(k) for k in np.argsort(-sizes) if sizes[k] >= max(min_area_px, 1)]
+    out = np.zeros(parts.shape, dtype=np.int32)
+    for rank, k in enumerate(order, start=1):
+        out[parts == k] = rank
+    return out
+
+
 class DetectSpheroidsParams(ModuleParams):
     channel: int = Field(ge=1, description="Brightfield (or fluorescence) channel.")
-    method: Literal["brightfield", "dark", "bright"] = Field(
+    method: Literal["brightfield", "dark", "bright", "probability"] = Field(
         default="brightfield",
         description="brightfield: texture, then half-height outline; dark: darker than the "
-        "background; bright: fluorescence (Otsu).",
+        "background; bright: fluorescence (Otsu); probability: a class channel of an earlier "
+        "ilastik step (e.g. ilastik_spheroid).",
+    )
+    probability_channel: str = Field(
+        default="",
+        description="probability: the ilastik class channel (default: the first ilastik_ "
+        "channel that is not background).",
+    )
+    probability_threshold: float = Field(
+        default=0.5, gt=0, lt=1, description="probability: the class probability that counts."
     )
     texture_um: float = Field(default=6.0, gt=0, description="Texture window (Gaussian σ).")
     min_area_um2: float = Field(default=300.0, ge=0, description="Smaller objects are dropped.")
@@ -267,9 +294,40 @@ class DetectSpheroids(Module):
         um_to_px(self.params.texture_um, metadata, "The texture window")
         if self.params.channel > len(metadata.channels):
             raise ModuleError(f"Channel {self.params.channel} does not exist")
+        if self.params.method == "probability":
+            self._probability_index([c.name for c in metadata.channels])
+
+    def _probability_index(self, names: list[str]) -> int:
+        wanted = self.params.probability_channel
+        if wanted:
+            if wanted not in names:
+                raise ModuleError(
+                    f"No channel {wanted!r}: put the ilastik step before spheroid detection"
+                )
+            return names.index(wanted)
+        classes = [n for n in names if n.startswith("ilastik_")]
+        chosen = [n for n in classes if n != "ilastik_background"] or classes
+        if not chosen:
+            raise ModuleError(
+                "Method 'probability' needs ilastik class channels: put an ilastik pixel "
+                "classification step first"
+            )
+        return names.index(chosen[0])
 
     def apply(self, image: ImageData, state: Any) -> ImageData:
         params: DetectSpheroidsParams = self.params
+        if params.method == "probability":
+            pixel_area = (image.metadata.pixel_size_um or 1.0) ** 2
+            index = self._probability_index([c.name for c in image.metadata.channels])
+            plane = image.data[index].max(axis=0)
+            labels = probability_spheroids(
+                plane, params.probability_threshold, params.min_area_um2 / pixel_area
+            )
+            name = image.metadata.channels[index].name
+            result = LabelSet(params.output, labels[None], source=f"spheroids ({name})")
+            return image.with_labels(
+                result, self.name, {"module": self.name, "objects": result.count}
+            )
         if image.data.shape[1] > 1:
             if params.method != "bright":
                 raise ModuleError(

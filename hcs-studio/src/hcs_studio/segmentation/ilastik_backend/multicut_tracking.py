@@ -51,6 +51,7 @@ class _IlastikWellStep(Module):
     needs_fit: ClassVar[bool] = True
     exclusive: ClassVar[bool] = True
     batch_scope: ClassVar[str] = "well"
+    fit_without_plate = True
     workflow: ClassVar[str] = ""
     workflow_title: ClassVar[str] = ""
 

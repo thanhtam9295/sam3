@@ -88,6 +88,7 @@ class IlastikObjects(Module):
     needs_fit: ClassVar[bool] = True
     exclusive: ClassVar[bool] = True
     batch_scope: ClassVar[str] = "well"
+    fit_without_plate = True
 
     def project_info(self) -> Any:
         from hcs_studio.segmentation.ilastik_backend.project import read_project

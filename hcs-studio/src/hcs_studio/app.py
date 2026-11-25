@@ -206,6 +206,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--boundary", type=Path, help="Multicut preset: the boundary pixel-classification .ilp"
     )
     ilastik_cmd.add_argument(
+        "--for",
+        dest="preset_for",
+        choices=["objects", "spheroids", "organoids", "confluence"],
+        default="objects",
+        help="--preset/--run: what the pixel project is used for (default: objects)",
+    )
+    ilastik_cmd.add_argument(
         "--channels", type=int, nargs="+", help="channels sent to ilastik (from 1)"
     )
     ilastik_cmd.add_argument(
@@ -2097,7 +2104,6 @@ def _ilastik_run(args: argparse.Namespace) -> int:
     from hcs_studio.io.base import ReaderError, open_plate
     from hcs_studio.pipeline.executor import parse_wells
     from hcs_studio.processing.base import ModuleError
-    from hcs_studio.segmentation.ilastik_backend.presets import multicut_preset, pixel_preset
     from hcs_studio.segmentation.ilastik_backend.project import read_project
     from hcs_studio.services.operations import run_pipeline
 
@@ -2106,12 +2112,7 @@ def _ilastik_run(args: argparse.Namespace) -> int:
         return 2
     try:
         info = read_project(args.run)
-        if info.workflow == "multicut" and args.boundary:
-            pipeline = multicut_preset(args.boundary, args.run)
-        else:
-            pipeline = pixel_preset(
-                args.run, info, object_class=args.object_class, channels=args.channels
-            )
+        pipeline = _ilastik_preset(args, args.run, info)
         plate = open_plate(args.input)
         wells = parse_wells(args.wells, plate)
     except (OSError, ValueError, ReaderError) as exc:
@@ -2145,6 +2146,28 @@ def _ilastik_run(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def _ilastik_preset(args: argparse.Namespace, path: Path, info: Any) -> Any:
+    """The preset pipeline for a project (``--for`` picks the use of a pixel project)."""
+    from hcs_studio.segmentation.ilastik_backend import presets
+
+    if info.workflow == "multicut" and args.boundary:
+        return presets.multicut_preset(args.boundary, path)
+    use = getattr(args, "preset_for", "objects")
+    if use in ("spheroids", "organoids"):
+        return presets.spheroid_preset(
+            path,
+            info,
+            object_class=args.object_class,
+            channels=args.channels,
+            organoids=use == "organoids",
+        )
+    if use == "confluence":
+        return presets.confluence_preset(
+            path, info, object_class=args.object_class, channels=args.channels
+        )
+    return presets.pixel_preset(path, info, object_class=args.object_class, channels=args.channels)
+
+
 def _ilastik_project(args: argparse.Namespace) -> int:
     """``--info``: the project's workflow, classes, training axes; ``--preset``: a pipeline."""
     import json
@@ -2163,15 +2186,8 @@ def _ilastik_project(args: argparse.Namespace) -> int:
     if not args.output:
         print("ERROR: give --output for the pipeline file")
         return 2
-    from hcs_studio.segmentation.ilastik_backend.presets import multicut_preset, pixel_preset
-
     try:
-        if info.workflow == "multicut" and args.boundary:
-            pipeline = multicut_preset(args.boundary, path)
-        else:
-            pipeline = pixel_preset(
-                path, info, object_class=args.object_class, channels=args.channels
-            )
+        pipeline = _ilastik_preset(args, path, info)
     except ValueError as exc:
         print(f"ERROR: {exc}")
         return 2

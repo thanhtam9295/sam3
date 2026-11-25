@@ -253,7 +253,7 @@ PlateLayout (model/annotation.py)
 
 Not added: lmfit (`scipy.optimize.least_squares` covers bounds, robust loss, covariance CIs), weasyprint (needs system Pango/Cairo; hard on Windows).
 
-## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a)–(f) built
+## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a)–(g) built
 
 Paused 2026-11-19 after step (a); resumed 2026-11-24 (user: "CONTINUE"): step (b) built against a
 fake ilastik (no `.ilp` samples yet; installing ilastik in the container was not permitted this
@@ -454,6 +454,18 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
   `preset_ready` → `PipelinePanel.set_pipeline`; `check_fit` on every field change).
 - Done-when test `tests/test_ilastik_done_when.py` (subprocess run killed with SIGKILL on its
   process group, CLI resume; `HCS_SLOW=1` for 384 wells).
+
+### Conventions (step g, built: ilastik as an option of Phases 21, 22, 25)
+
+- `Module.fit_without_plate` (True for the ilastik steps): `training.validate.predict` fits such
+  steps once per validation (`states`) instead of refusing them.
+- `detect_spheroids` method `probability` (`probability_channel`, default first non-background
+  `ilastik_` channel; `assays.spheroids.probability_spheroids`: ≥ threshold, holes filled, size
+  filter, numbered by size; 2D, Z max-projected) and `confluence` method `probability`
+  (`class_channel`, threshold default 0.5; needs no fit; reads `corrected`, so the class channel
+  must be in the linear image). Presets `presets.spheroid_preset` (from
+  `assays.spheroids.preset` with the detection swapped) and `confluence_preset`; CLI `--for`
+  (`_ilastik_preset` in app.py, shared by `--preset` and `--run`).
 
 ### Testing plan
 

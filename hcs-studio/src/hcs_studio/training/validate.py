@@ -69,19 +69,28 @@ def predict(
     channels: Sequence[str] = (),
     pixel_size_um: float | None = None,
     labels: str | None = None,
+    states: dict[int, Any] | None = None,
 ) -> NDArray[np.int32]:
-    """Labels (Y, X) of one (C, Y, X) image after the steps."""
+    """Labels (Y, X) of one (C, Y, X) image after the steps. Steps whose fit needs no plate
+    (``fit_without_plate``, e.g. ilastik) are fitted once and kept in ``states``."""
     from hcs_studio.processing.base import ModuleError
 
+    states = {} if states is None else states
     data = image_data(image, channels, pixel_size_um)
-    for step in steps:
+    for index, step in enumerate(steps):
         module = step.create()
+        state = None
         if module.needs_fit:
-            raise ModuleError(
-                f"Step '{step.module}' needs a plate-level fit; validate a pipeline without it"
-            )
+            if not module.fit_without_plate:
+                raise ModuleError(
+                    f"Step '{step.module}' needs a plate-level fit; validate a pipeline without it"
+                )
+            module.validate(data.metadata)
+            if index not in states:
+                states[index] = module.fit(None)  # type: ignore[arg-type]
+            state = states[index]
         module.validate(data.metadata)
-        data = module.apply(data, None)
+        data = module.apply(data, state)
     if not data.labels:
         raise ModuleError("The steps made no segmentation")
     chosen = data.label_set(labels) if labels else data.labels[-1]
@@ -106,6 +115,7 @@ def validate_segmentation(
         raise ValueError(f"{ann.ref}: no items in split {split!r} (split the set first)")
     rows = []
     predictions = {}
+    states: dict[int, Any] = {}
     for item in items:
         image, truth = read_item(ann, item, root)
         if truth is None:
@@ -116,6 +126,7 @@ def validate_segmentation(
             channels=ann.channels,
             labels=labels,
             pixel_size_um=item.pixel_size_um or pixel_size_um,
+            states=states,
         )
         if keep_predictions:
             predictions[item.id] = pred

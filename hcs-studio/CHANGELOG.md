@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Phase 16g — ilastik in spheroids, confluence and validation
+- `detect_spheroids` method `probability` and `confluence` method `probability`: an ilastik
+  pixel classifier's class replaces the built-in detection (spheroids, organoids, confluence
+  over time).
+- `hcs-studio ilastik --preset/--run <project> --for spheroids|organoids|confluence`.
+- Segmentation validation (Models tab, `validate-seg`) accepts pipelines with ilastik steps.
+
 ### Phase 16f — ilastik dock, "Train in ilastik", one-line runs
 - ilastik dock: choose a project (file or the project library = model registry), compatibility
   badge for the current field, preview of the class probabilities, preset into the pipeline,
