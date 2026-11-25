@@ -244,11 +244,12 @@ def test_gui_error_handler_logs_and_keeps_running(
     assert "boom in a slot" in app_log_path().read_text(encoding="utf-8")
 
 
-def test_viewer_without_opengl_switches_to_software_rendering(
+def test_viewer_without_opengl_says_what_to_do(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """On a PC whose graphics driver gives napari no OpenGL context (remote desktop, virtual
-    machines; the GitHub Windows runners), the next start uses Qt's software OpenGL."""
+    """A PC whose graphics driver gives napari no OpenGL context (remote desktop without GPU,
+    virtual machines; the GitHub Windows runners) gets a message with what helps, exit code 5,
+    instead of an unhandled crash. Software OpenGL is only used when asked for."""
     pytest.importorskip("PySide6")
     if not (os.environ.get("DISPLAY") or sys.platform in ("win32", "darwin")):
         pytest.skip("needs a display")
@@ -267,17 +268,21 @@ def test_viewer_without_opengl_switches_to_software_rendering(
     def no_opengl() -> None:
         raise gl_error("err = 1282, glGetIntegerv GL_MAX_TEXTURE_SIZE")
 
+    shown: list[str] = []
     monkeypatch.setattr(launch, "MainWindow", no_opengl)
-    assert not opengl.use_software_opengl()
-    assert launch.run_gui(smoke_test=True) == 5
-    assert opengl.use_software_opengl()  # remembered for the next start
-    monkeypatch.setenv(opengl.SOFTWARE_GL_ENV, "0")
-    assert not opengl.use_software_opengl()
-    monkeypatch.setenv(opengl.SOFTWARE_GL_ENV, "1")
-    with pytest.raises(gl_error):  # already in software mode: the error is not hidden
-        launch.run_gui(smoke_test=True)
+    from PySide6.QtWidgets import QMessageBox
 
-    if sys.platform != "win32":  # Windows: the Mesa DLL swap is checked by the installer job
+    monkeypatch.setattr(QMessageBox, "critical", lambda *a: shown.append(a[2]))
+    assert launch.run_gui(smoke_test=True) == 5
+    assert not opengl.use_software_opengl()  # nothing is switched on behind the user's back
+    import hcs_studio.gui.security_dialogs as dialogs
+
+    monkeypatch.setattr(dialogs, "require_sign_in", lambda: True)
+    assert launch.run_gui() == 5 and "Remote Desktop" in shown[0] and "command line" in shown[0]
+    assert not list(tmp_path.glob("**/opengl32.dll"))
+    monkeypatch.setenv(opengl.SOFTWARE_GL_ENV, "1")
+    assert opengl.use_software_opengl()
+    if sys.platform != "win32":  # Linux/macOS: Mesa's software renderer
         assert "LIBGL_ALWAYS_SOFTWARE" in opengl.prepare_opengl()
         assert os.environ["LIBGL_ALWAYS_SOFTWARE"] == "1"
 

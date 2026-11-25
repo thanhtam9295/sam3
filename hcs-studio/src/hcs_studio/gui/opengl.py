@@ -1,5 +1,7 @@
-"""Software OpenGL for PCs whose graphics driver gives napari no OpenGL 2.1 context (Remote
-Desktop sessions, virtual machines, old drivers, CI runners).
+"""Experimental software OpenGL (``HCS_SOFTWARE_OPENGL=1``) for PCs whose graphics driver gives
+napari no OpenGL 2.1 context (Remote Desktop sessions, virtual machines, old drivers).
+Verified on Linux (Mesa); on Windows it failed on the CI runners, so the app does not use it
+unless asked (``gui/launch.py`` shows ``OPENGL_HELP`` instead).
 
 Must run before Qt, napari, vispy or PyOpenGL are imported (``app.main`` calls
 :func:`prepare_opengl` for the ``gui`` command), and imports none of them.
@@ -30,17 +32,11 @@ def _config_dir() -> Path:
     return config_dir()
 
 
-def software_marker() -> Path:
-    return _config_dir() / "software_opengl"
-
-
 def use_software_opengl() -> bool:
-    """When ``HCS_SOFTWARE_OPENGL=1`` or after the driver failed once. ``HCS_SOFTWARE_OPENGL=0``
-    and deleting ``<settings>/software_opengl`` go back to the driver."""
-    choice = os.environ.get(SOFTWARE_GL_ENV, "")
-    if choice in ("0", "1"):
-        return choice == "1"
-    return software_marker().exists()
+    """Only when asked for with ``HCS_SOFTWARE_OPENGL=1`` (experimental on Windows: the swap
+    below did not give napari a context on the GitHub Windows runners, which may have no
+    usable desktop at all; it is not switched on automatically)."""
+    return os.environ.get(SOFTWARE_GL_ENV, "") == "1"
 
 
 def find_software_dll() -> Path | None:

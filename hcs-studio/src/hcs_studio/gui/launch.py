@@ -17,9 +17,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from hcs_studio import __version__
 from hcs_studio.gui.main_window import MainWindow
 from hcs_studio.gui.opengl import (
-    SOFTWARE_GL_ENV,
     prepare_opengl,
-    software_marker,
     use_software_opengl,
 )
 from hcs_studio.io.sidecar import config_dir
@@ -82,15 +80,17 @@ def is_opengl_error(exc: BaseException) -> bool:
     return False
 
 
-def _restart_with_software_opengl() -> bool:
-    """Start a new copy of the app with software OpenGL (installed app only)."""
-    if not getattr(sys, "frozen", False):
-        return False
-    import subprocess
-
-    env = {**os.environ, SOFTWARE_GL_ENV: "1"}
-    subprocess.Popen([sys.executable, *sys.argv[1:]], env=env)
-    return True
+OPENGL_HELP = (
+    "The graphics driver could not give the image viewer OpenGL 2.1. This happens in remote "
+    "desktop sessions without GPU acceleration, in virtual machines and with old drivers.\n\n"
+    "What helps:\n"
+    "• Remote Desktop: ask IT to enable the policy \u201cUse hardware graphics adapters for all "
+    "Remote Desktop Services sessions\u201d, or start HCS Studio on the PC itself.\n"
+    "• Update the graphics driver from the GPU vendor (NVIDIA, AMD, Intel).\n"
+    "• The command line (hcs-studio run, report, pharm, …) works without OpenGL.\n"
+    "• Experimental, not verified on Windows: start with HCS_SOFTWARE_OPENGL=1 for software "
+    "rendering."
+)
 
 
 def run_gui(smoke_test: bool = False) -> int:
@@ -133,26 +133,14 @@ def _run(app: QCoreApplication, smoke_test: bool, software: bool) -> int:
     try:
         window = MainWindow()
     except Exception as exc:
-        if not is_opengl_error(exc) or software:
+        if not is_opengl_error(exc):
             raise
-        log.exception("The image viewer could not start with the graphics driver")
-        software_marker().parent.mkdir(parents=True, exist_ok=True)
-        software_marker().write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
+        log.exception("The image viewer could not get OpenGL%s", " (software)" if software else "")
         if smoke_test:
-            print(f"Smoke test: OpenGL failed ({type(exc).__name__}); next start uses "
-                  f"software OpenGL", flush=True)  # fmt: skip
+            print(f"Smoke test: OpenGL failed ({type(exc).__name__}: {exc})"[:300], flush=True)
             return 5
-        restarted = _restart_with_software_opengl()
-        QMessageBox.warning(
-            None,
-            "HCS Studio: graphics",
-            "The graphics driver could not start the image viewer (common in remote desktop "
-            "sessions and virtual machines). HCS Studio now uses software rendering"
-            + (": it is starting again." if restarted else "; please start it again.")
-            + " Updating the graphics driver gives faster rendering; then delete "
-            f"{software_marker()} to use it.",
-        )
-        return 0 if restarted else 2
+        QMessageBox.critical(None, "HCS Studio: graphics", OPENGL_HELP)
+        return 5
     install_error_handler(window)
     if not smoke_test:
         from hcs_studio.gui.security_dialogs import connect_server

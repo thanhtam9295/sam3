@@ -12,9 +12,12 @@
   crashed on Z′/µm (Windows encodes it with cp1252; the CLI now writes UTF-8); file lists and
   tree fingerprints in reports, manifests and figure sidecars used `\` on Windows (now `/`
   everywhere, so runs and sidecars move between Windows and Linux).
-- When the graphics driver cannot give the image viewer OpenGL (remote desktop, virtual
-  machines), the app switches to software rendering (Qt's Mesa renderer, shared by Qt and
-  PyOpenGL; `gui/opengl.py`) and starts again instead of crashing (docs/troubleshooting.md).
+- When the graphics driver cannot give the image viewer OpenGL (Remote Desktop without GPU,
+  virtual machines), the app shows what helps (GPU policy for remote sessions, driver update,
+  the command line) instead of an unhandled crash; `HCS_SOFTWARE_OPENGL=1` tries software
+  rendering (verified on Linux only; on the Windows CI runners it did not help).
+- Third Windows run: all tests pass (599 passed, 0 failed); the installed copy passes its
+  self-test.
 - Fixed: on Windows a job kept running after its worker or the app was killed (it went on
   writing to a run folder that was being resumed elsewhere); it now stops with its parent, as on
   Linux and macOS.
