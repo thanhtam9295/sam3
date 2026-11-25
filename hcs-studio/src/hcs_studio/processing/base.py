@@ -304,6 +304,7 @@ def load_builtin_modules() -> None:
         registered,
         sam3_backend,
     )
+    from hcs_studio.segmentation.ilastik_backend import multicut_tracking as _mt  # noqa: F401
     from hcs_studio.segmentation.ilastik_backend import objects as _ilastik_objects  # noqa: F401
     from hcs_studio.segmentation.ilastik_backend import steps as _ilastik_steps  # noqa: F401
 

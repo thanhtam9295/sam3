@@ -33,6 +33,10 @@ class IlastikJob(BaseModel):
     roles: dict[str, list[str]] = Field(default_factory=dict)
     export_source: str
     output_format: str = "hdf5"
+    #: with ``export_source="Plugin"`` (tracking): the export plugin, e.g. "CSV-Table"
+    export_plugin: str | None = None
+    #: file extension of the exports ("csv" for the CSV-Table plugin)
+    output_extension: str = "h5"
     #: folder of the exports; files are ``<input name>_<suffix>.h5``
     output_folder: str
     output_suffix: str
@@ -46,7 +50,8 @@ class IlastikJob(BaseModel):
         out = []
         for spec in self.raw_data:
             stem = Path(spec.rsplit(".h5", 1)[0] + ".h5").stem
-            out.append(str(Path(self.output_folder) / f"{stem}_{self.output_suffix}.h5"))
+            name = f"{stem}_{self.output_suffix}.{self.output_extension}"
+            out.append(str(Path(self.output_folder) / name))
         return out
 
 

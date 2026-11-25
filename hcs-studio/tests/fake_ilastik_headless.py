@@ -46,6 +46,8 @@ def main() -> int:
     parser.add_argument("--label_image", nargs="+", default=[])
     parser.add_argument("--prediction_maps", nargs="+", default=[])
     parser.add_argument("--segmentation_image", nargs="+", default=[])
+    parser.add_argument("--probabilities", nargs="+", default=[])
+    parser.add_argument("--export_plugin")
     args = parser.parse_args()
     if args.version:
         print("1.4.2")
@@ -80,6 +82,10 @@ def main() -> int:
         workflow = project["workflowName"][()].decode()
     if "ObjectClassification" in workflow:
         return objects(args, min_area)
+    if "Multicut" in workflow:
+        return multicut(args)
+    if "Tracking" in workflow:
+        return tracking(args)
     if os.environ.get("FAKE_ILASTIK_TOUCH_PROJECT"):
         with h5py.File(args.project, "a") as project:
             project["fake"].attrs["touched"] = 1
@@ -156,6 +162,88 @@ def objects(args: argparse.Namespace, min_area: int) -> int:
         with h5py.File(target, "w") as f:
             ds = f.create_dataset("exported_data", data=out[..., np.newaxis])
             ds.attrs["axistags"] = axistags(out_axes)
+    return 0
+
+
+def write(target: str, out: np.ndarray, axes: str) -> None:
+    Path(target).parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(target, "w") as f:
+        ds = f.create_dataset("exported_data", data=out)
+        ds.attrs["axistags"] = axistags(axes)
+
+
+def target_for(args: argparse.Namespace, raw_spec: str) -> str:
+    file = raw_spec.rpartition(".h5/")[0] + ".h5"
+    return args.output_filename_format.replace("{nickname}", Path(file).stem)
+
+
+def multicut(args: argparse.Namespace) -> int:
+    """Segments = connected regions where the boundary probability (last channel) < 0.5."""
+    from scipy import ndimage
+
+    if args.export_source != "Multicut Segmentation" or not args.probabilities:
+        print("ERROR: multicut needs --probabilities and export Multicut Segmentation",
+              file=sys.stderr)
+        return 1
+    for raw_spec, spec in zip(args.raw_data, args.probabilities, strict=True):
+        data, axes = read(spec)
+        c = axes.index("c")
+        boundary = np.take(data, data.shape[c] - 1, axis=c)
+        labels, _ = ndimage.label(boundary < 0.5)
+        write(target_for(args, raw_spec), labels.astype(np.uint32)[..., np.newaxis],
+              "".join(a for a in axes if a != "c") + "c")
+    return 0
+
+
+def tracking(args: argparse.Namespace) -> int:
+    """Objects per frame; each linked to the nearest object of the previous frame within 20 px;
+    two objects linked to one → a division (new tracks, parent = the mother's track)."""
+    from scipy import ndimage
+
+    role = "segmentation_image" if args.segmentation_image else "prediction_maps"
+    for raw_spec, spec in zip(args.raw_data, getattr(args, role), strict=True):
+        data, axes = read(spec)
+        if axes[0] != "t":
+            print("ERROR: tracking needs a time axis", file=sys.stderr)
+            return 1
+        c = axes.index("c")
+        channel = np.take(data, data.shape[c] - 1, axis=c)
+        mask = channel >= 0.5 if role == "prediction_maps" else channel > 0
+        frames = [ndimage.label(m)[0] for m in mask]
+        if args.export_source == "Object-Identities":
+            out = np.stack(frames).astype(np.uint32)[..., np.newaxis]
+            write(target_for(args, raw_spec), out, "".join(a for a in axes if a != "c") + "c")
+            continue
+        if args.export_source != "Plugin" or args.export_plugin != "CSV-Table":
+            print("ERROR: unknown export", file=sys.stderr)
+            return 1
+        rows, previous, next_track = [], {}, 1
+        for t, labels in enumerate(frames):
+            ids = [i for i in np.unique(labels) if i > 0]
+            centres = dict(zip(ids, ndimage.center_of_mass(labels > 0, labels, ids), strict=True))
+            claims: dict[int, list[int]] = {}
+            for i in ids:
+                near = [(np.hypot(*np.subtract(centres[i], p)), j) for j, (p, _) in previous.items()]
+                near = [n for n in near if n[0] <= 20]
+                if near:
+                    claims.setdefault(min(near)[1], []).append(i)
+            current = {}
+            for i in ids:
+                mother = next((m for m, kids in claims.items() if i in kids), None)
+                if mother is not None and len(claims[mother]) == 1:
+                    track, parent = previous[mother][1], 0
+                else:
+                    track, next_track = next_track, next_track + 1
+                    parent = previous[mother][1] if mother is not None else 0
+                current[i] = (centres[i], track)
+                rows.append((t, int(i), track, parent, 1))
+            previous = current
+        target = target_for(args, raw_spec)
+        Path(target).parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("frame,labelimage_oid,track_id1,parent_track_id,lineage_id\n")
+            for row in rows:
+                f.write(",".join(map(str, row)) + "\n")
     return 0
 
 

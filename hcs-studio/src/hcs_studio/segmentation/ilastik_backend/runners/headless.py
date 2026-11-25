@@ -33,7 +33,9 @@ class HeadlessRunner:
         self.executable = str(executable)
 
     def command(self, job: IlastikJob) -> list[str]:
-        pattern = str(Path(job.output_folder) / f"{{nickname}}_{job.output_suffix}.h5")
+        pattern = str(
+            Path(job.output_folder) / f"{{nickname}}_{job.output_suffix}.{job.output_extension}"
+        )
         command = [
             *ilastik_command(self.executable),
             "--headless",
@@ -41,6 +43,7 @@ class HeadlessRunner:
             f"--export_source={job.export_source}",
             f"--output_format={job.output_format}",
             f"--output_filename_format={pattern}",
+            *([f"--export_plugin={job.export_plugin}"] if job.export_plugin else []),
             "--raw_data",
             *job.raw_data,
         ]
@@ -121,7 +124,7 @@ def _find_output(expected: Path) -> Path | None:
     if expected.exists():
         return expected
     stem, _, suffix = expected.stem.rpartition("_")
-    matches = sorted(expected.parent.glob(f"{stem}*_{suffix}.h5"))
+    matches = sorted(expected.parent.glob(f"{stem}*_{suffix}{expected.suffix}"))
     return matches[0] if len(matches) == 1 else None
 
 
