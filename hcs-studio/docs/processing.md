@@ -413,6 +413,21 @@ ilastik (Phase 16b): % of each field where each class is the most likely (`ilast
 | Parameter | Default | Meaning |
 |---|---|---|
 
+## ilastik Multicut (`ilastik_multicut`)
+
+ilastik (Phase 16d): boundary-based segmentation with a trained Multicut project, once per well: the class channels of an earlier ilastik_pixel step (trained with a boundary class) go to ilastik as --probabilities; the Multicut Segmentation becomes the label set `name` (unique IDs). Good for dense tissue and touching cells.
+
+Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `project` | '' | The trained Multicut project (.ilp). |
+| `source_channels` | None | Class channels sent as the boundary probabilities (default: every ilastik_ channel, in order). |
+| `channels` | None | Raw channels sent, in the trained order; empty = all. |
+| `name` | 'cells' | Name of the new label set. |
+| `keep_inputs` | False | Keep the HDF5 copies sent to ilastik. |
+| `timeout_min` | 120.0 | Give up on one well after this. |
+
 ## ilastik object classes (`ilastik_object_classes`)
 
 ilastik (Phase 16c): table step; adds class_<name> (class name) and class_<name>_agreement to the objects and per-well class_<name>_<class>_count and _fraction (plate maps, reports, pharmacology readouts).
@@ -456,6 +471,35 @@ Learns a plate-level estimate before processing; the estimate is recorded in `ru
 | `class_names` | None | Class names when the project does not hold them. |
 | `keep_inputs` | False | Keep the HDF5 copies sent to ilastik. |
 | `timeout_min` | 120.0 | Give up on one well after this. |
+
+## ilastik Tracking (`ilastik_tracking`)
+
+ilastik (Phase 16d): tracking with a trained Tracking project; each field's whole time series goes to ilastik (a binary mask from a label set or class channel, or the class probabilities). ilastik's objects of every time point become the label set `name`; their tracks and parent tracks (CSV-Table export) feed ilastik_tracks. Needs a time-lapse plate.
+
+Learns a plate-level estimate before processing; the estimate is recorded in `run_manifest.json`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `project` | '' | The trained Tracking project (.ilp). |
+| `input` | 'segmentation_image' | What the project was trained on: a binary mask or probabilities. |
+| `labels` | 'nuclei' | segmentation_image: the mask from this label set (or, if empty, the first of source_channels ≥ 0.5). |
+| `source_channels` | None | Class channels sent (default: every ilastik_ channel). |
+| `channels` | None | Raw channels sent, in the trained order; empty = all. |
+| `name` | 'tracked' | Label set of ilastik's tracked objects. |
+| `keep_inputs` | False | Keep the HDF5 copies sent to ilastik. |
+| `timeout_min` | 240.0 | Give up on one well after this. |
+
+## ilastik tracks (`ilastik_tracks`)
+
+ilastik (Phase 16d): table step; ilastik's tracks in the object tables (trk_id, trk_parent, trk_divided) and the same track table (tracking/tracks.csv) and per-well trk_ values as the built-in tracking step: tracks, speed, straightness, divisions, division rate, cell-cycle time.
+
+Table step: runs on the object tables after all wells are processed, and can be applied to a finished run with `hcs-studio analyze`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `object_type` | 'tracked' | ilastik's tracked objects. |
+| `name` | 'tracked' | As the ilastik_tracking step's name. |
+| `min_track_frames` | 3 | Shorter tracks are not summarised. |
 
 ## Kinetics (growth, IC50(t), GR) (`kinetics`)
 

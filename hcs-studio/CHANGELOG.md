@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Phase 16d — ilastik Multicut and Tracking
+- `ilastik_multicut`: boundary probabilities from an ilastik pixel step → Multicut
+  segmentation as a label set (dense tissue, touching cells); preset with `--boundary`.
+- `ilastik_tracking` + table step `ilastik_tracks`: ilastik tracks each field's time series;
+  its objects become the label set `tracked` and its tracks give the same track table and
+  `trk_` readouts as the built-in tracker (speed, divisions, cycle time); preset.
+- The headless runner supports export plugins (the tracking CSV-Table).
+
 ### Phase 16c — ilastik Object Classification
 - Step `ilastik_objects`: a trained Object Classification project classifies objects once per
   well — existing objects (Cellpose, SAM, classical) sent as the label image, each object

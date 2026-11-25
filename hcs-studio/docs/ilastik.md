@@ -170,10 +170,45 @@ hcs-studio ilastik --preset phenotype.ilp --channels 1 2 --output phenotype.yaml
 - Per well: `wells/<W>/ilastik/object_classes_ilastik.parquet` (field, time point, object,
   class, agreement) and `.json` (class totals), and ilastik's prediction images.
 
+## Multicut (touching cells, dense tissue)
+
+Train a Pixel Classification project with a **boundary** class (membranes, cell borders) and
+a Multicut project on its boundary probabilities, then:
+
+```
+hcs-studio ilastik --preset multicut.ilp --boundary boundaries.ilp --output multicut.yaml
+# ilastik_pixel (boundaries) → ilastik_multicut → measure objects → QC
+```
+
+`ilastik_multicut` sends the class channels of the pixel step as `--probabilities` (choose with
+`source_channels`) and turns ilastik's "Multicut Segmentation" into the label set `cells`
+(unique IDs), measured like any other segmentation.
+
+## Tracking (time-lapse plates)
+
+```
+hcs-studio ilastik --preset tracking.ilp --output tracking.yaml
+# Cellpose nuclei → ilastik_tracking → measure tracked objects → ilastik_tracks
+```
+
+- `ilastik_tracking` sends each field's **whole time series** in one call, with a binary mask
+  (default: from the `nuclei` label set; or a class channel ≥ 0.5) or the class probabilities
+  (`input: prediction_maps`), as the project was trained. Two exports per well:
+  "Object-Identities" (the objects of every time point → label set `tracked`) and the
+  "CSV-Table" plugin (each object's track and parent track).
+- `ilastik_tracks` turns them into the same results as HCS Studio's own tracking step (Phase
+  22d): `tracking/tracks.csv` (one row per track: frames, speed, straightness, how it ends,
+  parent, cycle time) and per-well `trk_tracks`, `trk_speed_um_per_h`, `trk_straightness`,
+  `trk_divisions`, `trk_division_rate_per_h`, `trk_cycle_h`, `trk_lost_fraction` — usable in the
+  kinetics report and pharmacology.
+- ilastik's tracking CSV columns are matched by their usual names (`frame`, `labelimage_oid`,
+  `track_id1`, `parent_track_id`, `lineage_id` and common variants); if a real export names them
+  differently the step says which column it misses.
+
 **Validation status:** tested with a stand-in program that accepts ilastik's command line and
 writes known answers (`tests/test_ilastik_steps.py`), including one call per well, resume after a
 failed well, and the read-only check. **Not yet run with a real trained project**: please send
 one or two `.ilp` files (Pixel Classification, Autocontext) with a few matching images; then
 `HCS_ILASTIK=<ilastik> pytest tests/test_ilastik.py tests/test_ilastik_steps.py` checks the real
 program, and the project reader's guesses (where the training axes and channels are stored) can
-be confirmed. Multicut, Tracking and the Fiji runner follow (steps d–e).
+be confirmed. The Fiji runner and the parity test follow (step e).

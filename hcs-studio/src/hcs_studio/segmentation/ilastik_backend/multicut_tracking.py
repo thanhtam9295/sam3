@@ -84,9 +84,12 @@ class _IlastikWellStep(Module):
         if not found.ilastik_ok:
             raise ModuleError(
                 "ilastik is not available: "
-                + (found.version_check.message if found.ilastik
-                   else "set its path in Tools → ilastik settings")
-            )  # fmt: skip
+                + (
+                    found.version_check.message
+                    if found.ilastik
+                    else "set its path in Tools → ilastik settings"
+                )
+            )
         info = self.project_info()
         return {
             "project": info.path,
@@ -110,8 +113,9 @@ class _IlastikWellStep(Module):
     def _raw(self, image: ImageData) -> np.ndarray:
         if self.params.channels:
             return image.data[[c - 1 for c in self.params.channels]]
-        keep = [i for i, c in enumerate(image.metadata.channels)
-                if not c.name.startswith(CLASS_PREFIX)]  # fmt: skip
+        keep = [
+            i for i, c in enumerate(image.metadata.channels) if not c.name.startswith(CLASS_PREFIX)
+        ]
         return image.data[keep]
 
     def _class_channels(self, image: ImageData, wanted: list[str] | None) -> np.ndarray:
@@ -125,7 +129,9 @@ class _IlastikWellStep(Module):
             )
         return image.data[[names.index(n) for n in chosen]]
 
-    def _setup(self, state: Any, workdir: Any) -> tuple[dict[str, Any], Path, Path, str, Path | None]:
+    def _setup(
+        self, state: Any, workdir: Any
+    ) -> tuple[dict[str, Any], Path, Path, str, Path | None]:
         state = state or self.fit(None)  # type: ignore[arg-type]
         if self.project_info().sha256 != state["sha256"]:
             raise ModuleError("The ilastik project changed since the run started")
@@ -158,9 +164,10 @@ class _IlastikWellStep(Module):
 class MulticutParams(ModuleParams):
     project: str = Field(default="", description="The trained Multicut project (.ilp).")
     source_channels: list[str] | None = Field(
-        default=None, description="Class channels sent as the boundary probabilities "
+        default=None,
+        description="Class channels sent as the boundary probabilities "
         "(default: every ilastik_ channel, in order).",
-    )  # fmt: skip
+    )
     channels: list[int] | None = Field(
         default=None, description="Raw channels sent, in the trained order; empty = all."
     )
@@ -184,8 +191,10 @@ class IlastikMulticut(_IlastikWellStep):
         names = [c.name for c in metadata.channels]
         wanted = self.params.source_channels or [n for n in names if n.startswith(CLASS_PREFIX)]
         if not wanted or any(c not in names for c in wanted):
-            raise ModuleError("Multicut needs the boundary probabilities: put ilastik_pixel "
-                              "(trained with a boundary class) before it")  # fmt: skip
+            raise ModuleError(
+                "Multicut needs the boundary probabilities: put ilastik_pixel "
+                "(trained with a boundary class) before it"
+            )
 
     def apply_batch(
         self,
@@ -211,27 +220,47 @@ class IlastikMulticut(_IlastikWellStep):
                 name = f"f{field_index:03d}_t{t}"
                 raw = self._raw(image)[np.newaxis]
                 probs = self._class_channels(image, params.source_channels)[np.newaxis]
-                axes = ilastik_axes(raw.shape)  # type: ignore[arg-type]
-                prob_axes = ilastik_axes(probs.shape)  # type: ignore[arg-type]
-                raw_specs.append(input_spec(write_h5(inputs / f"{name}.h5",
-                                                     to_ilastik(raw, axes), axes, compression=None)))
-                prob_specs.append(input_spec(write_h5(inputs / f"{name}_boundaries.h5",
-                                                      to_ilastik(probs, prob_axes), prob_axes,
-                                                      compression=None)))
+                axes = ilastik_axes(raw.shape)
+                prob_axes = ilastik_axes(probs.shape)
+                raw_specs.append(
+                    input_spec(
+                        write_h5(
+                            inputs / f"{name}.h5", to_ilastik(raw, axes), axes, compression=None
+                        )
+                    )
+                )
+                prob_specs.append(
+                    input_spec(
+                        write_h5(
+                            inputs / f"{name}_boundaries.h5",
+                            to_ilastik(probs, prob_axes),
+                            prob_axes,
+                            compression=None,
+                        )
+                    )
+                )
             produced = self._run(
-                state, run_folder / "logs" / f"{well}.log", raw_data=raw_specs,
-                roles={"probabilities": prob_specs}, export_source="Multicut Segmentation",
-                output_folder=str(outputs), output_suffix="Multicut_Segmentation",
-            )  # fmt: skip
+                state,
+                run_folder / "logs" / f"{well}.log",
+                raw_data=raw_specs,
+                roles={"probabilities": prob_specs},
+                export_source="Multicut Segmentation",
+                output_folder=str(outputs),
+                output_suffix="Multicut_Segmentation",
+            )
             out = []
             for image, path in zip(images, produced, strict=True):
                 labels = _relabel(_zyx(*read_h5(Path(path)))).astype(np.int32)
                 if labels.shape != image.data.shape[1:]:
-                    raise ModuleError(f"Multicut returned {labels.shape} for a field of "
-                                      f"{image.data.shape[1:]}")  # fmt: skip
+                    raise ModuleError(
+                        f"Multicut returned {labels.shape} for a field of {image.data.shape[1:]}"
+                    )
                 label_set = LabelSet(params.name, labels, source=self.name)
-                out.append(image.with_labels(label_set, self.name,
-                                             {"module": self.name, "objects": label_set.count}))  # fmt: skip
+                out.append(
+                    image.with_labels(
+                        label_set, self.name, {"module": self.name, "objects": label_set.count}
+                    )
+                )
             if temporary is None:
                 _projects_used(run_folder, state, "headless")
             return out
@@ -320,24 +349,51 @@ class IlastikTracking(_IlastikWellStep):
             for field_index in fields:
                 order = sorted(t for f, t in keys if f == field_index)
                 stack = np.stack([self._raw(images[position[(field_index, t)]]) for t in order])
-                second = np.stack([self._mask_or_probs(images[position[(field_index, t)]])
-                                   for t in order])  # fmt: skip
-                axes = ilastik_axes(stack.shape)  # type: ignore[arg-type]
-                second_axes = ilastik_axes(second.shape)  # type: ignore[arg-type]
+                second = np.stack(
+                    [self._mask_or_probs(images[position[(field_index, t)]]) for t in order]
+                )
+                axes = ilastik_axes(stack.shape)
+                second_axes = ilastik_axes(second.shape)
                 name = f"f{field_index:03d}"
-                raw_specs.append(input_spec(write_h5(inputs / f"{name}.h5",
-                                                     to_ilastik(stack, axes), axes,
-                                                     compression=None)))  # fmt: skip
-                second_specs.append(input_spec(write_h5(inputs / f"{name}_{params.input}.h5",
-                                                        to_ilastik(second, second_axes),
-                                                        second_axes, compression=1)))  # fmt: skip
+                raw_specs.append(
+                    input_spec(
+                        write_h5(
+                            inputs / f"{name}.h5", to_ilastik(stack, axes), axes, compression=None
+                        )
+                    )
+                )
+                second_specs.append(
+                    input_spec(
+                        write_h5(
+                            inputs / f"{name}_{params.input}.h5",
+                            to_ilastik(second, second_axes),
+                            second_axes,
+                            compression=1,
+                        )
+                    )
+                )
             log = run_folder / "logs" / f"{well}.log"
-            common = {"raw_data": raw_specs, "roles": {params.input: second_specs},
-                      "output_folder": str(outputs)}  # fmt: skip
-            identities = self._run(state, log, export_source="Object-Identities",
-                                   output_suffix="Object-Identities", **common)  # fmt: skip
-            tables = self._run(state, log, export_source="Plugin", export_plugin="CSV-Table",
-                               output_suffix="CSV-Table", output_extension="csv", **common)  # fmt: skip
+            common = {
+                "raw_data": raw_specs,
+                "roles": {params.input: second_specs},
+                "output_folder": str(outputs),
+            }
+            identities = self._run(
+                state,
+                log,
+                export_source="Object-Identities",
+                output_suffix="Object-Identities",
+                **common,
+            )
+            tables = self._run(
+                state,
+                log,
+                export_source="Plugin",
+                export_plugin="CSV-Table",
+                output_suffix="CSV-Table",
+                output_extension="csv",
+                **common,
+            )
             out: list[ImageData | None] = [None] * len(images)
             links = []
             for field_index, ids_path, csv_path in zip(fields, identities, tables, strict=True):
@@ -345,8 +401,9 @@ class IlastikTracking(_IlastikWellStep):
                 stack = from_ilastik(array, axes)  # (T, 1, Z, Y, X)
                 order = sorted(t for f, t in keys if f == field_index)
                 if stack.shape[0] != len(order):
-                    raise ModuleError(f"ilastik returned {stack.shape[0]} time points for "
-                                      f"{len(order)}")  # fmt: skip
+                    raise ModuleError(
+                        f"ilastik returned {stack.shape[0]} time points for {len(order)}"
+                    )
                 for k, t in enumerate(order):
                     image = images[position[(field_index, t)]]
                     labels = np.asarray(stack[k, 0], dtype=np.int32)
@@ -354,8 +411,10 @@ class IlastikTracking(_IlastikWellStep):
                         LabelSet(params.name, labels, source=self.name), self.name
                     )
                 table = read_tracking_csv(Path(csv_path))
-                table["timepoint"] = [order[int(f)] if 0 <= int(f) < len(order) else int(f)
-                                      for f in table["timepoint"]]  # fmt: skip
+                table["timepoint"] = [
+                    order[int(f)] if 0 <= int(f) < len(order) else int(f)
+                    for f in table["timepoint"]
+                ]
                 table.insert(0, "field", field_index)
                 links.append(table)
             if temporary is None:
@@ -420,13 +479,14 @@ class IlastikTracks(Tracking):
 
     name = "ilastik_tracks"
     title = "ilastik tracks"
-    Params = IlastikTracksParams
+    Params = IlastikTracksParams  # type: ignore[assignment]
 
     def transform(self, objects: pd.DataFrame, state: Any, well: Any) -> pd.DataFrame:
         params: IlastikTracksParams = self.params
         times = self.times()
-        out = pd.DataFrame({"trk_id": 0, "trk_parent": 0, "trk_divided": False},
-                           index=objects.index)  # fmt: skip
+        out = pd.DataFrame(
+            {"trk_id": 0, "trk_parent": 0, "trk_divided": False}, index=objects.index
+        )
         path = well.folder / "ilastik" / f"tracks_{params.name}.csv"
         chosen = objects[self.selected(objects)]
         if chosen.empty or not path.exists():
@@ -434,9 +494,12 @@ class IlastikTracks(Tracking):
         links = pd.read_csv(path)
         first = links.groupby(["field", "track_id"])["timepoint"].transform("min")
         links["born"] = (links["parent_track_id"] > 0) & (links["timepoint"] == first)
-        merged = chosen[["field", "timepoint", "object_id"]].reset_index().merge(
-            links, on=["field", "timepoint", "object_id"], how="left"
-        ).set_index("index")  # fmt: skip
+        merged = (
+            chosen[["field", "timepoint", "object_id"]]
+            .reset_index()
+            .merge(links, on=["field", "timepoint", "object_id"], how="left")
+            .set_index("index")
+        )
         offset = merged["field"].astype(int) * 100_000
         track = merged["track_id"].fillna(0).astype(int)
         parent = merged["parent_track_id"].fillna(0).astype(int)

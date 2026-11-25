@@ -249,7 +249,7 @@ PlateLayout (model/annotation.py)
 
 Not added: lmfit (`scipy.optimize.least_squares` covers bounds, robust loss, covariance CIs), weasyprint (needs system Pango/Cairo; hard on Windows).
 
-## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a)–(c) built
+## Phase 16 — ilastik backend (PROMPT_ILASTIK.md) — approved 2026-11-19; steps (a)–(d) built
 
 Paused 2026-11-19 after step (a); resumed 2026-11-24 (user: "CONTINUE"): step (b) built against a
 fake ilastik (no `.ilp` samples yet; installing ilastik in the container was not permitted this
@@ -387,6 +387,21 @@ DPCT solver (no CPLEX/Gurobi: the learning-tracking variant is unavailable, as i
 - `presets.objects_preset`: `segment_cellpose` → `ilastik_objects` → `measure_objects` → `qc`
   → `ilastik_object_classes`. Fake ilastik: workflows containing "ObjectClassification" accept
   `--label_image/--prediction_maps/--segmentation_image`; class 2 for objects ≥ `fake/min_area`.
+
+### Conventions (step d, built)
+
+- `multicut_tracking.py`: `_IlastikWellStep` (project, fit, folders `_setup`, `_run`);
+  `ilastik_multicut` (`--probabilities` = class channels, export "Multicut Segmentation" →
+  relabelled label set `name`); `ilastik_tracking` (per field a (T, …) stack; inputs
+  `segmentation_image` (mask from a label set, else first class channel ≥ 0.5) or
+  `prediction_maps`; exports "Object-Identities" (per-frame label set `tracked`, IDs kept to
+  match the CSV) and `--export_source=Plugin --export_plugin=CSV-Table` (`output_extension`
+  csv) → `wells/<W>/ilastik/tracks_<name>.csv` (field, timepoint, object_id, track_id,
+  parent_track_id, lineage_id)); `read_tracking_csv` (column spellings in `CSV_COLUMNS`,
+  unconfirmed); table step `ilastik_tracks` subclasses Phase 22d `Tracking` (transform maps
+  ilastik's links, then `track_table`; summarize/finish_table inherited → `trk_` readouts,
+  `tracking/tracks.csv`). `IlastikJob.export_plugin/output_extension`. Presets
+  `multicut_preset`, `tracking_preset`; CLI `--preset <multicut.ilp> --boundary <pixel.ilp>`.
 
 ### Testing plan
 

@@ -21,6 +21,13 @@ def pixel_preset(
     (ilastik projects usually list the background first)."""
     if info.workflow == "objects":
         return objects_preset(project, channels=channels)
+    if info.workflow == "tracking":
+        return tracking_preset(project)
+    if info.workflow == "multicut":
+        raise ValueError(
+            "A Multicut project needs its boundary pixel-classification project "
+            "too: give it with --boundary"
+        )
     names = list(info.label_names)
     if not names:
         raise ValueError("The project's class names were not found: give --class")
@@ -64,5 +71,37 @@ def objects_preset(
             PipelineStep(module="measure_objects", params={"labels": ["nuclei"]}),
             PipelineStep(module="qc"),
             PipelineStep(module="ilastik_object_classes", params={"object_type": "nuclei"}),
+        ]
+    )
+
+
+def multicut_preset(boundary_project: Path, multicut_project: Path) -> Pipeline:
+    """``ilastik boundary pixel classification → Multicut → measure objects → field QC``."""
+    return Pipeline(
+        steps=[
+            PipelineStep(
+                module="ilastik_pixel", params={"project": str(Path(boundary_project).absolute())}
+            ),
+            PipelineStep(
+                module="ilastik_multicut",
+                params={"project": str(Path(multicut_project).absolute())},
+            ),
+            PipelineStep(module="measure_objects", params={"labels": ["cells"]}),
+            PipelineStep(module="qc"),
+        ]
+    )
+
+
+def tracking_preset(tracking_project: Path, nucleus_channel: int = 1) -> Pipeline:
+    """``nuclei → ilastik Tracking → measure tracked objects → ilastik tracks`` (time-lapse)."""
+    return Pipeline(
+        steps=[
+            PipelineStep(module="segment_cellpose", params={"channel": nucleus_channel}),
+            PipelineStep(
+                module="ilastik_tracking",
+                params={"project": str(Path(tracking_project).absolute())},
+            ),
+            PipelineStep(module="measure_objects", params={"labels": ["tracked"]}),
+            PipelineStep(module="ilastik_tracks"),
         ]
     )

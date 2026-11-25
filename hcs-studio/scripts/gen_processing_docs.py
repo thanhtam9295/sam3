@@ -214,6 +214,19 @@ NOTES = {
     "ilastik_object_classes": "ilastik (Phase 16c): table step; adds class_<name> (class name) "
     "and class_<name>_agreement to the objects and per-well class_<name>_<class>_count and "
     "_fraction (plate maps, reports, pharmacology readouts).",
+    "ilastik_multicut": "ilastik (Phase 16d): boundary-based segmentation with a trained "
+    "Multicut project, once per well: the class channels of an earlier ilastik_pixel step "
+    "(trained with a boundary class) go to ilastik as --probabilities; the Multicut Segmentation "
+    "becomes the label set `name` (unique IDs). Good for dense tissue and touching cells.",
+    "ilastik_tracking": "ilastik (Phase 16d): tracking with a trained Tracking project; each "
+    "field's whole time series goes to ilastik (a binary mask from a label set or class "
+    "channel, or the class probabilities). ilastik's objects of every time point become the "
+    "label set `name`; their tracks and parent tracks (CSV-Table export) feed ilastik_tracks. "
+    "Needs a time-lapse plate.",
+    "ilastik_tracks": "ilastik (Phase 16d): table step; ilastik's tracks in the object tables "
+    "(trk_id, trk_parent, trk_divided) and the same track table (tracking/tracks.csv) and "
+    "per-well trk_ values as the built-in tracking step: tracks, speed, straightness, "
+    "divisions, division rate, cell-cycle time.",
     "confluence": "Kinetics (Phase 22a): % of the field covered by cells, per field and time "
     "point (`confluence_pct`, `confluence_area_um2`; per-well means in the summary). texture "
     "(brightfield/phase): local SD of the image minus its median filter, threshold calibrated "

@@ -17,6 +17,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import h5py
 import numpy as np
@@ -174,7 +175,7 @@ def write(target: str, out: np.ndarray, axes: str) -> None:
 
 def target_for(args: argparse.Namespace, raw_spec: str) -> str:
     file = raw_spec.rpartition(".h5/")[0] + ".h5"
-    return args.output_filename_format.replace("{nickname}", Path(file).stem)
+    return str(args.output_filename_format).replace("{nickname}", Path(file).stem)
 
 
 def multicut(args: argparse.Namespace) -> int:
@@ -182,16 +183,21 @@ def multicut(args: argparse.Namespace) -> int:
     from scipy import ndimage
 
     if args.export_source != "Multicut Segmentation" or not args.probabilities:
-        print("ERROR: multicut needs --probabilities and export Multicut Segmentation",
-              file=sys.stderr)
+        print(
+            "ERROR: multicut needs --probabilities and export Multicut Segmentation",
+            file=sys.stderr,
+        )
         return 1
     for raw_spec, spec in zip(args.raw_data, args.probabilities, strict=True):
         data, axes = read(spec)
         c = axes.index("c")
         boundary = np.take(data, data.shape[c] - 1, axis=c)
         labels, _ = ndimage.label(boundary < 0.5)
-        write(target_for(args, raw_spec), labels.astype(np.uint32)[..., np.newaxis],
-              "".join(a for a in axes if a != "c") + "c")
+        write(
+            target_for(args, raw_spec),
+            labels.astype(np.uint32)[..., np.newaxis],
+            "".join(a for a in axes if a != "c") + "c",
+        )
     return 0
 
 
@@ -217,13 +223,17 @@ def tracking(args: argparse.Namespace) -> int:
         if args.export_source != "Plugin" or args.export_plugin != "CSV-Table":
             print("ERROR: unknown export", file=sys.stderr)
             return 1
-        rows, previous, next_track = [], {}, 1
+        rows: list[tuple[int, int, int, int, int]] = []
+        previous: dict[int, tuple[Any, int]] = {}
+        next_track = 1
         for t, labels in enumerate(frames):
             ids = [i for i in np.unique(labels) if i > 0]
             centres = dict(zip(ids, ndimage.center_of_mass(labels > 0, labels, ids), strict=True))
             claims: dict[int, list[int]] = {}
             for i in ids:
-                near = [(np.hypot(*np.subtract(centres[i], p)), j) for j, (p, _) in previous.items()]
+                near = [
+                    (np.hypot(*np.subtract(centres[i], p)), j) for j, (p, _) in previous.items()
+                ]
                 near = [n for n in near if n[0] <= 20]
                 if near:
                     claims.setdefault(min(near)[1], []).append(i)

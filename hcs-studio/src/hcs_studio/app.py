@@ -203,6 +203,9 @@ def build_parser() -> argparse.ArgumentParser:
     ilastik_cmd.add_argument("--output", type=Path, help="pipeline file for --preset")
     ilastik_cmd.add_argument("--class", dest="object_class", help="class that becomes objects")
     ilastik_cmd.add_argument(
+        "--boundary", type=Path, help="Multicut preset: the boundary pixel-classification .ilp"
+    )
+    ilastik_cmd.add_argument(
         "--channels", type=int, nargs="+", help="channels sent to ilastik (from 1)"
     )
     qc_cmd = sub.add_parser(
@@ -1967,10 +1970,15 @@ def _ilastik_project(args: argparse.Namespace) -> int:
     if not args.output:
         print("ERROR: give --output for the pipeline file")
         return 2
-    from hcs_studio.segmentation.ilastik_backend.presets import pixel_preset
+    from hcs_studio.segmentation.ilastik_backend.presets import multicut_preset, pixel_preset
 
     try:
-        pipeline = pixel_preset(path, info, object_class=args.object_class, channels=args.channels)
+        if info.workflow == "multicut" and args.boundary:
+            pipeline = multicut_preset(args.boundary, path)
+        else:
+            pipeline = pixel_preset(
+                path, info, object_class=args.object_class, channels=args.channels
+            )
     except ValueError as exc:
         print(f"ERROR: {exc}")
         return 2

@@ -255,6 +255,11 @@ majority vote per object, class fractions per well equal the synthetic truth, an
 fitted on a class fraction (pharmacology); projects trained on probabilities make ilastik's
 own objects (two calls per well).
 
+Multicut and Tracking (Phase 16d), with the stand-in: a known 3 × 3 grid of boundaries gives
+9 objects per field; tracking of moving, dividing synthetic nuclei gives the stand-in's links
+as the built-in track table, with speed within 30 % of the truth and its divisions counted.
+The column names of ilastik's tracking CSV are assumptions until a real export is seen.
+
 **Not checked:** a real trained project with the real ilastik (no `.ilp` samples yet; the
 container could not install ilastik this time). Unconfirmed: where trained projects store the
 training data's axes and channel count (the compatibility check uses them only when found), and

@@ -71,6 +71,9 @@ DESCRIPTIONS = {
     "ilastik_class_areas": "per-field area of each ilastik class (pixels where the class is most likely)",
     "ilastik_objects": "object classification with a trained ilastik Object Classification project (headless ilastik; each object assigned the class predicted for most of its pixels)",
     "ilastik_object_classes": "per-well counts and fractions of the ilastik object classes",
+    "ilastik_multicut": "boundary-based segmentation with a trained ilastik Multicut project (headless ilastik) on boundary probabilities from ilastik pixel classification",
+    "ilastik_tracking": "cell tracking with a trained ilastik Tracking project (headless ilastik; each field's time series at once)",
+    "ilastik_tracks": "per-track and per-well tracking measures (speed, straightness, divisions, cell-cycle time) from the ilastik tracks",
     "confluence": "confluence (% of the field covered by cells: local texture of the image minus "
     "its median filter, thresholded at Otsu's level of fields pooled across the plate and time "
     "points, edges corrected for the window; or an intensity threshold, or a label set)",
