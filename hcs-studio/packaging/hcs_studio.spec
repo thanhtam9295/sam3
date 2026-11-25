@@ -78,6 +78,13 @@ for package in ("napari", "npe2", "napari-builtins", "napari-svg", "napari-resou
 hiddenimports += collect_submodules("sklearn")
 # Alembic reads the registry migrations as .py files from disk at start-up.
 datas += collect_data_files("hcs_studio", includes=["db/migrations/**/*"], include_py_files=True)
+# Scripts another Python runs by file path (SAM 3's and ilastik's own environments): they
+# must exist as .py files in the bundle, not only inside the PYZ archive.
+WORKER_SCRIPTS = [
+    "segmentation/sam3_worker.py",
+    "segmentation/ilastik_backend/api_worker.py",
+]
+datas += collect_data_files("hcs_studio", includes=WORKER_SCRIPTS, include_py_files=True)
 hiddenimports += collect_submodules("keyring.backends")
 hiddenimports += ["sqlalchemy.dialects.sqlite", "sqlalchemy.dialects.postgresql"]
 # ome-types (used by nd2) registers a napari plugin; its manifest must travel with it.

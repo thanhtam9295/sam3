@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Done-when audit fixes
+- Windows bundle: the SAM 3 and ilastik Python-API worker scripts (run by file path in their
+  own Python environments) are now copied into the bundle; before, SAM 3 and the Python-API
+  runner could not start from the installed app. A packaging test guards the spec.
+
 ### Phase 16h — Python API runner and installation test
 - `python_api` runner: Pixel Classification / Autocontext probabilities through ilastik's Python
   API in its own environment (project loaded once per well); headless fallback when the API is

@@ -37,7 +37,8 @@ from hcs_studio.processing.base import (
 from hcs_studio.segmentation import sam3_worker
 from hcs_studio.segmentation.objects import overlap_parents
 
-WORKER = Path(sam3_worker.__file__)
+#: run by SAM 3's Python as a file (frozen apps: the .py copied next to the .pyc by the spec)
+WORKER = Path(sam3_worker.__file__).with_suffix(".py")
 
 
 @dataclass(frozen=True)
