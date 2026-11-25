@@ -57,8 +57,13 @@ def test_open_operetta_plate_and_view_a_field(
     # Clicking an empty well does nothing; clicking a well with data lists its fields.
     window.plate_panel.plate_map.select_well(0, 0)
     assert window.plate_panel.gallery.count() == 0
-    with qtbot.waitSignal(window.plate_panel.thumbnails.ready, timeout=10000):
-        window.plate_panel.plate_map.select_well(3, 10)
+    # ``ready`` is emitted once per field from worker threads: wait until all are delivered.
+    # (Waiting for the first signal left the second one queued for a destroyed wait loop,
+    # which crashed the interpreter in pytest-qt's event processing after the test.)
+    window.plate_panel.plate_map.select_well(3, 10)
+    thumbnails = window.plate_panel.thumbnails
+    qtbot.waitUntil(lambda: thumbnails.idle(), timeout=10000)
+    qtbot.wait(50)  # deliver the queued signals to the gallery
     assert window.plate_panel.gallery.count() == 2
     assert "D11" in window.plate_panel.gallery_label.text()
 

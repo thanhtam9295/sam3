@@ -13,6 +13,8 @@
   stage the pipeline feeds ilastik) and `hcs-studio ilastik --run <project> --input <plate>`
   (`--runner` for one run).
 - Done-when test: a projected 384-well plate through ilastik, killed and resumed.
+- Tests: fixed an intermittent segfault in the GUI suite (a test waited for the first of
+  several thumbnail signals from worker threads).
 
 ### Phase 16e — Fiji runner and Fiji macros
 - Fiji runner: the ilastik steps can run through Fiji's ilastik4ij plugin (Tools → ilastik

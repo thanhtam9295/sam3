@@ -75,6 +75,10 @@ class ThumbnailLoader(QObject):
         self._pending.clear()
         self._colormaps = channel_colormaps(plate.metadata.channels) if plate else []
 
+    def idle(self) -> bool:
+        """No thumbnail is being rendered (all requested ones have been emitted)."""
+        return not self._pending and self._pool.activeThreadCount() == 0
+
     def request(self, key: tuple[int, int, int], field: Field) -> None:
         if key in self._cache:
             self.ready.emit(key, self._cache[key])
